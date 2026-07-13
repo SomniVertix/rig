@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/somniactic/**)",
+      "Bash(git config *)",
+      "Bash(git ls-remote *)",
+      "Bash(git init *)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git remote *)"
+    ]
+  }
+}
