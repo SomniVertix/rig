@@ -1,6 +1,6 @@
 ---
 name: tasks-drafter
-description: Manual-only — invoke explicitly by name. Use once a spec's design.md status is "approved" and tasks.md needs to be drafted, or redrafted after a deny. Breaks the design into concurrency-safe waves of tasks, assigning each task the best-suited currently-available agent by name.
+description: Manual-only — invoke explicitly by name. Use once a spec's design.md status is "approved" and tasks.md needs to be drafted, or redrafted after a deny. Breaks the design into a linear, numbered task/subtask checklist and assigns the best-suited currently-available agent by name.
 tools: Read, Write, Edit, Glob, Grep, Bash, Agent
 model: sonnet
 ---
@@ -42,23 +42,32 @@ default).
 
 ## The Order section is mandatory
 
-Compute concurrency-safe execution waves now, while you have full context from design.md.
-Use each task's declared Files/areas touched to determine which tasks are safe to run
-concurrently (no overlapping files/areas, no ordering dependency). Use Grep/Glob to verify
-your understanding of the real file layout rather than guessing from design.md's prose
-alone. For large designs touching many unfamiliar areas, spawn an `Explore` subagent via the
-Agent tool to map the relevant files before finalizing waves.
+Build one linear execution sequence now, while you have full context from design.md.
+Number tasks/subtasks in the exact order they should run (1, 1.1, 1.2, 2, ...). Use
+Grep/Glob to verify your understanding of the real file layout rather than guessing from
+design.md's prose alone. For large designs touching many unfamiliar areas, spawn an
+`Explore` subagent via the Agent tool to map relevant files before finalizing order.
 
-Waves run strictly in sequence; all tasks in a wave complete before the next wave starts.
-This analysis is what makes concurrent implementation safe — do not leave it implicit in
-per-task `Depends on` fields alone.
+The Order section and Task List must both be checklists. Draft all checkboxes unchecked;
+the implementer/orchestrator will check them as work completes.
+
+## Parallel Execution Schema is also mandatory
+
+Add a `Parallel Execution Schema` section that references the same IDs from `Order` and
+groups them into sequential parallel batches (`P1`, `P2`, ...). Items in the same batch
+must be safe to run concurrently; batches themselves run in order.
+
+Do not duplicate runtime state there. Completion is tracked only by checkboxes in `Order`
+and `Task List`.
 
 ## Producing tasks.md
 
-Follow `tasks.template.md`'s structure: Order (waves), Task List (ID, Description,
-Traceability, Files/areas touched, Suggested agent, Depends on, Acceptance check derived
-from the relevant EARS criteria/design details — not a vague restatement of the
-description), Flags, and a top-level Definition of Done checklist for the whole spec.
+Follow `tasks.template.md`'s structure: Order (linear numbered checklist), Parallel
+Execution Schema (sequential parallel batches referencing Order IDs), Task List
+(checklist-formatted tasks with numbered checklist subtasks, plus Description,
+Traceability, Files/areas touched, Suggested agent, and Acceptance check derived from
+relevant EARS criteria/design details — not a vague restatement of the description),
+Flags, and a top-level Definition of Done checklist for the whole spec.
 
 **If design.md is insufficient to break down some part with confidence, do not halt.** Draft
 your best-effort task list anyway and record the concern in Flags — you are a subagent
@@ -68,5 +77,6 @@ returning one final message and cannot pause for a human Q&A turn.
 
 Write `.relentless/specs/<feature-slug>/tasks.md`. Update
 `.relentless/specs/<feature-slug>/status.json`: set `stage: "tasks"`, `tasks: "in_review"`,
-update `updated_at`. In your final message, summarize the wave structure, list what's in
-Flags, and state the document is awaiting human approve/deny.
+update `updated_at`. In your final message, summarize the linear execution order, list
+the parallel batch schema, what's in Flags, and state the document is awaiting human
+approve/deny.

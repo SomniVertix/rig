@@ -18,8 +18,8 @@ router/dispatcher agent.
 |---|---|---|---|---|---|
 | `requirements-compiler` | 1 | `decisions.md` | `requirements.md` | Sonnet | Reliable structured reformatting (EARS notation) on a foundational document; Opus is overkill, Haiku risks sloppy output. |
 | `design-drafter` | 2 | `requirements.md` + codebase | `design.md` | Opus | Highest-stakes stage — real architectural decisions and alternatives, no human in the loop until approve/deny. Worth the cost. |
-| `tasks-drafter` | 3 | `design.md` | `tasks.md` | Sonnet | Correctness-critical dependency/wave analysis; more careful decomposition than creative judgment. |
-| `spec-implementation-orchestrator` | 4 | `tasks.md` | dispatches waves | Haiku | Purely mechanical dispatch loop — all the hard reasoning already happened in `tasks-drafter`'s wave computation. |
+| `tasks-drafter` | 3 | `design.md` | `tasks.md` | Sonnet | Correctness-critical linear decomposition and execution ordering; more careful decomposition than creative judgment. |
+| `spec-implementation-orchestrator` | 4 | `tasks.md` | executes ordered checklist (linear or parallel-schema mode) | Haiku | Purely mechanical dispatch loop — all the hard reasoning already happened in `tasks-drafter`'s ordering and parallel grouping. |
 
 Each drafting agent (`requirements-compiler`, `design-drafter`, `tasks-drafter`) never halts
 mid-task to ask the human a clarifying question — subagents invoked via the Agent tool
@@ -42,8 +42,8 @@ they hold up across projects.
 | `code-reviewer` | Independent verification pass, no code changes | Read-only + Bash + `ReportFindings` | Sonnet | Needs real bug-catching judgment; not the pipeline's highest-stakes stage. |
 
 `code-reviewer` is opt-in per task — `tasks-drafter` assigns it explicitly to tasks/subtasks
-that warrant a verification pass; the orchestrator does not run it automatically after every
-wave.
+that warrant a verification pass; the orchestrator does not run it automatically for every
+task.
 
 ## Activating an agent
 

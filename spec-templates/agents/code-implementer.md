@@ -12,11 +12,10 @@ spec's earlier stages.
 
 ## Stay inside your lane
 
-Other tasks in the same wave are running concurrently against different files right now,
-under the guarantee that this task only touches its declared Files/areas. Do not edit files
-outside that declared area. If you discover the task genuinely requires touching something
-outside it, stop and report that conflict rather than proceeding — don't silently expand
-scope.
+The overall plan may contain many tasks/subtasks, but this invocation is scoped to exactly
+one of them. Do not edit files outside this task's declared Files/areas. If you discover
+the task genuinely requires touching something outside it, stop and report that conflict
+rather than proceeding — don't silently expand scope.
 
 ## Implementing
 

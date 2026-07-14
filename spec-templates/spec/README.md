@@ -134,10 +134,19 @@ autonomous. Break the design into discrete, independently-inspectable tasks, eac
 back to the requirement(s) and design section(s) it implements.
 
 **The Order section is mandatory.** Determine which tasks can run concurrently without
-risk of conflicting changes (e.g. non-overlapping files/areas touched) and group tasks
-into precomputed execution **waves/batches** — do this analysis now, while you have full
-context from `design.md`, rather than leaving it for the implementing agent to infer
-later.
+risk of ambiguity and represent the full run as one precomputed **linear numbered
+checklist**, including subtasks (e.g. `1`, `1.1`, `1.2`, `2`). Do this analysis now,
+while you have full context from `design.md`, rather than leaving it for the implementing
+agent to infer later.
+
+**Parallel mode schema is mandatory.** In addition to the linear checklist, include a
+`Parallel Execution Schema` section that groups the same task/subtask IDs into sequential
+parallel batches (e.g. `P1`, `P2`) so an orchestrator can run compatible work concurrently
+without re-deriving grouping logic at runtime.
+
+**Checklist semantics are required.** Draft all task/subtask checkboxes as unchecked. The
+implementer/orchestrator must check each item immediately when it completes so `tasks.md`
+remains an accurate live execution state.
 
 **Suggested agent per task.** Take inventory of the agent types currently available to
 you and assign the best-suited one to each task (and subtask, if applicable). If none of
@@ -193,15 +202,17 @@ remember which stage comes next.
 ## Implementation handoff (orchestrator)
 
 Once `tasks.md` is `approved`, implementation begins. The implementer is an
-**orchestrator**, not a single agent working the list serially:
+**orchestrator**, executing the precomputed linear plan mechanically:
 
 1. Read `tasks.md` in full — cold, no prior context assumed.
-2. For each wave in the Order section, dispatch every task in that wave **concurrently**,
-   each to the agent named in its `Suggested agent` field (or the orchestrator's own
-   default agent if `none`).
-3. Wait for the entire wave to complete before starting the next wave.
-4. Repeat until every task is done and the Definition of Done checklist is satisfied.
+2. Choose runtime mode:
+  - linear mode: walk the `Order` checklist top-to-bottom, one item at a time.
+  - parallel mode: follow `Parallel Execution Schema` batch-by-batch, dispatching each
+    batch's items concurrently.
+3. After each item completes in either mode, mark its checkbox immediately in `tasks.md`.
+4. Repeat until every ordered item is done and the Definition of Done checklist is
+  satisfied.
 
 The orchestrator does not need deep judgment — it mechanically executes the precomputed
-plan. All the reasoning about ordering, concurrency safety, and agent selection already
+plan. All the reasoning about ordering, parallel grouping, and agent selection already
 happened when `tasks.md` was authored.

@@ -1,9 +1,9 @@
 <!--
   tasks.template.md
   Drafted autonomously by the tasks stage from an APPROVED design.md. No human
-  interview happens at this stage — see README.md. The Order section is mandatory:
-  compute concurrency-safe execution waves now, while you have full context from
-  design.md, rather than leaving that analysis to the implementing agent.
+  interview happens at this stage — see README.md. The Order section is mandatory
+  and linear: number tasks/subtasks in exact run order so implementation can be
+  executed mechanically from top to bottom.
 -->
 
 # Tasks: <feature name>
@@ -11,49 +11,78 @@
 ## Order
 
 <!--
-  Group tasks into waves. Tasks within the same wave MUST be safe to run
-  concurrently (no overlapping files/areas touched, no ordering dependency between
-  them). Waves run strictly in sequence; all tasks in a wave complete before the
-  next wave starts. This is what makes concurrent implementation agents safe —
-  don't leave this analysis implicit in per-task "Depends on" fields alone.
+  This is the single source of truth for run order. Represent the full execution
+  sequence as a numbered checklist, including subtasks, in the exact order they
+  must run for a linear implementation.
+
+  Checklist state is live runtime state:
+  - drafter writes every item unchecked ([ ])
+  - implementer/orchestrator checks an item ([x]) immediately when it completes
+  - parent tasks should only be checked after all of their subtasks are checked
 -->
 
-- **Wave 1:** T1, T2, T3 (no shared files/areas, no interdependency)
-- **Wave 2:** T4 (depends on T1, T2)
-- **Wave 3:** T5 (depends on T4)
+- [ ] 1. T1: <short title>
+- [ ] 1.1 T1.1: <subtask title>
+- [ ] 1.2 T1.2: <subtask title>
+- [ ] 2. T2: <short title>
+
+## Parallel Execution Schema
+
+<!--
+  Mandatory: define how the same ordered task/subtask IDs from Order can be run
+  in parallel mode.
+
+  Rules:
+  - Use only IDs that exist in Order (e.g. 1, 1.1, 1.2, 2).
+  - Group IDs into parallel batches where items in the same batch are safe to
+    run concurrently.
+  - Batches run in sequence (P1, then P2, then P3...).
+  - Keep runtime completion state in Order/Task List checkboxes, not here.
+-->
+
+- **P1 (parallel):** 1.1, 1.2
+- **P2 (parallel):** 2
 
 ## Task List
 
 <!--
   One entry per task. Fields:
-    ID              stable identifier, referenced by Order above and by other
-                    tasks' Depends on.
+    Execution #     required integer run position for top-level task (1, 2, 3...).
+    ID              stable identifier referenced by Order and subtasks.
     Description     what to build/change.
     Traceability    requirement(s) + design section(s) this task implements.
-    Files/areas     explicit list — the auditable basis for the Order wave
-                    touched          groupings above, and the task's blast radius.
+    Files/areas     explicit list — the auditable task blast radius.
+                    touched
     Suggested agent take inventory of the agent types currently available and name
-                    the best-suited one for this task (or subtask). `none` if no
-                    available agent is a good fit — the implementer falls back to
-                    its default agent.
-    Depends on      explicit task-ID list (the raw edges Order's waves were
-                    computed from — kept so a single task can be inspected in
-                    isolation without cross-referencing the whole Order section).
+                    the best-suited one for this task. `none` if no available
+                    agent is a good fit — the implementer falls back to its
+                    default agent.
+    Subtasks        required numbered checklist in run order; each subtask includes
+                    ID, description, suggested agent (or `none`), and acceptance.
     Acceptance      how the implementer knows this task is done. Derive from the
     check           relevant EARS criteria / design details, not a vague restatement
                     of the description.
 -->
 
-### T1: <short title>
+### [ ] 1. T1: <short title>
 
+- **Execution #:** 1
 - **Description:**
 - **Traceability:** Story 1 -> design §Architecture
 - **Files/areas touched:**
 - **Suggested agent:** `none`
-- **Depends on:** —
 - **Acceptance check:**
+- **Subtasks (run in listed order):**
+  - [ ] 1.1 T1.1: <subtask title>
+    - **Description:**
+    - **Suggested agent:** `none`
+    - **Acceptance check:**
+  - [ ] 1.2 T1.2: <subtask title>
+    - **Description:**
+    - **Suggested agent:** `none`
+    - **Acceptance check:**
 
-### T2: <short title>
+### [ ] 2. T2: <short title>
 
 <!-- repeat pattern -->
 
@@ -72,7 +101,7 @@
 <!-- Top-level checklist for the whole spec, not per-task. Implementation is not
      complete until every item here is checked. -->
 
-- [ ] All tasks in the Task List are complete.
+- [ ] All task and subtask checkboxes in Order and Task List are complete.
 - [ ] All acceptance checks pass.
 - [ ] No unresolved item in design.md's Open Risks / Tradeoffs blocks release.
 - [ ] No unresolved Flags remain from design.md or tasks.md.
