@@ -1,19 +1,19 @@
 <!--
   component-tasks.template.md
-  One filled-in instance of this template exists PER declared component (see
-  design.md's Components section / design.template.md), autonomously drafted by the
-  tasks stage from an APPROVED design.md. No human interview happens at this stage —
-  see README.md. This document covers exactly one component's own run order,
-  parallel-execution grouping, task list, and flags. It does NOT carry the spec-wide
-  Definition of Done — that lives once, in tasks-index.template.md, alongside the list
-  of every component and the Cross-Component Dependencies. The Order section below is
-  mandatory and linear: number tasks/subtasks in exact run order so this component's
-  slice of implementation can be executed mechanically from top to bottom.
-
-  File naming convention: instances of this template are named `<component-slug>.md`
-  or `tasks-<component-slug>.md` (match whatever the surrounding spec directory
-  convention already uses for other per-component files), one per row declared in
-  design.md's Components section.
+  Describes the section shape that mcp__relentless__render_document (stage: "tasks",
+  component: "<component-slug>") produces for one component, from task_items /
+  parallel_batches / parallel_batch_members / tasks_flags rows scoped to that component's
+  tasks_doc. Nothing is hand-filled from this file — it's reference structure for the
+  tasks-drafter agent, not a file that gets copied or edited per-feature. One such document
+  exists PER declared component (see design.template.md's Components section),
+  autonomously drafted by the tasks stage from an APPROVED design. No human interview
+  happens at this stage — see README.md. This document covers exactly one component's own
+  run order, parallel-execution grouping, task list, and flags. It does NOT carry the
+  spec-wide Definition of Done — that lives once, spec-wide (see tasks-index.template.md).
+  The Order section below is mandatory and linear: task items are appended via
+  add_task_item in exact run order (item_id/execution_order are derived from call order,
+  not an explicit position argument) so this component's slice of implementation can be
+  executed mechanically from top to bottom.
 -->
 
 # Tasks: <feature name> — Component: <component-slug> (<Component Display Name>)

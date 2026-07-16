@@ -1,9 +1,15 @@
 <!--
   design.template.md
-  Drafted autonomously by the design stage from an APPROVED requirements.md. No human
-  interview happens at this stage — see README.md. If something here can't be
-  determined confidently from requirements.md, draft your best-effort approach anyway
-  and record the concern in Flags below rather than halting.
+  Describes the section shape that mcp__relentless__render_document (stage: "design")
+  produces from rows written via set_design_overview / set_design_architecture /
+  add_design_component / add_design_data_model_entry / add_design_traceability /
+  add_design_alternative / add_design_open_risk / add_design_flag. Nothing is hand-filled
+  from this file — it's reference structure for the design-drafter agent, not a file that
+  gets copied or edited per-feature. Drafted autonomously by the design stage from an
+  APPROVED requirements stage. No human interview happens at this stage — see README.md.
+  If something here can't be determined confidently from requirements, draft your
+  best-effort approach anyway and record the concern via add_design_flag rather than
+  halting.
 -->
 
 # Design: <feature name>

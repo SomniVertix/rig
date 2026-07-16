@@ -2,54 +2,69 @@
 
 This document defines how a "spec" is created and consumed in this project. It is written
 so that an AI agent with **zero prior context** can read it cold and correctly execute
-whichever stage of the workflow applies. Every stage document produced by this workflow
-must itself be self-contained enough for a fresh, cold-context agent to act on — never
-assume a later reader has access to this conversation or any earlier one.
+whichever stage of the workflow applies.
+
+**All spec data lives in the `relentless` MCP server, not the local filesystem.** Every
+read and write described below is an `mcp__relentless__*` tool call against Postgres-backed
+storage, scoped to the session's bound project. No agent in this pipeline ever uses
+Read/Write/Edit/Glob on a spec document, a `decisions.md`, or a `status.json` — those files
+do not exist at runtime. The only real files involved are the templates in this folder,
+which are reference material describing the *shape* `render_document` produces — they are
+never hand-filled or copied per-feature.
+
+Every stage document produced by this workflow must itself be self-contained enough for a
+fresh, cold-context agent to act on — never assume a later reader has access to this
+conversation or any earlier one. For MCP-managed state that means: re-fetch it via
+`get_spec` / `get_next_stage` / `render_document` at the start of every invocation, never
+assume it's still what it was last time you looked.
 
 ## What a "spec" is
 
-A spec is not one document. It is three sequential stage documents that together fully
-describe a feature:
+A spec is not one document. It is three sequential stages that together fully describe a
+feature, each stored as structured rows and rendered to markdown on demand:
 
-1. **`requirements.md`** — what must be true. No implementation detail.
-2. **`design.md`** — how it will be built. Technical approach, grounded in the requirements.
-3. **The tasks documents** — the concrete, ordered, executable work plan derived from the
-   design, split per-component: one spec-wide `tasks-index.md` (component list + status,
-   Cross-Component Dependencies, Definition of Done) plus one `<component-slug>-tasks.md`
-   per component declared in design.md's Components section (that component's own Order,
-   Parallel Execution Schema, Task List, Flags). See Stage 3 below.
+1. **Requirements** — what must be true. No implementation detail.
+2. **Design** — how it will be built. Technical approach, grounded in the requirements.
+3. **Tasks** — the concrete, ordered, executable work plan derived from the design, split
+   per-component: one spec-wide index (component list + status, Cross-Component
+   Dependencies, Definition of Done) plus one task document per component declared in the
+   design's Components section. See Stage 3 below.
 
 Stages are strictly sequential (requirements → design → tasks), but each stage may be
 executed by a **completely different agent with a clean context**. Treat every stage
-boundary as a cold handoff.
+boundary as a cold handoff: call `mcp__relentless__get_spec` and/or
+`mcp__relentless__render_document` at the start of your turn rather than trusting anything
+carried over from a previous message.
 
 ## Where things live
 
-Two different kinds of files exist. Do not confuse them:
+Two different kinds of things exist. Do not confuse them:
 
-- **Templates** (this folder, `relentless/templates/spec/`) — the reusable skeletons this
-  document describes. Checked into the project, never modified per-feature.
-- **Instances** (`.relentless/specs/<feature-slug>/`) — the real, filled-in documents for
-  one specific feature, generated at runtime from the templates.
+- **Templates** (this folder, `spec-templates/spec/`) — reference documents describing the
+  section-by-section shape that `render_document` produces for each stage. Checked into the
+  project, read for structure/guidance, never written to per-feature.
+- **Instances** — real, per-feature data, held entirely by the `relentless` MCP server as
+  rows scoped to the session's bound project. There is no `.relentless/specs/<slug>/`
+  directory. A spec instance is identified purely by the `specId` returned from
+  `mcp__relentless__create_spec`, and every subsequent tool call for that spec takes that
+  `specId` (or an id/slug derived from it, e.g. `componentSlug`).
 
 ```
-relentless/
-  templates/spec/
-    README.md                    <- this file
-    requirements.template.md
-    design.template.md
-    tasks.template.md            <- retired pointer; see below
-    tasks-index.template.md
-    component-tasks.template.md
-  .relentless/
-    specs/
-      <feature-slug>/
-        decisions.md              (provenance copy from the grilling session)
-        requirements.md
-        design.md
-        tasks-index.md
-        <component-slug>-tasks.md (one per component declared in design.md)
-        status.json
+spec-templates/spec/
+  README.md                    <- this file
+  requirements.template.md
+  design.template.md
+  tasks-index.template.md
+  component-tasks.template.md
+  tasks.template.md            <- retired pointer; see below
+
+relentless MCP server (Postgres, spec_pipeline schema)
+  specs                        (one row per feature, scoped to a project)
+    spec_stages                (per-stage approve/deny state, replaces status.json)
+    requirements + user_stories + acceptance_criteria + non_goals + ...
+    designs + design_components + design_traceability + ...
+    tasks_docs (one per design_component) + task_items + parallel_batches + ...
+    task_dependency_edges, definition_of_done_items (spec-wide)
 ```
 
 ## The pipeline
@@ -60,15 +75,18 @@ human idea
    ▼
 [grilling session]  (type: session — takes over the active agent session)
    │  interviews the human until requirements are unambiguous
+   │  produces a Q&A transcript held only in the session's context — nothing is
+   │  written to a file. There is no MCP tool for grilling/decisions data.
    ▼
-decisions.md  ───────copied to───────►  .relentless/specs/<slug>/decisions.md
-   │
+decisions Q&A (in-context only) ──handed directly, verbatim, into the invocation
+   │                              of whichever agent performs Stage 1 next
    ▼
-[requirements compile]  (mechanical)
-   │  decisions.md -> requirements.md, using requirements.template.md
+[requirements compile]  (mechanical, via mcp__relentless__* tools)
+   │  decisions Q&A -> requirements rows, using requirements.template.md as the
+   │  target shape
    ▼
-requirements.md  ──[approve/deny gate]──►  design.md  ──[approve/deny gate]──►  tasks.md  ──[approve/deny gate]──►  implementation
-                        (autonomous draft)                  (autonomous draft)              (orchestrator)
+requirements  ──[approve/deny gate]──►  design  ──[approve/deny gate]──►  tasks  ──[approve/deny gate]──►  implementation
+   (autonomous draft)                     (autonomous draft)                (orchestrator)
 ```
 
 **The grilling interview is the last point of deep human interaction in the entire
@@ -79,159 +97,176 @@ never another interview.
 ### Feature slug
 
 Derive a short kebab-case slug from the feature's working title as stated at the start of
-the interview (e.g. "dark mode toggle" → `dark-mode-toggle`), sanitized to filesystem-safe
-characters. If `.relentless/specs/<slug>/` already exists, append a numeric suffix
-(`-2`, `-3`, ...) until the name is free.
+the interview (e.g. "dark mode toggle" → `dark-mode-toggle`). Call
+`mcp__relentless__list_specs` and check whether that slug is already in use in this
+project; if so, append a numeric suffix (`-2`, `-3`, ...) until it's free, then call
+`mcp__relentless__create_spec` with that slug. Keep the returned `specId` — everything
+downstream is addressed by it, not by the slug.
 
 ## Stage 0 — Requirements gathering (`grilling`, type: `session`)
 
 A session-type skill takes over the active agent session and interviews the human about
 the feature idea until requirements are concrete, testable, and free of ambiguity. It
-produces only `decisions.md` — a raw Q&A log, not a formal document. It does not write
-`requirements.md` itself.
-
-Session skills are skills that take over the active agent session and usually work as the
-detailed information gathering for an upcoming spec.
-
-When the interview concludes, copy the resulting `decisions.md` into
-`.relentless/specs/<feature-slug>/decisions.md`. This copy is retained permanently as a
-provenance record — no downstream stage reads it, but it preserves *why* a requirement
-exists in the human's own words, for later human or audit review.
+produces only a raw Q&A transcript — not a formal document, and **not a file**. No
+`mcp__relentless__*` tool exists for grilling sessions or decisions, so there is nothing to
+persist here: the transcript lives in the session's own context and is handed directly,
+verbatim, into the Stage 1 invocation. Once that handoff happens, the transcript is not
+retained anywhere durable — it exists only for as long as it's needed to compile
+requirements from it.
 
 ## Stage 1 — Requirements compile (mechanical)
 
-Read `.relentless/specs/<feature-slug>/decisions.md` and produce
-`.relentless/specs/<feature-slug>/requirements.md` using `requirements.template.md`.
+Given the decisions Q&A transcript (passed in-context, not read from a file), produce the
+spec's requirements using `requirements.template.md` as the target section shape, via these
+`mcp__relentless__*` calls:
 
-This step is **mostly mechanical**: reformat the decisions log into proper requirements
-structure (user stories, EARS acceptance criteria, non-goals). It is not a fresh
-interview. However, if something the template requires is simply absent from
-`decisions.md`, do not invent an answer — stop and ask the human directly for that one
-piece of missing information, then continue. This is a narrow clarifying question, not a
-Q&A session.
+1. If this is a new spec, `create_spec` first and keep the returned `specId`.
+2. `set_requirements_overview` for the `## Overview` section.
+3. `add_user_story` per story, then `add_acceptance_criterion` per EARS criterion under
+   each returned `userStoryId`.
+4. `add_non_goal` per non-goal.
+5. `add_assumption_open_question` per gap/ambiguity.
+6. `add_glossary_term` per domain term.
+
+This step is **mostly mechanical**: reformat the decisions transcript into proper
+requirements structure. It is not a fresh interview. If something the template requires is
+simply absent from the transcript, do not invent an answer — record it via
+`add_assumption_open_question` instead (see Stage 1's agent notes for why this replaced
+"stop and ask the human directly").
 
 Acceptance criteria use **EARS notation** (see `requirements.template.md` for the full
-pattern set and rationale). Any non-functional requirement must include a measurable
-threshold — reject and flag ones that don't (e.g. "the system shall be fast" is not
-acceptable; "the system shall respond within 200ms under 1000 concurrent users" is).
+pattern set and rationale — `add_acceptance_criterion`'s `earsPattern` enum mirrors it
+exactly). Any non-functional requirement must include a measurable threshold — flag ones
+that don't via `add_assumption_open_question` rather than writing a vague one.
 
-Once written, set `requirements` status to `in_review` in `status.json` (see
-[Status tracking](#status-tracking)) and present the document to the human for
-approve/deny.
+Once every section is written, call `mcp__relentless__finalize_stage` with
+`stage: "requirements"` to submit it for review, then call
+`mcp__relentless__render_document` with `stage: "requirements"` and present the rendered
+markdown to the human for approve/deny.
 
 ## Stage 2 — Design (autonomous draft)
 
-Once `requirements.md` is `approved`, read it cold and draft
-`.relentless/specs/<feature-slug>/design.md` using `design.template.md`. This is fully
-autonomous — do not interview the human. Every requirement must be traceable to a part of
-the design that satisfies it.
+Precondition: call `mcp__relentless__get_spec` and confirm `requirements` is `"approved"`.
+If it isn't, stop and report that back — do not draft against unapproved requirements.
 
-If the requirements document is insufficient to design some part of the feature with
-confidence, do not halt to ask a blocking question. Draft your best-effort approach and
-record the concern in the **Flags** section of `design.md` (see the template). The human
-will see it during their approve/deny review.
+Read the requirements cold via `mcp__relentless__render_document`
+(`stage: "requirements"`) — never assume you already know its contents. This stage is
+fully autonomous — do not interview the human. Every requirement must be traceable to a
+part of the design that satisfies it.
 
-Set `design` status to `in_review` and present for approve/deny.
+Produce the design using `design.template.md` as the target section shape, via:
+
+1. `set_design_overview`, `set_design_architecture`.
+2. `add_design_component` for every component (at least one is mandatory — a design with
+   zero declared components is rejected at `finalize_stage`). Slugs must be kebab-case.
+3. `add_design_data_model_entry` per schema/type/API contract.
+4. `add_design_traceability` per requirement/story, mapping it to the design section or
+   component that satisfies it.
+5. `add_design_alternative`, `add_design_open_risk`, `add_design_flag` as needed.
+
+If the requirements are insufficient to design some part with confidence, do not halt.
+Draft your best-effort approach anyway and record the concern via `add_design_flag`.
+
+Call `mcp__relentless__finalize_stage` with `stage: "design"`. This also auto-seeds one
+task document per declared component server-side — nothing further to do for that. Then
+`render_document` (`stage: "design"`) and present for approve/deny.
 
 ## Stage 3 — Tasks (autonomous draft)
 
-Once `design.md` is `approved`, read it cold and draft the tasks-stage documents. Also
-fully autonomous. Break the design into discrete, independently-inspectable tasks, each
-traced back to the requirement(s) and design section(s) it implements.
+Precondition: `design` must be `"approved"` (`get_spec`). The design's Components section
+(read via `render_document`, `stage: "design"`) declares >=1 component; the tasks stage maps
+onto it 1:1 — one task document per component slug already seeded by Stage 2's
+`finalize_stage`, plus the single spec-wide Definition of Done.
 
-design.md's Components section (see `design.template.md`) declares >=1 component. The
-tasks stage maps onto it 1:1: draft one
-`.relentless/specs/<feature-slug>/<component-slug>-tasks.md` per declared component using
-`component-tasks.template.md`, plus exactly one spec-wide
-`.relentless/specs/<feature-slug>/tasks-index.md` using `tasks-index.template.md` that
-lists every component + its status, the Cross-Component Dependencies, and the single
-spec-wide Definition of Done. Do not author a single unified `tasks.md` — that format is
-retired (see `tasks.template.md`'s pointer note).
+For **each** component (`componentSlug` from the design):
 
-**The Order section is mandatory in every component-tasks document.** Determine which
-tasks within that component can run concurrently without risk of ambiguity and represent
-the full run as one precomputed **linear numbered checklist**, including subtasks (e.g.
-`1`, `1.1`, `1.2`, `2`). Do this analysis now, while you have full context from
-`design.md`, rather than leaving it for the implementing agent to infer later. Ordering
-that crosses component boundaries goes in `tasks-index.md`'s Cross-Component
-Dependencies section instead, never inside a component-tasks document's Order.
+1. `add_task_item` per task/subtask, **in the exact order it must run** — `item_id` and
+   `execution_order` are derived append-only from call order, there is no explicit
+   position argument, so the sequence you call this in *is* the Order section. Use
+   `parentItemId` for subtasks. Keep the returned task-item id — you'll need it for files
+   touched, parallel batches, and any cross-component dependency edge.
+2. `add_task_file_touched` per file/area for that task item.
+3. `add_parallel_batch` once per batch, in sequence (`batchLabel`/`batchOrder` are derived
+   from call order), then `add_parallel_batch_member` for each task item in that batch.
+4. `add_tasks_flag` for any concern specific to this component.
 
-**Parallel mode schema is mandatory.** In addition to the linear checklist, include a
-`Parallel Execution Schema` section that groups the same task/subtask IDs into sequential
-parallel batches (e.g. `P1`, `P2`) so an orchestrator can run compatible work concurrently
-without re-deriving grouping logic at runtime.
+Spec-wide, once (not per component):
 
-**Checklist semantics are required.** Draft all task/subtask checkboxes as unchecked. The
-implementer/orchestrator must check each item immediately when it completes so the
-relevant document (a component's `<component-slug>-tasks.md`, or `tasks-index.md` for the
-Components table/Definition of Done) remains an accurate live execution state.
+- `add_definition_of_done_item` for each item in the single Definition of Done, shared
+  across every component.
+- `add_task_dependency_edge` for any dependency that crosses component boundaries (`from`
+  must complete before `to`). Since there's no lookup-by-display-id tool, keep an in-memory
+  map from each component's task-item ids (as you create them) to the UUIDs `add_task_item`
+  returned, for the whole drafting session across all components — you need those UUIDs to
+  wire an edge. Never express a cross-component dependency inside a single component's
+  Order/Parallel Execution Schema.
 
-**Suggested agent per task.** Take inventory of the agent types currently available to
-you and assign the best-suited one to each task (and subtask, if applicable). If none of
-the available agents is a good fit, set the field to `none` — the implementer will use
-its default agent for that task.
+**Suggested agent per task.** Take inventory of the agent types currently available to you
+and record the best-suited one in `add_task_item`'s `suggestedAgent` (or `update_task_item`
+after the fact). If none fits, use `none` — the implementer falls back to its default agent.
 
-Same Flags rule as design: draft best-effort, record concerns in the Flags section rather
+Same Flags rule as design: draft best-effort, record concerns via `add_tasks_flag` rather
 than halting.
 
-Set `tasks` status to `in_review` and present for approve/deny.
+Once a component's items/batches/flags are complete, call `mcp__relentless__finalize_stage`
+with `stage: "tasks"` and `component: "<slug>"` — each component finalizes independently
+(this is also where cross-component cycle detection runs, across the whole spec's edges).
+Repeat per component, then `render_document` (`stage: "tasks"`, `component: "all"` for the
+index, or a specific slug for one component's document) and present for approve/deny.
 
 ## Approve/deny gate
 
-At the end of every stage (requirements, design, tasks), present the document to the
-human for a quick review:
+At the end of every stage (requirements, design, and each tasks component), your job is to
+call `mcp__relentless__finalize_stage`, which submits it to `in_review`, and then present
+the `render_document` output to the human. **Approve/deny itself is a human-only action not
+exposed by any `mcp__relentless__*` tool** — you cannot set a stage to `approved` yourself,
+and you should not report a stage as approved just because you finalized it. Your
+involvement ends at "submitted for review."
 
-- **Approve** → set that stage's status to `approved` in `status.json`, unblocking the
-  next stage.
-- **Deny** → the human gives a short freeform reason (one or two sentences — not a Q&A
-  loop). Redraft the document incorporating that feedback, then re-present it for
-  approval. Status stays `in_review` until approved.
+- **Approve** happens outside your tool access; the next stage becomes eligible once you
+  observe (via `get_spec` / `get_next_stage`) that it has flipped to `approved`.
+- **Deny** — the human gives a short freeform reason (one or two sentences — not a Q&A
+  loop), which reaches you as part of your next invocation. Redraft using the relevant
+  `update_*`/`add_*`/`delete_*` tools for that stage, incorporating the feedback, then call
+  `finalize_stage` again to resubmit.
 
-Advancing to the next stage is blocked while the current stage's document is not
-`approved`.
+Advancing to the next stage is blocked while the current stage (or, for tasks, a given
+component) is not `approved` — `get_next_stage` will simply not surface it as actionable.
 
 ## Status tracking
 
-`.relentless/specs/<feature-slug>/status.json` tracks pipeline state. It is separate from
-the markdown documents so they stay pure, standalone-readable content with no pipeline
-metadata mixed in.
+There is no `status.json`. Call `mcp__relentless__get_spec` with the spec's id to get its
+`current_stage` and each of `requirements` / `design` / `tasks`'s status
+(`not_started`, `in_review`, `approved`) directly from the server.
 
-```json
-{
-  "stage": "design",
-  "requirements": "approved",
-  "design": "in_review",
-  "tasks": "not_started",
-  "created_at": "2026-07-12T22:03:36Z",
-  "updated_at": "2026-07-13T01:00:00Z"
-}
-```
-
-`stage` is the current active stage. Each of `requirements` / `design` / `tasks` is one
-of `not_started`, `in_review`, `approved`. If `status.json` does not exist yet, treat the
-spec as brand new (stage `requirements`, everything `not_started`).
-
-**Entry-point behavior:** whatever invokes this workflow should inspect
-`status.json` (creating it if absent) and always do the next correct thing — run the next
-stage whose predecessor is `approved` and which is itself not yet `approved`. This lets a
-human or orchestrating agent re-invoke the same entry point repeatedly without needing to
-remember which stage comes next.
+**Entry-point behavior:** whatever invokes this workflow should call
+`mcp__relentless__get_next_stage` first thing and always do the next correct thing — run
+the next stage whose predecessor is `approved` and which is itself not yet `approved` (for
+tasks, this includes telling you which components still lag). This lets a human or
+orchestrating agent re-invoke the same entry point repeatedly without needing to remember
+which stage — or which component — comes next.
 
 ## Implementation handoff (orchestrator)
 
-Once the `tasks` stage is `approved`, implementation begins. The implementer is an
-**orchestrator**, executing the precomputed linear plan mechanically:
+Once every component's `tasks` stage is `approved`, implementation begins. The implementer
+is an **orchestrator**, executing the precomputed plan mechanically:
 
-1. Read `tasks-index.md` and every `<component-slug>-tasks.md` document it lists, in
-   full — cold, no prior context assumed.
+1. Call `get_next_stage` / `get_spec`, then `render_document` (`stage: "tasks"`, first
+   `component: "all"` for the index, then each component) to read the full plan — cold, no
+   prior context assumed.
 2. Choose runtime mode:
-  - linear mode: walk the `Order` checklist top-to-bottom, one item at a time.
-  - parallel mode: follow `Parallel Execution Schema` batch-by-batch, dispatching each
-    batch's items concurrently.
-3. After each item completes in either mode, mark its checkbox immediately in `tasks.md`.
-4. Repeat until every ordered item is done and the Definition of Done checklist is
-  satisfied.
+   - linear mode: walk each component's Order top-to-bottom, one item at a time.
+   - parallel mode: follow each component's Parallel Execution Schema batch-by-batch,
+     dispatching each batch's items concurrently, while respecting any cross-component
+     `task_dependency_edges` between components.
+3. After each item completes in either mode, call `mcp__relentless__update_task_item` with
+   `isChecked: true` immediately — this is the live checklist state; there is no file to
+   edit. (A parent item is rejected if marked checked while any of its children in the same
+   component are still unchecked.)
+4. Repeat until every ordered item is done, then call
+   `mcp__relentless__update_definition_of_done_item` with `isChecked: true` for each spec-
+   wide Definition of Done item as it's verified satisfied.
 
 The orchestrator does not need deep judgment — it mechanically executes the precomputed
 plan. All the reasoning about ordering, parallel grouping, and agent selection already
-happened when `tasks.md` was authored.
+happened when tasks were drafted.

@@ -1,15 +1,19 @@
 <!--
   tasks-index.template.md
-  The single spec-wide tasks-stage document, autonomously drafted by the tasks stage
-  from an APPROVED design.md. No human interview happens at this stage — see
-  README.md. This document does NOT contain any component's own Order / Parallel
-  Execution Schema / Task List / Flags — those live one-per-component in
-  component-tasks.template.md instances (one per row in design.md's Components
-  section). This index instead tracks, spec-wide: which components exist and their
-  current status, dependencies that cross component boundaries, and the single
-  Definition of Done for the whole spec. This is the one and only place the
-  Definition of Done appears — it must never be duplicated into a component-tasks.md
-  instance.
+  Describes the section shape that mcp__relentless__render_document (stage: "tasks",
+  component: "all") produces spec-wide: design_components' status, task_dependency_edges,
+  and definition_of_done_items. Nothing is hand-filled from this file — it's reference
+  structure for the tasks-drafter agent, not a file that gets copied or edited per-feature.
+  The single spec-wide tasks-stage document, autonomously drafted by the tasks stage from
+  an APPROVED design. No human interview happens at this stage — see README.md. This
+  document does NOT contain any component's own Order / Parallel Execution Schema / Task
+  List / Flags — those live one-per-component in component-tasks.template.md's shape
+  (one per row in design's Components section, rendered via render_document with a specific
+  component slug). This index instead tracks, spec-wide: which components exist and their
+  current status, dependencies that cross component boundaries (task_dependency_edges), and
+  the single Definition of Done for the whole spec (definition_of_done_items). This is the
+  one and only place the Definition of Done appears — it must never be duplicated into a
+  component-tasks document.
 -->
 
 # Tasks: <feature name> (Index)

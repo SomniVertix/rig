@@ -1,8 +1,12 @@
 <!--
   requirements.template.md
-  Produced by the requirements-compile step from decisions.md. See README.md for the
-  full process. This file describes WHAT must be true — never HOW it will be built.
-  No implementation detail, architecture, or technology choices belong here.
+  Describes the section shape that mcp__relentless__render_document (stage: "requirements")
+  produces from rows written via set_requirements_overview / add_user_story /
+  add_acceptance_criterion / add_non_goal / add_assumption_open_question /
+  add_glossary_term. Nothing is hand-filled from this file — it's reference structure for
+  the requirements-compiler agent, not a file that gets copied or edited per-feature. See
+  README.md for the full process. This describes WHAT must be true — never HOW it will be
+  built. No implementation detail, architecture, or technology choices belong here.
 -->
 
 # Requirements: <feature name>
