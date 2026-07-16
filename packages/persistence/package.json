@@ -1,0 +1,22 @@
+{
+  "name": "@relentless/persistence",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "dependencies": {
+    "@relentless/schema": "workspace:*",
+    "pg": "^8.22.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm build && node --test ./test/spec-repository.test.mjs"
+  }
+}

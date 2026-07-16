@@ -32,7 +32,7 @@ _Record resolved questions and decisions here as the interview progresses._
 
 ### Q5: Where do the three stage documents live?
 - **Resolution:** `.relentless/specs/<feature-slug>/` in the current workspace directory, containing `requirements.md`, `design.md`, `tasks.md` (one folder per spec, grouping all three stage docs together).
-- **Rationale:** Predictable, discoverable location so a cold-context agent can find "the spec" for a feature without being told exactly where it lives. Confirms `.relentless/` is this project's convention root (already used for grilling `sessions/`).
+- **Rationale:** Predictable, discoverable location so a cold-context agent can find "the spec" for a feature without being told exactly where it lives. Confirms `.relentless/` is this project's convention root (already used for grilling `specs/`).
 
 ### Q6: Does the session skill write requirements.md directly, or hand off to a separate step?
 - **Resolution:** Session-type skills (e.g. `grilling`) only ever produce a `decisions.md`. A separate downstream step in the spec workflow reads that `decisions.md` and produces the formal `requirements.md`.
@@ -109,7 +109,7 @@ Also confirmed (uncontested carryover from the original Tasks-stage proposal): t
 - **Rationale:** Consistent with the cold-start principle (Q3) — an AI reading the umbrella doc cold must know exactly what to do at each stage, not just what the system looks like.
 
 ### Q20: Where do the umbrella doc + templates live?
-- **Resolution:** Templates (umbrella doc + 3 per-artifact templates) live in the `relentless` project root itself (checked-in project assets), NOT under `.relentless/`. `.relentless/` is reserved for runtime/workspace state only: sessions (`.relentless/sessions/`) and generated spec instances (`.relentless/specs/<feature-slug>/requirements.md`, `design.md`, `tasks.md`, per Q5). Templates are the source an agent copies/reads from; `.relentless/specs/...` is where the real, filled-in spec gets generated at runtime.
+- **Resolution:** Templates (umbrella doc + 3 per-artifact templates) live in the `relentless` project root itself (checked-in project assets), NOT under `.relentless/`. `.relentless/` is reserved for runtime/workspace state only: sessions (`.relentless/specs/`) and generated spec instances (`.relentless/specs/<feature-slug>/requirements.md`, `design.md`, `tasks.md`, per Q5). Templates are the source an agent copies/reads from; `.relentless/specs/...` is where the real, filled-in spec gets generated at runtime.
 
 ### Q21: Exact template folder/file naming
 - **Resolution:**

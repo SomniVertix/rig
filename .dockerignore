@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+.claude
+.relentless
+coverage
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store

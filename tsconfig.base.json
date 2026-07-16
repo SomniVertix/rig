@@ -1,0 +1,51 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "ignoreDeprecations": "5.0",
+    "skipLibCheck": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "ignoreDeprecations": "5.0",
+    "baseUrl": ".",
+    "paths": {
+      "@relentless/schema": ["packages/schema/src"],
+      "@relentless/proto": ["packages/proto/src"],
+      "@relentless/engine": ["packages/engine/src"],
+      "@relentless/persistence": ["packages/persistence/src"],
+      "@relentless/executors": ["packages/executors/src"],
+      "@relentless/library": ["packages/library/src"],
+      "@relentless/server": ["packages/server/src"],
+      "@relentless/test-support": ["packages/test-support/src"]
+    }
+  },
+  "include": [],
+  "references": [
+    { "path": "packages/schema" },
+    { "path": "packages/proto" },
+    { "path": "packages/engine" },
+    { "path": "packages/persistence" },
+    { "path": "packages/executors" },
+    { "path": "packages/library" },
+    { "path": "packages/server" },
+    { "path": "packages/test-support" }
+  ]
+}

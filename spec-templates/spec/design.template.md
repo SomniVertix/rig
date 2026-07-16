@@ -19,6 +19,21 @@
 <!-- Components/modules involved and how they interact. Use a diagram (mermaid,
      ASCII, or prose) if it clarifies relationships that prose alone would muddy. -->
 
+## Components
+
+<!-- Mandatory: declare every component this feature is built from, at least one row
+     required — a design with zero declared components is invalid and must be rejected
+     at design finalization. Each `slug` MUST be kebab-case (lowercase letters/digits,
+     hyphen-separated, e.g. `db-schema`, `mcp-transport`) — this is enforced by the same
+     kebab-case convention used for spec/project slugs elsewhere in this workflow, not
+     just a style preference. The tasks stage maps onto these 1:1: exactly one
+     per-component task document (see tasks-index.template.md /
+     component-tasks.template.md) per declared component slug. -->
+
+| Slug | Display name | Responsibility |
+|---|---|---|
+| `<component-slug>` | <Component Display Name> | <what this component is responsible for> |
+
 ## Data Model / Interfaces
 
 <!-- Schemas, types, API contracts. Concrete enough that an implementer can code

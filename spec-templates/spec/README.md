@@ -13,7 +13,11 @@ describe a feature:
 
 1. **`requirements.md`** — what must be true. No implementation detail.
 2. **`design.md`** — how it will be built. Technical approach, grounded in the requirements.
-3. **`tasks.md`** — the concrete, ordered, executable work plan derived from the design.
+3. **The tasks documents** — the concrete, ordered, executable work plan derived from the
+   design, split per-component: one spec-wide `tasks-index.md` (component list + status,
+   Cross-Component Dependencies, Definition of Done) plus one `<component-slug>-tasks.md`
+   per component declared in design.md's Components section (that component's own Order,
+   Parallel Execution Schema, Task List, Flags). See Stage 3 below.
 
 Stages are strictly sequential (requirements → design → tasks), but each stage may be
 executed by a **completely different agent with a clean context**. Treat every stage
@@ -34,14 +38,17 @@ relentless/
     README.md                    <- this file
     requirements.template.md
     design.template.md
-    tasks.template.md
+    tasks.template.md            <- retired pointer; see below
+    tasks-index.template.md
+    component-tasks.template.md
   .relentless/
     specs/
       <feature-slug>/
         decisions.md              (provenance copy from the grilling session)
         requirements.md
         design.md
-        tasks.md
+        tasks-index.md
+        <component-slug>-tasks.md (one per component declared in design.md)
         status.json
 ```
 
@@ -128,16 +135,26 @@ Set `design` status to `in_review` and present for approve/deny.
 
 ## Stage 3 — Tasks (autonomous draft)
 
-Once `design.md` is `approved`, read it cold and draft
-`.relentless/specs/<feature-slug>/tasks.md` using `tasks.template.md`. Also fully
-autonomous. Break the design into discrete, independently-inspectable tasks, each traced
-back to the requirement(s) and design section(s) it implements.
+Once `design.md` is `approved`, read it cold and draft the tasks-stage documents. Also
+fully autonomous. Break the design into discrete, independently-inspectable tasks, each
+traced back to the requirement(s) and design section(s) it implements.
 
-**The Order section is mandatory.** Determine which tasks can run concurrently without
-risk of ambiguity and represent the full run as one precomputed **linear numbered
-checklist**, including subtasks (e.g. `1`, `1.1`, `1.2`, `2`). Do this analysis now,
-while you have full context from `design.md`, rather than leaving it for the implementing
-agent to infer later.
+design.md's Components section (see `design.template.md`) declares >=1 component. The
+tasks stage maps onto it 1:1: draft one
+`.relentless/specs/<feature-slug>/<component-slug>-tasks.md` per declared component using
+`component-tasks.template.md`, plus exactly one spec-wide
+`.relentless/specs/<feature-slug>/tasks-index.md` using `tasks-index.template.md` that
+lists every component + its status, the Cross-Component Dependencies, and the single
+spec-wide Definition of Done. Do not author a single unified `tasks.md` — that format is
+retired (see `tasks.template.md`'s pointer note).
+
+**The Order section is mandatory in every component-tasks document.** Determine which
+tasks within that component can run concurrently without risk of ambiguity and represent
+the full run as one precomputed **linear numbered checklist**, including subtasks (e.g.
+`1`, `1.1`, `1.2`, `2`). Do this analysis now, while you have full context from
+`design.md`, rather than leaving it for the implementing agent to infer later. Ordering
+that crosses component boundaries goes in `tasks-index.md`'s Cross-Component
+Dependencies section instead, never inside a component-tasks document's Order.
 
 **Parallel mode schema is mandatory.** In addition to the linear checklist, include a
 `Parallel Execution Schema` section that groups the same task/subtask IDs into sequential
@@ -145,8 +162,9 @@ parallel batches (e.g. `P1`, `P2`) so an orchestrator can run compatible work co
 without re-deriving grouping logic at runtime.
 
 **Checklist semantics are required.** Draft all task/subtask checkboxes as unchecked. The
-implementer/orchestrator must check each item immediately when it completes so `tasks.md`
-remains an accurate live execution state.
+implementer/orchestrator must check each item immediately when it completes so the
+relevant document (a component's `<component-slug>-tasks.md`, or `tasks-index.md` for the
+Components table/Definition of Done) remains an accurate live execution state.
 
 **Suggested agent per task.** Take inventory of the agent types currently available to
 you and assign the best-suited one to each task (and subtask, if applicable). If none of
@@ -201,10 +219,11 @@ remember which stage comes next.
 
 ## Implementation handoff (orchestrator)
 
-Once `tasks.md` is `approved`, implementation begins. The implementer is an
+Once the `tasks` stage is `approved`, implementation begins. The implementer is an
 **orchestrator**, executing the precomputed linear plan mechanically:
 
-1. Read `tasks.md` in full — cold, no prior context assumed.
+1. Read `tasks-index.md` and every `<component-slug>-tasks.md` document it lists, in
+   full — cold, no prior context assumed.
 2. Choose runtime mode:
   - linear mode: walk the `Order` checklist top-to-bottom, one item at a time.
   - parallel mode: follow `Parallel Execution Schema` batch-by-batch, dispatching each

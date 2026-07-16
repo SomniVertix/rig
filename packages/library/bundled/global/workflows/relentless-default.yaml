@@ -1,0 +1,116 @@
+{
+  "id": "relentless-default",
+  "name": "Relentless Default Workflow",
+  "entry": "compile-requirements",
+  "inputs": [
+    {
+      "name": "decisions.md",
+      "required": true
+    }
+  ],
+  "artifacts": [
+    "requirements.md",
+    "design.md",
+    "tasks.md"
+  ],
+  "nodes": [
+    {
+      "kind": "agent",
+      "id": "compile-requirements",
+      "reads": ["decisions.md"],
+      "writes": ["requirements.md"],
+      "prompt": "requirements-compiler",
+      "template": "requirements"
+    },
+    {
+      "kind": "human",
+      "id": "review-requirements",
+      "reads": ["requirements.md"],
+      "writes": [],
+      "prompt": "Review requirements",
+      "allowedSignals": ["approve", "deny"]
+    },
+    {
+      "kind": "guard",
+      "id": "requirements-gate",
+      "reads": ["requirements.md"],
+      "writes": [],
+      "cases": [
+        { "when": "approve", "goto": "draft-design" },
+        { "when": "deny", "goto": "compile-requirements" }
+      ],
+      "default": "compile-requirements"
+    },
+    {
+      "kind": "agent",
+      "id": "draft-design",
+      "reads": ["requirements.md"],
+      "writes": ["design.md"],
+      "prompt": "design-drafter",
+      "template": "design"
+    },
+    {
+      "kind": "human",
+      "id": "review-design",
+      "reads": ["design.md"],
+      "writes": [],
+      "prompt": "Review design",
+      "allowedSignals": ["approve", "deny"]
+    },
+    {
+      "kind": "guard",
+      "id": "design-gate",
+      "reads": ["design.md"],
+      "writes": [],
+      "cases": [
+        { "when": "approve", "goto": "draft-tasks" },
+        { "when": "deny", "goto": "draft-design" }
+      ],
+      "default": "draft-design"
+    },
+    {
+      "kind": "agent",
+      "id": "draft-tasks",
+      "reads": ["design.md"],
+      "writes": ["tasks.md"],
+      "prompt": "tasks-drafter",
+      "template": "tasks"
+    },
+    {
+      "kind": "human",
+      "id": "review-tasks",
+      "reads": ["tasks.md"],
+      "writes": [],
+      "prompt": "Review tasks",
+      "allowedSignals": ["approve"]
+    },
+    {
+      "kind": "guard",
+      "id": "tasks-gate",
+      "reads": ["tasks.md"],
+      "writes": [],
+      "cases": [
+        { "when": "approve", "goto": "done" }
+      ],
+      "default": "done"
+    },
+    {
+      "kind": "script",
+      "id": "done",
+      "reads": ["tasks.md"],
+      "writes": [],
+      "handler": "noop"
+    }
+  ],
+  "edges": [
+    { "from": "compile-requirements", "to": "review-requirements" },
+    { "from": "review-requirements", "to": "requirements-gate" },
+    { "from": "requirements-gate", "to": "draft-design" },
+    { "from": "draft-design", "to": "review-design" },
+    { "from": "review-design", "to": "design-gate" },
+    { "from": "design-gate", "to": "draft-tasks" },
+    { "from": "draft-tasks", "to": "review-tasks" },
+    { "from": "review-tasks", "to": "tasks-gate" },
+    { "from": "tasks-gate", "to": "done" }
+  ]
+}

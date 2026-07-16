@@ -1,0 +1,34 @@
+{
+  "name": "relentless-monorepo",
+  "version": "0.1.0",
+  "description": "AI Workflow Engine with user-defined state machines",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint --max-warnings 0 .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm -r test",
+    "check:deps": "node ./scripts/check-engine-deps.mjs"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "dependency-cruiser": "^13.1.0",
+    "eslint": "^8.56.0",
+    "pg": "^8.22.0",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.0",
+    "zod-to-json-schema": "^3.21.0"
+  }
+}

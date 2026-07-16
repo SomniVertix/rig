@@ -1,0 +1,22 @@
+{
+  "name": "@relentless/library",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/library/src/index.js",
+  "types": "./dist/library/src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/library/src/index.js",
+      "types": "./dist/library/src/index.d.ts"
+    }
+  },
+  "dependencies": {
+    "@relentless/schema": "workspace:*",
+    "@relentless/persistence": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no tests yet'"
+  }
+}
