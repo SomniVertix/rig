@@ -12,6 +12,13 @@ do not exist at runtime. The only real files involved are the templates in this 
 which are reference material describing the *shape* `render_document` produces — they are
 never hand-filled or copied per-feature.
 
+**Project binding today vs. planned:** a session's bound project currently comes from the
+per-repo `.mcp.json` URL path (`/mcp/<projectSlug>`) — one project per repo config, kept in
+sync manually across a multi-repo workspace. A VS Code-workspace-based redesign has been
+decided (each `.code-workspace` file carries a durable `rig.projectId`, resolved
+automatically by a shared local resolver process so every repo in one workspace shares a
+project) but is not yet built — see the `workspace-based-project-binding` spec.
+
 Every stage document produced by this workflow must itself be self-contained enough for a
 fresh, cold-context agent to act on — never assume a later reader has access to this
 conversation or any earlier one. For MCP-managed state that means: re-fetch it via
