@@ -21,6 +21,7 @@
   evidenceLinks:
     - packages/persistence/src/spec-repository.ts
   dependsOn: []
+  confidence: verified
   extra:
     hostingNote: Managed via the project's own docker-compose.yml today.
 
@@ -41,3 +42,4 @@
     - docker-compose.yml
   dependsOn:
     - data-store
+  confidence: inferred
