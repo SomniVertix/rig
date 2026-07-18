@@ -4,8 +4,8 @@ This document defines how a "spec" is created and consumed in this project. It i
 so that an AI agent with **zero prior context** can read it cold and correctly execute
 whichever stage of the workflow applies.
 
-**All spec data lives in the `relentless` MCP server, not the local filesystem.** Every
-read and write described below is an `mcp__relentless__*` tool call against Postgres-backed
+**All spec data lives in the `rig` MCP server, not the local filesystem.** Every
+read and write described below is an `mcp__rig__*` tool call against Postgres-backed
 storage, scoped to the session's bound project. No agent in this pipeline ever uses
 Read/Write/Edit/Glob on a spec document, a `decisions.md`, or a `status.json` — those files
 do not exist at runtime. The only real files involved are the templates in this folder,
@@ -32,8 +32,8 @@ feature, each stored as structured rows and rendered to markdown on demand:
 
 Stages are strictly sequential (requirements → design → tasks), but each stage may be
 executed by a **completely different agent with a clean context**. Treat every stage
-boundary as a cold handoff: call `mcp__relentless__get_spec` and/or
-`mcp__relentless__render_document` at the start of your turn rather than trusting anything
+boundary as a cold handoff: call `mcp__rig__get_spec` and/or
+`mcp__rig__render_document` at the start of your turn rather than trusting anything
 carried over from a previous message.
 
 ## Where things live
@@ -43,10 +43,10 @@ Two different kinds of things exist. Do not confuse them:
 - **Templates** (this folder, `spec-templates/spec/`) — reference documents describing the
   section-by-section shape that `render_document` produces for each stage. Checked into the
   project, read for structure/guidance, never written to per-feature.
-- **Instances** — real, per-feature data, held entirely by the `relentless` MCP server as
-  rows scoped to the session's bound project. There is no `.relentless/specs/<slug>/`
+- **Instances** — real, per-feature data, held entirely by the `rig` MCP server as
+  rows scoped to the session's bound project. There is no `.rig/specs/<slug>/`
   directory. A spec instance is identified purely by the `specId` returned from
-  `mcp__relentless__complete_trail` (which creates the spec when a trail completes with a
+  `mcp__rig__complete_trail` (which creates the spec when a trail completes with a
   spec outcome — see Stage 0), and every subsequent tool call for that spec takes that
   `specId` (or an id/slug derived from it, e.g. `componentSlug`).
 
@@ -59,11 +59,11 @@ spec-templates/spec/
   component-tasks.template.md
   tasks.template.md            <- retired pointer (superseded by the two files above;
                                   kept only so stale references aren't stranded)
-  db/                          <- reference SQL schema for the relentless server's storage
+  db/                          <- reference SQL schema for the rig server's storage
   pre/                         <- pre-migration grilling transcript (history only — models
                                   the old file-based flow, not current behavior)
 
-relentless MCP server (Postgres, discovery + spec_pipeline schemas)
+rig MCP server (Postgres, discovery + spec_pipeline schemas)
   discovery.trails             (one row per discovery effort — Stage 0)
     discovery.waypoints        (one question each) + waypoint_assets + dependency edges
     discovery.trail_terms      (per-trail terminology)
@@ -85,12 +85,12 @@ human idea
 [trail]  (discovery schema — grilling and/or wayfinder skills)
    │  each question becomes a WAYPOINT driven to a decision
    │  (sighted → marked → claimed → reached | bypassed), persisted live via the
-   │  mcp__relentless__* trail tools — nothing lives only in session context
+   │  mcp__rig__* trail tools — nothing lives only in session context
    ▼
 complete_trail (outcome: spec) ──creates the spec AND links the trail to it
    │                             (trails.outcome_spec_id) in one transaction
    ▼
-[requirements compile]  (mechanical, via mcp__relentless__* tools)
+[requirements compile]  (mechanical, via mcp__rig__* tools)
    │  the trail's reached waypoints (read via get_trail_by_spec) -> requirements
    │  rows, using requirements.template.md as the target shape
    ▼
@@ -107,17 +107,17 @@ never another interview.
 
 Derive a short kebab-case slug from the feature's working title as stated at the start of
 the trail (e.g. "dark mode toggle" → `dark-mode-toggle`). Call
-`mcp__relentless__list_specs` and check whether that slug is already in use in this
+`mcp__rig__list_specs` and check whether that slug is already in use in this
 project; if so, append a numeric suffix (`-2`, `-3`, ...) until it's free, then pass it to
-`mcp__relentless__complete_trail` when the trail completes with a spec outcome. Keep the
+`mcp__rig__complete_trail` when the trail completes with a spec outcome. Keep the
 returned `specId` — everything downstream is addressed by it, not by the slug.
 
 ## Stage 0 — Discovery (a trail, via the `grilling` and `wayfinder` skills)
 
 Stage 0 is a **trail**: one effort to turn a loose idea into a destination, stored in the
-`discovery` schema and worked entirely through `mcp__relentless__*` tools (`create_trail`,
+`discovery` schema and worked entirely through `mcp__rig__*` tools (`create_trail`,
 `add_waypoint`, `reach_waypoint`, `bypass_waypoint`, `get_frontier`, ... — the skills
-hard-fail without the relentless MCP server; there is no local storage layer). Each
+hard-fail without the rig MCP server; there is no local storage layer). Each
 question is a **waypoint** driven to a decision through the lifecycle
 sighted → marked → claimed → reached | bypassed.
 
@@ -125,22 +125,22 @@ There is no structural difference between a quick grilling conversation and a lo
 wayfinder campaign: a grill adds a waypoint and reaches it in the same breath (no claim
 step); a campaign marks waypoints and lets later conversations claim them off the frontier
 (`claim_waypoint` / `get_frontier`; a stale claim is reclaimable after the server's
-`RELENTLESS_CLAIM_TTL`, or released manually via `release_waypoint`). Either way, every
+`RIG_CLAIM_TTL`, or released manually via `release_waypoint`). Either way, every
 decision is persisted durably as it's made — nothing lives only in the session's context,
 and there is no verbatim in-context handoff to Stage 1.
 
-The trail ends with `mcp__relentless__complete_trail` (`outcome_kind: "spec"`), which
+The trail ends with `mcp__rig__complete_trail` (`outcome_kind: "spec"`), which
 creates the spec **and** links the trail to it (`trails.outcome_spec_id`) in a single
 transaction. At most one trail can stand behind any spec.
 
 ## Stage 1 — Requirements compile (mechanical)
 
 The decisions transcript is the spec's linked trail: call
-`mcp__relentless__get_trail_by_spec` with the `specId` and read its reached waypoints
+`mcp__rig__get_trail_by_spec` with the `specId` and read its reached waypoints
 (resolution + gist, in reached order) as the decisions, its bypassed waypoints as
 out-of-scope rulings, and its trail terms as terminology. Produce the spec's requirements
 from that using `requirements.template.md` as the target section shape, via these
-`mcp__relentless__*` calls:
+`mcp__rig__*` calls:
 
 1. The spec already exists — `complete_trail` created it. Do not create one here.
 2. `set_requirements_overview` for the `## Overview` section.
@@ -161,17 +161,17 @@ pattern set and rationale — `add_acceptance_criterion`'s `earsPattern` enum mi
 exactly). Any non-functional requirement must include a measurable threshold — flag ones
 that don't via `add_assumption_open_question` rather than writing a vague one.
 
-Once every section is written, call `mcp__relentless__finalize_stage` with
+Once every section is written, call `mcp__rig__finalize_stage` with
 `stage: "requirements"` to submit it for review, then call
-`mcp__relentless__render_document` with `stage: "requirements"` and present the rendered
+`mcp__rig__render_document` with `stage: "requirements"` and present the rendered
 markdown to the human for approve/deny.
 
 ## Stage 2 — Design (autonomous draft)
 
-Precondition: call `mcp__relentless__get_spec` and confirm `requirements` is `"approved"`.
+Precondition: call `mcp__rig__get_spec` and confirm `requirements` is `"approved"`.
 If it isn't, stop and report that back — do not draft against unapproved requirements.
 
-Read the requirements cold via `mcp__relentless__render_document`
+Read the requirements cold via `mcp__rig__render_document`
 (`stage: "requirements"`) — never assume you already know its contents. This stage is
 fully autonomous — do not interview the human. Every requirement must be traceable to a
 part of the design that satisfies it.
@@ -189,7 +189,7 @@ Produce the design using `design.template.md` as the target section shape, via:
 If the requirements are insufficient to design some part with confidence, do not halt.
 Draft your best-effort approach anyway and record the concern via `add_design_flag`.
 
-Call `mcp__relentless__finalize_stage` with `stage: "design"`. This also auto-seeds one
+Call `mcp__rig__finalize_stage` with `stage: "design"`. This also auto-seeds one
 task document per declared component server-side — nothing further to do for that. Then
 `render_document` (`stage: "design"`) and present for approve/deny.
 
@@ -230,7 +230,7 @@ after the fact). If none fits, use `none` — the implementer falls back to its 
 Same Flags rule as design: draft best-effort, record concerns via `add_tasks_flag` rather
 than halting.
 
-Once a component's items/batches/flags are complete, call `mcp__relentless__finalize_stage`
+Once a component's items/batches/flags are complete, call `mcp__rig__finalize_stage`
 with `stage: "tasks"` and `component: "<slug>"` — each component finalizes independently
 (this is also where cross-component cycle detection runs, across the whole spec's edges).
 Repeat per component, then `render_document` (`stage: "tasks"`, `component: "all"` for the
@@ -239,9 +239,9 @@ index, or a specific slug for one component's document) and present for approve/
 ## Approve/deny gate
 
 At the end of every stage (requirements, design, and each tasks component), your job is to
-call `mcp__relentless__finalize_stage`, which submits it to `in_review`, and then present
+call `mcp__rig__finalize_stage`, which submits it to `in_review`, and then present
 the `render_document` output to the human. **Approve/deny itself is a human-only action not
-exposed by any `mcp__relentless__*` tool** — you cannot set a stage to `approved` yourself,
+exposed by any `mcp__rig__*` tool** — you cannot set a stage to `approved` yourself,
 and you should not report a stage as approved just because you finalized it. Your
 involvement ends at "submitted for review."
 
@@ -257,12 +257,12 @@ component) is not `approved` — `get_next_stage` will simply not surface it as 
 
 ## Status tracking
 
-There is no `status.json`. Call `mcp__relentless__get_spec` with the spec's id to get its
+There is no `status.json`. Call `mcp__rig__get_spec` with the spec's id to get its
 `current_stage` and each of `requirements` / `design` / `tasks`'s status
 (`not_started`, `in_review`, `approved`) directly from the server.
 
 **Entry-point behavior:** whatever invokes this workflow should call
-`mcp__relentless__get_next_stage` first thing and always do the next correct thing — run
+`mcp__rig__get_next_stage` first thing and always do the next correct thing — run
 the next stage whose predecessor is `approved` and which is itself not yet `approved` (for
 tasks, this includes telling you which components still lag). This lets a human or
 orchestrating agent re-invoke the same entry point repeatedly without needing to remember
@@ -281,12 +281,12 @@ is an **orchestrator**, executing the precomputed plan mechanically:
    - parallel mode: follow each component's Parallel Execution Schema batch-by-batch,
      dispatching each batch's items concurrently, while respecting any cross-component
      `task_dependency_edges` between components.
-3. After each item completes in either mode, call `mcp__relentless__update_task_item` with
+3. After each item completes in either mode, call `mcp__rig__update_task_item` with
    `isChecked: true` immediately — this is the live checklist state; there is no file to
    edit. (A parent item is rejected if marked checked while any of its children in the same
    component are still unchecked.)
 4. Repeat until every ordered item is done, then call
-   `mcp__relentless__update_definition_of_done_item` with `isChecked: true` for each spec-
+   `mcp__rig__update_definition_of_done_item` with `isChecked: true` for each spec-
    wide Definition of Done item as it's verified satisfied.
 
 The orchestrator does not need deep judgment — it mechanically executes the precomputed

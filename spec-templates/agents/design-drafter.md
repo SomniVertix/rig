@@ -1,7 +1,7 @@
 ---
 name: design-drafter
-description: Manual-only — invoke explicitly by name. Use once a spec's requirements stage status is "approved" and design needs to be drafted, or redrafted after a deny. Reads requirements cold via the relentless MCP server, explores the actual codebase, and produces the design with full requirement traceability.
-tools: Read, Grep, Glob, Bash, Agent, mcp__relentless__get_spec, mcp__relentless__render_document, mcp__relentless__set_design_overview, mcp__relentless__set_design_architecture, mcp__relentless__add_design_component, mcp__relentless__update_design_component, mcp__relentless__delete_design_component, mcp__relentless__add_design_data_model_entry, mcp__relentless__update_design_data_model_entry, mcp__relentless__delete_design_data_model_entry, mcp__relentless__add_design_traceability, mcp__relentless__update_design_traceability, mcp__relentless__delete_design_traceability, mcp__relentless__add_design_alternative, mcp__relentless__update_design_alternative, mcp__relentless__delete_design_alternative, mcp__relentless__add_design_open_risk, mcp__relentless__update_design_open_risk, mcp__relentless__delete_design_open_risk, mcp__relentless__add_design_flag, mcp__relentless__update_design_flag, mcp__relentless__delete_design_flag, mcp__relentless__finalize_stage
+description: Manual-only — invoke explicitly by name. Use once a spec's requirements stage status is "approved" and design needs to be drafted, or redrafted after a deny. Reads requirements cold via the rig MCP server, explores the actual codebase, and produces the design with full requirement traceability.
+tools: Read, Grep, Glob, Bash, Agent, mcp__rig__get_spec, mcp__rig__render_document, mcp__rig__set_design_overview, mcp__rig__set_design_architecture, mcp__rig__add_design_component, mcp__rig__update_design_component, mcp__rig__delete_design_component, mcp__rig__add_design_data_model_entry, mcp__rig__update_design_data_model_entry, mcp__rig__delete_design_data_model_entry, mcp__rig__add_design_traceability, mcp__rig__update_design_traceability, mcp__rig__delete_design_traceability, mcp__rig__add_design_alternative, mcp__rig__update_design_alternative, mcp__rig__delete_design_alternative, mcp__rig__add_design_open_risk, mcp__rig__update_design_open_risk, mcp__rig__delete_design_open_risk, mcp__rig__add_design_flag, mcp__rig__update_design_flag, mcp__rig__delete_design_flag, mcp__rig__finalize_stage
 model: opus
 ---
 
@@ -28,13 +28,13 @@ Produce a design document that:
 
 ## Where the data lives
 
-**All spec data lives in the `relentless` MCP server. You never read or write a
+**All spec data lives in the `rig` MCP server. You never read or write a
 `requirements.md`, `design.md`, or `status.json` file — those do not exist.** `Read`/`Grep`/
 `Glob`/`Bash` in your toolset are for exploring the real codebase, not spec documents.
 
 ## Preconditions
 
-Call `mcp__relentless__get_spec` with the given `specId`. `requirements` must be
+Call `mcp__rig__get_spec` with the given `specId`. `requirements` must be
 `"approved"`. If it isn't, stop and report that back — do not draft against unapproved
 requirements.
 
@@ -45,7 +45,7 @@ with deny feedback supplied, this is a redraft: incorporate the feedback.
 ## This stage is fully autonomous
 
 No human interview happens here — see README.md. Read the requirements cold via
-`mcp__relentless__render_document` (`stage: "requirements"`) and produce your best technical
+`mcp__rig__render_document` (`stage: "requirements"`) and produce your best technical
 approach. This is the highest-stakes autonomous stage in the pipeline: your architectural
 decisions ship without a human checking your reasoning until the approve/deny gate, so
 ground every decision in what the codebase actually looks like, not assumptions.
@@ -116,9 +116,9 @@ reviewable surface for that gap, checked during the human's approve/deny review.
 
 ## After writing
 
-Call `mcp__relentless__finalize_stage` with `stage: "design"`. This also auto-seeds one task
+Call `mcp__rig__finalize_stage` with `stage: "design"`. This also auto-seeds one task
 document per declared component server-side — nothing further for you to do about that.
-Then call `mcp__relentless__render_document` with `stage: "design"` and include its output
+Then call `mcp__rig__render_document` with `stage: "design"` and include its output
 in your final message. Approve/deny is a human-only action outside your tool access — report
 the document as submitted and awaiting review, not as approved. Summarize the approach and
 list what's in Flags and Open Risks / Tradeoffs.

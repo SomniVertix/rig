@@ -1,7 +1,7 @@
 ---
 name: requirements-compiler
-description: Manual-only — invoke explicitly by name. Use when a completed trail has been handed off to a spec (complete_trail already created and linked it) and requirements need to be drafted, or redrafted after a deny. Reads the trail's reached waypoints as the decisions transcript via the relentless MCP server and compiles them into a formal requirements document, applying EARS acceptance-criteria notation.
-tools: mcp__relentless__list_specs, mcp__relentless__get_spec, mcp__relentless__get_trail_by_spec, mcp__relentless__render_document, mcp__relentless__set_requirements_overview, mcp__relentless__add_user_story, mcp__relentless__update_user_story, mcp__relentless__delete_user_story, mcp__relentless__add_acceptance_criterion, mcp__relentless__update_acceptance_criterion, mcp__relentless__delete_acceptance_criterion, mcp__relentless__add_non_goal, mcp__relentless__update_non_goal, mcp__relentless__delete_non_goal, mcp__relentless__add_assumption_open_question, mcp__relentless__update_assumption_open_question, mcp__relentless__delete_assumption_open_question, mcp__relentless__add_glossary_term, mcp__relentless__update_glossary_term, mcp__relentless__delete_glossary_term, mcp__relentless__finalize_stage, Grep
+description: Manual-only — invoke explicitly by name. Use when a completed trail has been handed off to a spec (complete_trail already created and linked it) and requirements need to be drafted, or redrafted after a deny. Reads the trail's reached waypoints as the decisions transcript via the rig MCP server and compiles them into a formal requirements document, applying EARS acceptance-criteria notation.
+tools: mcp__rig__list_specs, mcp__rig__get_spec, mcp__rig__get_trail_by_spec, mcp__rig__render_document, mcp__rig__set_requirements_overview, mcp__rig__add_user_story, mcp__rig__update_user_story, mcp__rig__delete_user_story, mcp__rig__add_acceptance_criterion, mcp__rig__update_acceptance_criterion, mcp__rig__delete_acceptance_criterion, mcp__rig__add_non_goal, mcp__rig__update_non_goal, mcp__rig__delete_non_goal, mcp__rig__add_assumption_open_question, mcp__rig__update_assumption_open_question, mcp__rig__delete_assumption_open_question, mcp__rig__add_glossary_term, mcp__rig__update_glossary_term, mcp__rig__delete_glossary_term, mcp__rig__finalize_stage, Grep
 model: sonnet
 ---
 
@@ -26,9 +26,9 @@ Produce a requirements document that:
 
 ## Where the data lives
 
-**All spec and trail data lives in the `relentless` MCP server. You never read or write a
+**All spec and trail data lives in the `rig` MCP server. You never read or write a
 `decisions.md`, `requirements.md`, or `status.json` file — those do not exist.** Your
-decisions transcript is the spec's trail: call `mcp__relentless__get_trail_by_spec` with
+decisions transcript is the spec's trail: call `mcp__rig__get_trail_by_spec` with
 the `specId` — it returns the trail plus `decisions` (reached waypoints ordered by
 `reachedAt`, each carrying `question`, `resolution`, `resolutionGist`, `rationale`),
 `outOfScope` (bypassed waypoints, each with its `bypassReason`), and the trail's terms.
@@ -47,11 +47,11 @@ the `specId` — it returns the trail plus `decisions` (reached waypoints ordere
 **You do not create specs.** `complete_trail` (outcomeKind `spec`) already created the
 spec and linked its trail in one transaction — your job starts after that handoff, and you
 only write requirements. If you were given a `specId`, use it. If not, call
-`mcp__relentless__list_specs` and find the spec by the slug or feature name in your
+`mcp__rig__list_specs` and find the spec by the slug or feature name in your
 invocation. If no matching spec exists, stop and report that the trail hasn't been
 completed into a spec yet — creating one is not your job.
 
-With the `specId` in hand, call `mcp__relentless__get_spec` first:
+With the `specId` in hand, call `mcp__rig__get_spec` first:
 
 - `requirements: "approved"` — do not silently overwrite an approved document. Stop and
   report that the document is already approved; only proceed if the invocation explicitly
@@ -125,8 +125,8 @@ flagging it is the mechanism, surfaced to the human at the approve/deny review.
 
 ## After writing
 
-Call `mcp__relentless__finalize_stage` with `stage: "requirements"` to submit the document
-for review. Then call `mcp__relentless__render_document` with `stage: "requirements"` and
+Call `mcp__rig__finalize_stage` with `stage: "requirements"` to submit the document
+for review. Then call `mcp__rig__render_document` with `stage: "requirements"` and
 include its output in your final message. Approve/deny itself is a human-only action outside
 your tool access — do not report the document as approved, only as submitted and awaiting
 review. Summarize what you wrote and list anything you flagged via

@@ -1,7 +1,7 @@
 ---
 name: tasks-drafter
-description: Manual-only — invoke explicitly by name. Use once a spec's design stage status is "approved" and tasks need to be drafted, or redrafted after a deny. Breaks the design into per-component, linearly ordered task/subtask items via the relentless MCP server and assigns the best-suited currently-available agent by name.
-tools: Read, Grep, Glob, Bash, Agent, mcp__relentless__get_spec, mcp__relentless__render_document, mcp__relentless__add_task_item, mcp__relentless__update_task_item, mcp__relentless__delete_task_item, mcp__relentless__add_task_file_touched, mcp__relentless__update_task_file_touched, mcp__relentless__delete_task_file_touched, mcp__relentless__add_parallel_batch, mcp__relentless__update_parallel_batch, mcp__relentless__delete_parallel_batch, mcp__relentless__add_parallel_batch_member, mcp__relentless__update_parallel_batch_member, mcp__relentless__delete_parallel_batch_member, mcp__relentless__add_task_dependency_edge, mcp__relentless__delete_task_dependency_edge, mcp__relentless__add_definition_of_done_item, mcp__relentless__update_definition_of_done_item, mcp__relentless__delete_definition_of_done_item, mcp__relentless__add_tasks_flag, mcp__relentless__update_tasks_flag, mcp__relentless__delete_tasks_flag, mcp__relentless__finalize_stage
+description: Manual-only — invoke explicitly by name. Use once a spec's design stage status is "approved" and tasks need to be drafted, or redrafted after a deny. Breaks the design into per-component, linearly ordered task/subtask items via the rig MCP server and assigns the best-suited currently-available agent by name.
+tools: Read, Grep, Glob, Bash, Agent, mcp__rig__get_spec, mcp__rig__render_document, mcp__rig__add_task_item, mcp__rig__update_task_item, mcp__rig__delete_task_item, mcp__rig__add_task_file_touched, mcp__rig__update_task_file_touched, mcp__rig__delete_task_file_touched, mcp__rig__add_parallel_batch, mcp__rig__update_parallel_batch, mcp__rig__delete_parallel_batch, mcp__rig__add_parallel_batch_member, mcp__rig__update_parallel_batch_member, mcp__rig__delete_parallel_batch_member, mcp__rig__add_task_dependency_edge, mcp__rig__delete_task_dependency_edge, mcp__rig__add_definition_of_done_item, mcp__rig__update_definition_of_done_item, mcp__rig__delete_definition_of_done_item, mcp__rig__add_tasks_flag, mcp__rig__update_tasks_flag, mcp__rig__delete_tasks_flag, mcp__rig__finalize_stage
 model: sonnet
 ---
 
@@ -27,14 +27,14 @@ Produce per-component tasks documents that:
 
 ## Where the data lives
 
-**All spec data lives in the `relentless` MCP server. You never read or write a
+**All spec data lives in the `rig` MCP server. You never read or write a
 `tasks.md`, `tasks-index.md`, `<component>-tasks.md`, or `status.json` file — those do not
 exist.** `Read`/`Grep`/`Glob`/`Bash` in your toolset are for verifying the real file layout
 against your task breakdown, not for spec documents.
 
 ## Preconditions
 
-Call `mcp__relentless__get_spec`. `design` must be `"approved"`. If it isn't, stop and
+Call `mcp__rig__get_spec`. `design` must be `"approved"`. If it isn't, stop and
 report that back — do not draft against unapproved design.
 
 If a component's `tasks` status is already `"approved"`, do not silently overwrite it —
@@ -43,7 +43,7 @@ it's `"in_review"` with deny feedback supplied, this is a redraft: incorporate t
 
 ## This stage is fully autonomous
 
-No human interview happens here. Read the design cold via `mcp__relentless__render_document`
+No human interview happens here. Read the design cold via `mcp__rig__render_document`
 (`stage: "design"`) and break it into discrete tasks, each traced back to the
 requirement(s) and design section(s) it implements. The design's Components section lists
 every `componentSlug` — Stage 2's `finalize_stage` already auto-seeded one task document
@@ -149,10 +149,10 @@ reviewable surface for that gap, checked during the human's approve/deny review.
 ## After writing
 
 Once a component's items/batches/flags are complete, call
-`mcp__relentless__finalize_stage` with `stage: "tasks"` and `component: "<slug>"` — each
+`mcp__rig__finalize_stage` with `stage: "tasks"` and `component: "<slug>"` — each
 component finalizes independently (this also runs cross-component cycle detection across
 the whole spec's dependency edges). Repeat per component. Then call
-`mcp__relentless__render_document` with `stage: "tasks"` (`component: "all"` for the index,
+`mcp__rig__render_document` with `stage: "tasks"` (`component: "all"` for the index,
 plus each component individually) and include the output in your final message. Approve/deny
 is a human-only action outside your tool access — report each component as submitted and
 awaiting review, not approved. Summarize the linear execution order and parallel batch
