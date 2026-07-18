@@ -2,7 +2,7 @@
   "mcpServers": {
     "relentless": {
       "type": "http",
-      "url": "http://localhost:8787/mcp/relentless",
+      "url": "http://localhost:8787/mcp/development",
       "headers": {
         "Authorization": "Bearer dev-local-token"
       }
