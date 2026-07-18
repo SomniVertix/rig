@@ -15,7 +15,7 @@ import { jsonResult, withToolErrorHandling } from './tool-helpers.js';
  * a read -- no `actor` argument required.
  */
 export function registerRenderDocumentTool(server: McpServer, context: McpToolContext): void {
-	const repository = new SpecRepository(context.pool);
+	const repository = new SpecRepository(context.pool, context.events);
 
 	server.registerTool(
 		'render_document',

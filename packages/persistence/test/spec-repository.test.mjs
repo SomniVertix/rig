@@ -16,7 +16,7 @@ import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 
-import { Pool, ensureProject, SpecRepository, SpecRepositoryError } from '../dist/index.js';
+import { Pool, ensureProject, SpecRepository, SpecRepositoryError, SpecChangeEmitter } from '../dist/index.js';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const schemaPath = join(repoRoot, 'spec-templates/spec/db/schema.sql');
@@ -467,3 +467,632 @@ async function buildRequirementsApprovedOnlySpec() {
 	await setStageStatus(spec.id, 'requirements', 'approved');
 	return { spec };
 }
+
+// =============================================================================
+// emission-coverage suite (spec-change-events)
+// =============================================================================
+// Representative tests verifying that each stage family's write methods emit
+// exactly one correctly-scoped spec_changed event on success, and zero events
+// on thrown rejection/rollback (Story 4 AC1, AC2).
+
+describe('emission-coverage: requirements stage', () => {
+	test('addUserStory emits spec_changed with stage=requirements', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await testRepository.createSpec({ projectId, slug, featureName: 'Emission Test' }, TEST_AUDIT);
+		const requirements = await testRepository.setRequirementsOverview(spec.id, { featureName: 'Emission Test', overview: 'Overview.' }, TEST_AUDIT);
+
+		events.length = 0; // Clear events from prior operations
+
+		const userStory = await testRepository.addUserStory(requirements.id, {
+			title: 'Story',
+			role: 'user',
+			capability: 'do a thing',
+			benefit: 'get value',
+			rationale: 'because'
+		}, TEST_AUDIT);
+
+		assert.equal(events.length, 1, 'exactly one event emitted');
+		assert.equal(events[0].type, 'spec_changed');
+		assert.equal(events[0].specId, spec.id);
+		assert.equal(events[0].stage, 'requirements');
+		assert.equal(events[0].component, undefined, 'requirements events have no component');
+
+		unsubscribe();
+	});
+
+	test('addUserStory emits no events on constraint violation', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		// Try to add a user story to non-existent requirements ID (use a valid UUID)
+		await assert.rejects(
+			() => testRepository.addUserStory('00000000-0000-0000-0000-000000000000', {
+				title: 'Story',
+				role: 'user',
+				capability: 'do a thing',
+				benefit: 'get value',
+				rationale: 'because'
+			}, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'parent_not_found'
+		);
+
+		assert.equal(events.length, 0, 'no events emitted on constraint violation');
+
+		unsubscribe();
+	});
+
+	test('addNonGoal emits spec_changed with stage=requirements', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await testRepository.createSpec({ projectId, slug, featureName: 'Non-Goal Emission' }, TEST_AUDIT);
+		const requirements = await testRepository.setRequirementsOverview(spec.id, { featureName: 'Non-Goal Emission', overview: 'Overview.' }, TEST_AUDIT);
+
+		events.length = 0; // Clear events from prior operations
+
+		await testRepository.addNonGoal(requirements.id, 'This is not a goal', TEST_AUDIT);
+
+		assert.equal(events.length, 1, 'exactly one event emitted');
+		assert.equal(events[0].type, 'spec_changed');
+		assert.equal(events[0].specId, spec.id);
+		assert.equal(events[0].stage, 'requirements');
+
+		unsubscribe();
+	});
+});
+
+describe('emission-coverage: design stage', () => {
+	test('addDesignComponent emits spec_changed with stage=design', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await testRepository.createSpec({ projectId, slug, featureName: 'Design Emission' }, TEST_AUDIT);
+		const requirements = await testRepository.setRequirementsOverview(spec.id, { featureName: 'Design Emission', overview: 'Overview.' }, TEST_AUDIT);
+		const userStory = await testRepository.addUserStory(requirements.id, {
+			title: 'Story',
+			role: 'user',
+			capability: 'do a thing',
+			benefit: 'get value',
+			rationale: 'because'
+		}, TEST_AUDIT);
+		await testRepository.addAcceptanceCriterion(userStory.id, {
+			earsPattern: 'ubiquitous',
+			responseClause: 'system does thing',
+			fullText: 'THE SYSTEM SHALL do the thing.'
+		}, TEST_AUDIT);
+		await testRepository.finalizeStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+		await setStageStatus(spec.id, 'requirements', 'approved');
+
+		const design = await testRepository.setDesignOverview(spec.id, { featureName: 'Design Emission', overview: 'Design.' }, TEST_AUDIT);
+
+		events.length = 0; // Clear events from prior operations
+
+		await testRepository.addDesignComponent(design.id, { slug: 'test-component', displayName: 'Test Component' }, TEST_AUDIT);
+
+		assert.equal(events.length, 1, 'exactly one event emitted');
+		assert.equal(events[0].type, 'spec_changed');
+		assert.equal(events[0].specId, spec.id);
+		assert.equal(events[0].stage, 'design');
+
+		unsubscribe();
+	});
+});
+
+describe('emission-coverage: tasks stage', () => {
+	test('addTaskItem emits spec_changed with stage=tasks and component', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const { spec, tasksDocsBySlug } = await buildApprovedSpecWithComponents(['test-component']);
+
+		events.length = 0; // Clear events from setup
+
+		const taskItem = await testRepository.addTaskItem(spec.id, 'test-component', {
+			title: 'Do the thing',
+			description: 'Does the thing.',
+			traceability: 'Story 1 -> design §Architecture',
+			acceptanceCheck: 'The thing is done.'
+		}, TEST_AUDIT);
+
+		assert.equal(events.length, 1, 'exactly one event emitted');
+		assert.equal(events[0].type, 'spec_changed');
+		assert.equal(events[0].specId, spec.id);
+		assert.equal(events[0].stage, 'tasks');
+		assert.equal(events[0].component, 'test-component');
+
+		unsubscribe();
+	});
+});
+
+describe('emission-coverage: finalizeStage', () => {
+	test('finalizeStage(requirements) emits spec_changed with stage=requirements', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await testRepository.createSpec({ projectId, slug, featureName: 'Finalize Req' }, TEST_AUDIT);
+		const requirements = await testRepository.setRequirementsOverview(spec.id, { featureName: 'Finalize Req', overview: 'Overview.' }, TEST_AUDIT);
+		const userStory = await testRepository.addUserStory(requirements.id, {
+			title: 'Story',
+			role: 'user',
+			capability: 'do a thing',
+			benefit: 'get value',
+			rationale: 'because'
+		}, TEST_AUDIT);
+		await testRepository.addAcceptanceCriterion(userStory.id, {
+			earsPattern: 'ubiquitous',
+			responseClause: 'system does thing',
+			fullText: 'THE SYSTEM SHALL do the thing.'
+		}, TEST_AUDIT);
+
+		events.length = 0; // Clear events from prior operations
+
+		const result = await testRepository.finalizeStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+
+		assert.equal(events.length, 1, 'exactly one event emitted');
+		assert.equal(events[0].type, 'spec_changed');
+		assert.equal(events[0].specId, spec.id);
+		assert.equal(events[0].stage, 'requirements');
+		assert.equal(result.status, 'in_review');
+
+		unsubscribe();
+	});
+
+	test('finalizeStage(design) emits spec_changed with stage=design', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const { spec } = await buildApprovedSpecWithComponents(['delta']);
+
+		events.length = 0; // Clear events from setup
+
+		const result = await testRepository.finalizeStage(spec.id, 'design', undefined, TEST_AUDIT);
+
+		assert.equal(events.length, 1, 'exactly one event emitted');
+		assert.equal(events[0].type, 'spec_changed');
+		assert.equal(events[0].specId, spec.id);
+		assert.equal(events[0].stage, 'design');
+		assert.equal(events[0].component, undefined, 'design finalize has no component');
+		assert.equal(result.status, 'in_review');
+
+		unsubscribe();
+	});
+
+	test('finalizeStage(tasks) emits spec_changed with stage=tasks and component', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const { spec } = await buildApprovedSpecWithComponents(['echo', 'foxtrot']);
+		// Add task items with files touched (using the test repository with emitter)
+		const taskItem1 = await testRepository.addTaskItem(spec.id, 'echo', {
+			title: 'Task 1',
+			description: 'Does the thing.',
+			traceability: 'Story 1 -> design §Architecture',
+			acceptanceCheck: 'The thing is done.'
+		}, TEST_AUDIT);
+		await testRepository.addTaskFileTouched(taskItem1.id, '/path/to/file1.ts', TEST_AUDIT);
+
+		const taskItem2 = await testRepository.addTaskItem(spec.id, 'foxtrot', {
+			title: 'Task 2',
+			description: 'Does the thing.',
+			traceability: 'Story 1 -> design §Architecture',
+			acceptanceCheck: 'The thing is done.'
+		}, TEST_AUDIT);
+		await testRepository.addTaskFileTouched(taskItem2.id, '/path/to/file2.ts', TEST_AUDIT);
+
+		events.length = 0; // Clear events from setup
+
+		const result = await testRepository.finalizeStage(spec.id, 'tasks', 'echo', TEST_AUDIT);
+
+		assert.equal(events.length, 1, 'exactly one event emitted');
+		assert.equal(events[0].type, 'spec_changed');
+		assert.equal(events[0].specId, spec.id);
+		assert.equal(events[0].stage, 'tasks');
+		assert.equal(events[0].component, 'echo', 'tasks finalize includes component');
+		assert.equal(result.status, 'in_review');
+
+		unsubscribe();
+	});
+
+	test('finalizeStage emits no events on validation rejection', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await testRepository.createSpec({ projectId, slug, featureName: 'Finalize Reject' }, TEST_AUDIT);
+		await testRepository.setRequirementsOverview(spec.id, { featureName: 'Finalize Reject', overview: 'Overview.' }, TEST_AUDIT);
+		// Deliberately no user stories
+
+		events.length = 0; // Clear events from prior operations
+
+		await assert.rejects(
+			() => testRepository.finalizeStage(spec.id, 'requirements', undefined, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'zero_top_level_items'
+		);
+
+		assert.equal(events.length, 0, 'no events emitted on validation rejection');
+
+		unsubscribe();
+	});
+});
+
+describe('emission-coverage: approval/denial operations', () => {
+	test('stage approval update emits no events (approval is human-only operation)', async () => {
+		const events = [];
+		const emitter = new SpecChangeEmitter();
+		const testRepository = new SpecRepository(pool, emitter);
+		const unsubscribe = emitter.subscribe((event) => {
+			events.push(event);
+		});
+
+		const { spec } = await buildApprovedSpecWithComponents(['golf']);
+
+		events.length = 0; // Clear events from setup
+
+		// Directly update status via SQL (mimics human approve/deny in test environment)
+		await pool.query(`update spec_pipeline.spec_stages set status = 'approved' where spec_id = $1 and stage_name = $2`, [spec.id, 'design']);
+
+		// Approval is not a SpecRepository method call, so no emission expected
+		assert.equal(events.length, 0, 'approval updates are external to SpecRepository');
+
+		unsubscribe();
+	});
+});
+
+describe('approveStage / denyStage (stage-approval-write-path)', () => {
+	// Happy-path approve for requirements stage
+	test('approveStage: requirements stage transitions from in_review to approved', async () => {
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await repository.createSpec({ projectId, slug, featureName: 'Test Feature' }, TEST_AUDIT);
+		const requirements = await repository.setRequirementsOverview(spec.id, { featureName: 'Test Feature', overview: 'Overview text.' }, TEST_AUDIT);
+		const userStory = await repository.addUserStory(requirements.id, {
+			title: 'Story',
+			role: 'user',
+			capability: 'do a thing',
+			benefit: 'get value',
+			rationale: 'because'
+		}, TEST_AUDIT);
+		await repository.addAcceptanceCriterion(userStory.id, {
+			earsPattern: 'event_driven',
+			triggerClause: 'something happens',
+			responseClause: 'the system shall respond',
+			fullText: 'WHEN something happens, THE SYSTEM SHALL respond within 200ms.'
+		}, TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+
+		// Stage should be in_review after finalize
+		let stages = await repository.getSpecStages(spec.id);
+		const requirementsStage = stages.find((s) => s.stageName === 'requirements');
+		assert.equal(requirementsStage.status, 'in_review');
+
+		// Approve the stage
+		const result = await repository.approveStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+		assert.equal(result.stage, 'requirements');
+		assert.equal(result.status, 'approved');
+
+		// Verify database state
+		stages = await repository.getSpecStages(spec.id);
+		const approved = stages.find((s) => s.stageName === 'requirements');
+		assert.equal(approved.status, 'approved');
+
+		// Verify audit log entry exists
+		const auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'approve' and table_name = 'spec_stages' and row_id = $1`,
+			[requirementsStage.id]
+		);
+		assert.equal(auditRows.rowCount, 1);
+		assert.equal(auditRows.rows[0].actor, TEST_AUDIT.actor);
+		assert.equal(auditRows.rows[0].project_id, TEST_AUDIT.projectId);
+	});
+
+	// Happy-path deny for requirements stage
+	test('denyStage: requirements stage transitions from in_review back to not_started', async () => {
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await repository.createSpec({ projectId, slug, featureName: 'Test Feature' }, TEST_AUDIT);
+		const requirements = await repository.setRequirementsOverview(spec.id, { featureName: 'Test Feature', overview: 'Overview text.' }, TEST_AUDIT);
+		const userStory = await repository.addUserStory(requirements.id, {
+			title: 'Story',
+			role: 'user',
+			capability: 'do a thing',
+			benefit: 'get value',
+			rationale: 'because'
+		}, TEST_AUDIT);
+		await repository.addAcceptanceCriterion(userStory.id, {
+			earsPattern: 'event_driven',
+			triggerClause: 'something happens',
+			responseClause: 'the system shall respond',
+			fullText: 'WHEN something happens, THE SYSTEM SHALL respond within 200ms.'
+		}, TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+
+		// Stage should be in_review after finalize
+		let stages = await repository.getSpecStages(spec.id);
+		const requirementsStage = stages.find((s) => s.stageName === 'requirements');
+		assert.equal(requirementsStage.status, 'in_review');
+
+		// Deny the stage
+		const result = await repository.denyStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+		assert.equal(result.stage, 'requirements');
+		assert.equal(result.status, 'not_started');
+
+		// Verify database state
+		stages = await repository.getSpecStages(spec.id);
+		const denied = stages.find((s) => s.stageName === 'requirements');
+		assert.equal(denied.status, 'not_started');
+
+		// Verify audit log entry exists
+		const auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'deny' and table_name = 'spec_stages' and row_id = $1`,
+			[requirementsStage.id]
+		);
+		assert.equal(auditRows.rowCount, 1);
+		assert.equal(auditRows.rows[0].actor, TEST_AUDIT.actor);
+		assert.equal(auditRows.rows[0].project_id, TEST_AUDIT.projectId);
+	});
+
+	// Happy-path approve for design stage
+	test('approveStage: design stage transitions from in_review to approved', async () => {
+		const { spec } = await buildRequirementsApprovedOnlySpec();
+		const design = await repository.setDesignOverview(spec.id, { featureName: 'Test Feature', overview: 'Design overview.' }, TEST_AUDIT);
+		await repository.addDesignComponent(design.id, { slug: 'alpha', displayName: 'Alpha Component' }, TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'design', undefined, TEST_AUDIT);
+
+		// Stage should be in_review after finalize
+		let stages = await repository.getSpecStages(spec.id);
+		const designStage = stages.find((s) => s.stageName === 'design');
+		assert.equal(designStage.status, 'in_review');
+
+		// Approve the stage
+		const result = await repository.approveStage(spec.id, 'design', undefined, TEST_AUDIT);
+		assert.equal(result.stage, 'design');
+		assert.equal(result.status, 'approved');
+
+		// Verify database state
+		stages = await repository.getSpecStages(spec.id);
+		const approved = stages.find((s) => s.stageName === 'design');
+		assert.equal(approved.status, 'approved');
+
+		// Verify audit log entry exists
+		const auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'approve' and table_name = 'spec_stages' and row_id = $1`,
+			[designStage.id]
+		);
+		assert.equal(auditRows.rowCount, 1);
+	});
+
+	// Happy-path deny for design stage
+	test('denyStage: design stage transitions from in_review back to not_started', async () => {
+		const { spec } = await buildRequirementsApprovedOnlySpec();
+		const design = await repository.setDesignOverview(spec.id, { featureName: 'Test Feature', overview: 'Design overview.' }, TEST_AUDIT);
+		await repository.addDesignComponent(design.id, { slug: 'beta', displayName: 'Beta Component' }, TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'design', undefined, TEST_AUDIT);
+
+		// Stage should be in_review after finalize
+		let stages = await repository.getSpecStages(spec.id);
+		const designStage = stages.find((s) => s.stageName === 'design');
+		assert.equal(designStage.status, 'in_review');
+
+		// Deny the stage
+		const result = await repository.denyStage(spec.id, 'design', undefined, TEST_AUDIT);
+		assert.equal(result.stage, 'design');
+		assert.equal(result.status, 'not_started');
+
+		// Verify database state
+		stages = await repository.getSpecStages(spec.id);
+		const denied = stages.find((s) => s.stageName === 'design');
+		assert.equal(denied.status, 'not_started');
+
+		// Verify audit log entry exists
+		const auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'deny' and table_name = 'spec_stages' and row_id = $1`,
+			[designStage.id]
+		);
+		assert.equal(auditRows.rowCount, 1);
+	});
+
+	// Happy-path approve for tasks stage (component-specific)
+	test('approveStage: tasks stage component transitions from in_review to approved via resolveTasksDocId', async () => {
+		const { spec, tasksDocsBySlug } = await buildApprovedSpecWithComponents(['charlie']);
+		const charlieItem = await addCompleteTaskItem(spec.id, 'charlie', 'Charlie work');
+		await repository.addTaskFileTouched(charlieItem.id, 'packages/charlie/src/index.ts', TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'tasks', 'charlie', TEST_AUDIT);
+
+		// Tasks doc should be in_review after finalize
+		let doc = await repository.getTasksDocByComponent(spec.id, 'charlie');
+		assert.equal(doc.status, 'in_review');
+
+		// Approve the tasks stage for this component
+		const result = await repository.approveStage(spec.id, 'tasks', 'charlie', TEST_AUDIT);
+		assert.equal(result.stage, 'tasks');
+		assert.equal(result.componentSlug, 'charlie');
+		assert.equal(result.status, 'approved');
+
+		// Verify database state
+		doc = await repository.getTasksDocByComponent(spec.id, 'charlie');
+		assert.equal(doc.status, 'approved');
+
+		// Verify audit log entry exists
+		const auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'approve' and table_name = 'tasks_docs' and row_id = $1`,
+			[doc.id]
+		);
+		assert.equal(auditRows.rowCount, 1);
+		assert.equal(auditRows.rows[0].actor, TEST_AUDIT.actor);
+	});
+
+	// Happy-path deny for tasks stage (component-specific)
+	test('denyStage: tasks stage component transitions from in_review back to not_started via resolveTasksDocId', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['delta']);
+		const deltaItem = await addCompleteTaskItem(spec.id, 'delta', 'Delta work');
+		await repository.addTaskFileTouched(deltaItem.id, 'packages/delta/src/index.ts', TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'tasks', 'delta', TEST_AUDIT);
+
+		// Tasks doc should be in_review after finalize
+		let doc = await repository.getTasksDocByComponent(spec.id, 'delta');
+		assert.equal(doc.status, 'in_review');
+
+		// Deny the tasks stage for this component
+		const result = await repository.denyStage(spec.id, 'tasks', 'delta', TEST_AUDIT);
+		assert.equal(result.stage, 'tasks');
+		assert.equal(result.componentSlug, 'delta');
+		assert.equal(result.status, 'not_started');
+
+		// Verify database state
+		doc = await repository.getTasksDocByComponent(spec.id, 'delta');
+		assert.equal(doc.status, 'not_started');
+
+		// Verify audit log entry exists
+		const auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'deny' and table_name = 'tasks_docs' and row_id = $1`,
+			[doc.id]
+		);
+		assert.equal(auditRows.rowCount, 1);
+		assert.equal(auditRows.rows[0].actor, TEST_AUDIT.actor);
+	});
+
+	// Error case: not_in_review rejection for requirements stage
+	test('approveStage: rejects with not_in_review when requirements stage is not in_review', async () => {
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await repository.createSpec({ projectId, slug, featureName: 'Test Feature' }, TEST_AUDIT);
+		const requirements = await repository.setRequirementsOverview(spec.id, { featureName: 'Test Feature', overview: 'Overview text.' }, TEST_AUDIT);
+
+		// Stage is not_started, not in_review
+		await assert.rejects(
+			() => repository.approveStage(spec.id, 'requirements', undefined, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_in_review'
+		);
+	});
+
+	// Error case: not_in_review rejection for design stage
+	test('denyStage: rejects with not_in_review when design stage is not in_review', async () => {
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await repository.createSpec({ projectId, slug, featureName: 'Test Feature' }, TEST_AUDIT);
+
+		// Design stage is not_started, not in_review
+		await assert.rejects(
+			() => repository.denyStage(spec.id, 'design', undefined, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_in_review'
+		);
+	});
+
+	// Error case: not_in_review rejection for tasks stage
+	test('approveStage: rejects with not_in_review when tasks stage component is not in_review', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['echo']);
+
+		// Tasks doc is not_started, not in_review
+		await assert.rejects(
+			() => repository.approveStage(spec.id, 'tasks', 'echo', TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_in_review'
+		);
+	});
+
+	// Error case: component_required rejection for tasks stage approve
+	test('approveStage: rejects with component_required when stage=tasks and no componentSlug is supplied', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['foxtrot']);
+		const foxItem = await addCompleteTaskItem(spec.id, 'foxtrot', 'Fox work');
+		await repository.addTaskFileTouched(foxItem.id, 'packages/fox/src/index.ts', TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'tasks', 'foxtrot', TEST_AUDIT);
+
+		// Attempting to approve tasks without componentSlug should fail
+		await assert.rejects(
+			() => repository.approveStage(spec.id, 'tasks', undefined, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'component_required'
+		);
+	});
+
+	// Error case: component_required rejection for tasks stage deny
+	test('denyStage: rejects with component_required when stage=tasks and no componentSlug is supplied', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['golf']);
+		const golfItem = await addCompleteTaskItem(spec.id, 'golf', 'Golf work');
+		await repository.addTaskFileTouched(golfItem.id, 'packages/golf/src/index.ts', TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'tasks', 'golf', TEST_AUDIT);
+
+		// Attempting to deny tasks without componentSlug should fail
+		await assert.rejects(
+			() => repository.denyStage(spec.id, 'tasks', undefined, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'component_required'
+		);
+	});
+
+	// Verify each successful call creates exactly one matching audit_log row
+	test('approveStage and denyStage each create a single matching audit_log row', async () => {
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const spec = await repository.createSpec({ projectId, slug, featureName: 'Test Feature' }, TEST_AUDIT);
+		const requirements = await repository.setRequirementsOverview(spec.id, { featureName: 'Test Feature', overview: 'Overview text.' }, TEST_AUDIT);
+		const userStory = await repository.addUserStory(requirements.id, {
+			title: 'Story',
+			role: 'user',
+			capability: 'do a thing',
+			benefit: 'get value',
+			rationale: 'because'
+		}, TEST_AUDIT);
+		await repository.addAcceptanceCriterion(userStory.id, {
+			earsPattern: 'event_driven',
+			triggerClause: 'something happens',
+			responseClause: 'the system shall respond',
+			fullText: 'WHEN something happens, THE SYSTEM SHALL respond within 200ms.'
+		}, TEST_AUDIT);
+		await repository.finalizeStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+
+		const stages = await repository.getSpecStages(spec.id);
+		const requirementsStage = stages.find((s) => s.stageName === 'requirements');
+
+		// Approve requirements
+		await repository.approveStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+		let auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'approve' and table_name = 'spec_stages' and row_id = $1`,
+			[requirementsStage.id]
+		);
+		assert.equal(auditRows.rowCount, 1, 'approveStage should create exactly one audit_log row');
+
+		// Deny requirements (first reset to in_review for testing)
+		await setStageStatus(spec.id, 'requirements', 'in_review');
+		await repository.denyStage(spec.id, 'requirements', undefined, TEST_AUDIT);
+		auditRows = await pool.query(
+			`select * from spec_pipeline.audit_log where action = 'deny' and table_name = 'spec_stages' and row_id = $1`,
+			[requirementsStage.id]
+		);
+		assert.equal(auditRows.rowCount, 1, 'denyStage should create exactly one audit_log row');
+	});
+});

@@ -26,8 +26,33 @@ services:
       RELENTLESS_MCP_BEARER_TOKEN: ${RELENTLESS_MCP_BEARER_TOKEN:-dev-local-token}
       RELENTLESS_MCP_PORT: "8787"
       RELENTLESS_LOG_LEVEL: ${RELENTLESS_LOG_LEVEL:-info}
+      RELENTLESS_WEB_PORT: "${RELENTLESS_WEB_PORT:-8788}"
+      # known-actors sourcing: scans <mounted-claude-dir>/relentless-actors for
+      # <name> actor entries at boot (actor-registry.ts). This is a CURATED
+      # actors directory, not the general ~/.claude/skills tree -- it should
+      # contain one entry per legitimate actor (the pipeline agents +
+      # grilling/wayfinder), as a RELATIVE symlink back into the sibling
+      # `skills/<name>` directory, e.g. (run once on the host, under ~/.claude):
+      #   mkdir -p relentless-actors
+      #   ln -s ../skills/grilling relentless-actors/grilling
+      #   ln -s ../skills/design-drafter relentless-actors/design-drafter
+      #   ... (repeat per actor)
+      # Relative symlinks matter here: we bind-mount the whole ~/.claude
+      # directory (not just relentless-actors) so that `../skills/<name>`
+      # still resolves correctly from inside the container, where the host
+      # path doesn't exist. An absolute host-path symlink would silently
+      # break the moment it crosses the bind-mount boundary.
+      # No default here on purpose -- Compose does not expand `~` inside a
+      # ${VAR:-default}, so a tilde-containing fallback would pass through
+      # literally and fail; unset RELENTLESS_CLAUDE_HOST_DIR should fail fast
+      # rather than mount somewhere wrong. Set it in a local .env, e.g.
+      # RELENTLESS_CLAUDE_HOST_DIR=/Users/you/.claude
+      RELENTLESS_ACTORS_DIR: /claude/relentless-actors
     ports:
       - "8787:8787"
+      - "127.0.0.1:${RELENTLESS_WEB_PORT:-8788}:${RELENTLESS_WEB_PORT:-8788}"
+    volumes:
+      - ${RELENTLESS_CLAUDE_HOST_DIR}:/claude:ro
 
 volumes:
   postgres-data:

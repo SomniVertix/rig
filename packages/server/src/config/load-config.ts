@@ -88,6 +88,13 @@ function normalizeConfig(raw: Record<string, unknown>, source: ServerConfigSourc
 			parseInteger(source.env?.RELENTLESS_CONCURRENCY_CAP ?? process.env.RELENTLESS_CONCURRENCY_CAP, 'concurrencyCap') ??
 			(typeof raw.concurrencyCap === 'number' ? raw.concurrencyCap : undefined) ??
 			4,
+		// discovery-schema claim recovery: hours before a waypoint claim goes stale
+		// and becomes reclaimable in the same atomic claim UPDATE (no separate steal
+		// step). Not stored in the database -- claimed_at is the only stored fact.
+		claimTtlHours:
+			parseInteger(source.env?.RELENTLESS_CLAIM_TTL ?? process.env.RELENTLESS_CLAIM_TTL, 'claimTtlHours') ??
+			(typeof raw.claimTtlHours === 'number' ? raw.claimTtlHours : undefined) ??
+			24,
 		defaultTimeoutMs:
 			parseInteger(source.env?.RELENTLESS_DEFAULT_TIMEOUT_MS ?? process.env.RELENTLESS_DEFAULT_TIMEOUT_MS, 'defaultTimeoutMs') ??
 			(typeof raw.defaultTimeoutMs === 'number' ? raw.defaultTimeoutMs : undefined) ??
@@ -126,6 +133,12 @@ function normalizeConfig(raw: Record<string, unknown>, source: ServerConfigSourc
 				: typeof raw.mirrorRoot === 'string'
 					? raw.mirrorRoot
 					: undefined,
+		actorsDir:
+			typeof (source.env?.RELENTLESS_ACTORS_DIR ?? process.env.RELENTLESS_ACTORS_DIR) === 'string'
+				? (source.env?.RELENTLESS_ACTORS_DIR ?? process.env.RELENTLESS_ACTORS_DIR)
+				: typeof raw.actorsDir === 'string'
+					? raw.actorsDir
+					: undefined,
 		configPath: source.configPath ?? (typeof raw.configPath === 'string' ? raw.configPath : undefined),
 		mcpBearerToken:
 			typeof (source.env?.RELENTLESS_MCP_BEARER_TOKEN ?? process.env.RELENTLESS_MCP_BEARER_TOKEN) === 'string'
@@ -142,7 +155,16 @@ function normalizeConfig(raw: Record<string, unknown>, source: ServerConfigSourc
 		mcpPort:
 			parseInteger(source.env?.RELENTLESS_MCP_PORT ?? process.env.RELENTLESS_MCP_PORT, 'mcpPort') ??
 			(typeof raw.mcpPort === 'number' ? raw.mcpPort : undefined) ??
-			8787
+			8787,
+		webHost:
+			typeof (source.env?.RELENTLESS_WEB_HOST ?? process.env.RELENTLESS_WEB_HOST) === 'string'
+				? (source.env?.RELENTLESS_WEB_HOST ?? process.env.RELENTLESS_WEB_HOST)
+				: typeof raw.webHost === 'string'
+					? raw.webHost
+					: '0.0.0.0',
+		webPort:
+			parseInteger(source.env?.RELENTLESS_WEB_PORT ?? process.env.RELENTLESS_WEB_PORT, 'webPort') ??
+			(typeof raw.webPort === 'number' ? raw.webPort : undefined)
 	};
 
 	try {

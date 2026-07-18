@@ -28,13 +28,13 @@ import {
 	GuardrailError,
 	QUALITY_ADJECTIVES,
 	requireKnownActor,
-	syncKnownActorsFromAgentDefinitions
+	syncKnownActorsFromActorsDirectory
 } from '../../dist/server/src/mcp/guardrails/index.js';
 import { ensureProject, SpecRepository } from '../../../persistence/dist/index.js';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const schemaPath = join(repoRoot, 'spec-templates/spec/db/schema.sql');
-const agentsDirectory = join(repoRoot, 'spec-templates/agents');
+const actorsDirectory = join(repoRoot, 'packages/server/test/fixtures/actors');
 
 const TEST_AUDIT = { actor: 'test-actor', projectId: null };
 
@@ -314,24 +314,25 @@ describe('requireKnownActor (T6.2, Story 11.1, 11.4)', () => {
 	});
 });
 
-describe('syncKnownActorsFromAgentDefinitions (T6.4, Story 11.5)', () => {
-	test('registers every spec-templates/agents/*.md file as a known actor', async () => {
-		const actors = await syncKnownActorsFromAgentDefinitions(pool, agentsDirectory);
-		assert.ok(actors.includes('code-implementer'), 'expected code-implementer.md to be scanned');
-		assert.ok(actors.includes('design-drafter'), 'expected design-drafter.md to be scanned');
+describe('syncKnownActorsFromActorsDirectory (T6.4, Story 11.5)', () => {
+	test('registers every <name>/SKILL.md directory as a known actor', async () => {
+		const actors = await syncKnownActorsFromActorsDirectory(pool, actorsDirectory);
+		assert.ok(actors.includes('code-implementer'), 'expected code-implementer/SKILL.md to be scanned');
+		assert.ok(actors.includes('design-drafter'), 'expected design-drafter/SKILL.md to be scanned');
+		assert.ok(!actors.includes('not-a-skill'), 'expected a directory with no SKILL.md to be skipped');
 
 		const result = await pool.query(`select actor, source from spec_pipeline.known_actors where actor = 'code-implementer'`);
 		assert.equal(result.rowCount, 1);
-		assert.equal(result.rows[0].source, 'spec-templates/agents');
+		assert.equal(result.rows[0].source, 'claude-skills');
 	});
 
 	test('re-running the sync does not error and keeps the actor registered', async () => {
-		const actors = await syncKnownActorsFromAgentDefinitions(pool, agentsDirectory);
+		const actors = await syncKnownActorsFromActorsDirectory(pool, actorsDirectory);
 		assert.ok(actors.includes('code-implementer'));
 	});
 
 	test('scanning a nonexistent directory returns an empty list rather than throwing', async () => {
-		const actors = await syncKnownActorsFromAgentDefinitions(pool, join(agentsDirectory, 'does-not-exist'));
+		const actors = await syncKnownActorsFromActorsDirectory(pool, join(actorsDirectory, 'does-not-exist'));
 		assert.deepEqual(actors, []);
 	});
 });

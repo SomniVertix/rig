@@ -17,6 +17,6 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm build && node --test ./test/spec-repository.test.mjs"
+    "test": "pnpm build && node --test ./test/spec-change-emitter.test.mjs ./test/spec-repository.test.mjs ./test/trail-repository.test.mjs"
   }
 }

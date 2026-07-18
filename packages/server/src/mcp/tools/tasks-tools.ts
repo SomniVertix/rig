@@ -27,7 +27,7 @@ const COMPONENT_SLUG_DESCRIPTION = "The component's slug (one tasks_docs row per
  * successful write inserts exactly one `audit_log` row in the same transaction (T6.3).
  */
 export function registerTasksTools(server: McpServer, context: McpToolContext): void {
-	const repository = new SpecRepository(context.pool);
+	const repository = new SpecRepository(context.pool, context.events);
 	const taskItemContentFields = ['description', 'traceability', 'acceptanceCheck'];
 
 	server.registerTool(

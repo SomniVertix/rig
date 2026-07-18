@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { ensureProject } from '@relentless/persistence';
-import type { PersistenceBundle } from '@relentless/persistence';
+import type { PersistenceBundle, SpecChangeEmitter } from '@relentless/persistence';
 
 import { registerTools } from './tool-registry.js';
 
@@ -36,14 +36,18 @@ function headerValue(value: string | string[] | undefined): string | undefined {
  * configured on the transport, so a disconnect (or a fresh connection with no
  * `mcp-session-id` header) always produces a brand-new, independent session
  * with nothing carried over from any prior one (Story 5.8).
+ *
+ * The optional `events` emitter (spec-change-events) is threaded through into
+ * every session's `McpToolContext` so tool handlers can broadcast document
+ * mutations; omitting it leaves sessions functioning exactly as before.
  */
-export function createMcpSessionManager(pool: PersistenceBundle['pool']): McpSessionManager {
+export function createMcpSessionManager(pool: PersistenceBundle['pool'], events?: SpecChangeEmitter, claimTtlHours?: number): McpSessionManager {
 	const sessions = new Map<string, McpSessionEntry>();
 
 	async function createSession(projectSlug: string): Promise<McpSessionEntry> {
 		const projectId = await ensureProject(pool, projectSlug);
 		const server = new McpServer({ name: 'relentless-spec-pipeline', version: '0.1.0' });
-		registerTools(server, { pool, projectId, projectSlug });
+		registerTools(server, { pool, projectId, projectSlug, events, claimTtlHours });
 
 		let entry: McpSessionEntry;
 		const transport = new StreamableHTTPServerTransport({

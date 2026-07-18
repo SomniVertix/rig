@@ -4,12 +4,13 @@ import { join } from 'node:path';
 import { ClaudeExecutor, PiExecutor, type AgentExecutor } from '@relentless/executors';
 import { createInterpreter, type Interpreter } from '@relentless/engine';
 import { createPostgresLibraryResolver, seedBundledLibrary, type LibraryResolver } from '@relentless/library';
-import { createPersistenceBundle, type PersistenceBundle } from '@relentless/persistence';
+import { createPersistenceBundle, SpecChangeEmitter, type PersistenceBundle } from '@relentless/persistence';
 import type { ArtifactStore, Clock, RunStore } from '@relentless/schema';
 
 import type { ServerConfig } from '../config/index.js';
 import { startMcpTransport, type McpTransportHandle } from '../mcp/index.js';
-import { syncKnownActorsFromAgentDefinitions } from '../mcp/guardrails/index.js';
+import { syncKnownActorsFromActorsDirectory } from '../mcp/guardrails/index.js';
+import { startWebTransport, type WebTransportHandle } from '../web/transport.js';
 
 export interface CompositionOverrides {
 	runStore?: RunStore;
@@ -28,11 +29,21 @@ export interface ServerComposition {
 	artifactStore: ArtifactStore;
 	clock: Clock;
 	pool: PersistenceBundle['pool'];
+	// spec-change-events: always constructed regardless of `config.mcpBearerToken`
+	// -- cheap, in-process, so MCP-only compositions still work unchanged. Only
+	// the SSE consumer/web listener that reads from it is config-gated.
+	specEvents: SpecChangeEmitter;
 	// mcp-transport (Story 5): present only when `config.mcpBearerToken` is
 	// configured. The daemon stays a single process either way -- this is the
 	// existing gRPC/proto transport's sibling inside the same `startDaemon`
 	// process, not a second entry point/binary (Story 5.2).
 	mcpTransport?: McpTransportHandle;
+	// web-transport (Story 7 AC2, AC3): present only when `config.webPort` is
+	// configured, matching the mcp-transport's own config-gated pattern above --
+	// the REST BFF listener stays a sibling inside the same `startDaemon`
+	// process (Story 6 AC1), never a second entry point/binary, and is simply
+	// not started for compositions that leave `webPort` unset.
+	webTransport?: WebTransportHandle;
 	close(): Promise<void>;
 }
 
@@ -76,12 +87,20 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 	});
 
 	// guardrails (T6.4): boot-time known-actors registry sync, scanning
-	// spec-templates/agents/*.md for agent names and upserting each into
+	// <actorsDir>/<name> for a curated set of actors and upserting each into
 	// known_actors so every write tool's actor-attribution check (T6.2) has a
-	// current registry to validate against. Run on every boot, same as the
-	// library seed pass above -- re-running only refreshes `updated_at`, it never
-	// removes an actor no longer present on disk.
-	await syncKnownActorsFromAgentDefinitions(bundle.pool, join(config.workspaceRoot, 'spec-templates', 'agents'));
+	// current registry to validate against. This is deliberately NOT a scan of
+	// the general Claude Code skills directory -- agents and skills are separate
+	// concepts, and an unrelated skill (e.g. a personal formatting helper) must
+	// never become a valid actor just because it's installed. See
+	// actor-registry.ts's doc comment for the full rationale. Run on every boot,
+	// same as the library seed pass above -- re-running only refreshes
+	// `updated_at`, it never removes an actor no longer present on disk. Defaults
+	// to a project-local `.claude/relentless-actors` under workspaceRoot when
+	// config.actorsDir is unset (local/non-Docker dev); Docker overrides via
+	// RELENTLESS_ACTORS_DIR to point at the bind-mounted curated actors
+	// directory (see docker-compose.yml).
+	await syncKnownActorsFromActorsDirectory(bundle.pool, config.actorsDir ?? join(config.workspaceRoot, '.claude', 'relentless-actors'));
 
 	// library-store (Story 1.2, 2.1, 3.1): prompts and workflows resolve from
 	// Postgres via `@relentless/persistence`'s library-store, replacing the
@@ -112,6 +131,12 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 	const artifactStore = overrides.artifactStore ?? bundle.artifactStore;
 	const clock = overrides.clock ?? bundle.clock;
 
+	// spec-change-events (Story 4): always constructed -- cheap, in-process --
+	// so MCP-only compositions (no `config.mcpBearerToken`) still work
+	// unchanged. Only the SSE consumer/web listener that reads from it is
+	// config-gated, not the emitter itself.
+	const specEvents = new SpecChangeEmitter();
+
 	// mcp-transport (Story 5.2): wired in alongside the rest of the composition
 	// so `startDaemon` brings it up in the same process as the existing
 	// gRPC/proto transport, which this wiring leaves untouched. Only started
@@ -125,7 +150,25 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 					pool: bundle.pool,
 					host: config.mcpHost,
 					port: config.mcpPort,
-					bearerToken: config.mcpBearerToken
+					bearerToken: config.mcpBearerToken,
+					events: specEvents,
+					claimTtlHours: config.claimTtlHours
+				});
+
+	// web-transport (Story 7 AC2, AC3): started alongside the mcp-transport
+	// above, in the same `buildComposition` call/process (Story 6 AC1), only
+	// when `config.webPort` is configured -- without one the REST BFF listener
+	// is simply not started for this composition (e.g. existing tests/local dev
+	// that build a composition without configuring the web listener at all),
+	// mirroring the mcp-transport's own `config.mcpBearerToken` gate.
+	const webTransport =
+		config.webPort === undefined
+			? undefined
+			: await startWebTransport({
+					pool: bundle.pool,
+					events: specEvents,
+					host: config.webHost ?? '0.0.0.0',
+					port: config.webPort
 				});
 
 	const engine = createInterpreter({
@@ -149,7 +192,9 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 		libraryResolver,
 		executor,
 		engine,
+		specEvents,
 		mcpTransport,
+		webTransport,
 		async close() {
 			const maybeClose = runStore as { close?: () => Promise<void> };
 			if (typeof maybeClose.close === 'function') {
@@ -157,6 +202,9 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 			}
 			if (mcpTransport !== undefined) {
 				await mcpTransport.close();
+			}
+			if (webTransport !== undefined) {
+				await webTransport.close();
 			}
 			await bundle.pool.end();
 		}

@@ -1,0 +1,416 @@
+// Integration tests for TrailRepository — the persistence query layer for the
+// `discovery` schema (the trails domain; see spec-templates/spec/db/schema.sql
+// PART 2 for the DDL and design model).
+//
+// Spins up a throwaway Postgres container (matching spec-repository.test.mjs)
+// and applies the full clean-database bootstrap. The bootstrap currently lives
+// at discovery.schema.mock.sql while under review; once it is renamed to
+// schema.sql at cut-over, the fallback below keeps this suite working unchanged.
+
+import assert from 'node:assert/strict';
+import { after, before, describe, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { access, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createServer } from 'node:net';
+import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+
+import { Pool, ensureProject, TrailRepository, SpecRepositoryError } from '../dist/index.js';
+
+const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
+
+async function resolveSchemaPath() {
+	const mockPath = join(repoRoot, 'spec-templates/spec/db/discovery.schema.mock.sql');
+	try {
+		await access(mockPath);
+		return mockPath;
+	} catch {
+		return join(repoRoot, 'spec-templates/spec/db/schema.sql');
+	}
+}
+
+function runCommand(command, args, options = {}) {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
+		let stdout = '';
+		let stderr = '';
+		child.stdout?.on('data', (chunk) => {
+			stdout += chunk.toString('utf8');
+		});
+		child.stderr?.on('data', (chunk) => {
+			stderr += chunk.toString('utf8');
+		});
+		child.on('error', reject);
+		child.on('close', (code) => {
+			if (code === 0) {
+				resolve({ stdout, stderr });
+				return;
+			}
+			reject(new Error(`${command} ${args.join(' ')} failed with exit code ${code}: ${stderr || stdout}`));
+		});
+	});
+}
+
+async function getFreePort() {
+	return await new Promise((resolve, reject) => {
+		const server = createServer();
+		server.unref();
+		server.on('error', reject);
+		server.listen(0, '127.0.0.1', () => {
+			const address = server.address();
+			if (address === null || typeof address === 'string') {
+				reject(new Error('Unable to allocate a free port'));
+				return;
+			}
+			const port = address.port;
+			server.close((error) => {
+				if (error !== undefined) {
+					reject(error);
+					return;
+				}
+				resolve(port);
+			});
+		});
+	});
+}
+
+async function waitForPostgres(connectionString) {
+	const deadline = Date.now() + 60_000;
+	while (Date.now() < deadline) {
+		const pool = new Pool({ connectionString });
+		try {
+			await pool.query('select 1');
+			await pool.end();
+			return;
+		} catch {
+			await pool.end().catch(() => {});
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+		}
+	}
+	throw new Error('Timed out waiting for Postgres container');
+}
+
+async function startPostgresContainer() {
+	const port = await getFreePort();
+	const containerName = `relentless-trail-repo-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	const args = [
+		'run',
+		'--rm',
+		'-d',
+		'--name',
+		containerName,
+		'-e',
+		'POSTGRES_USER=postgres',
+		'-e',
+		'POSTGRES_PASSWORD=postgres',
+		'-e',
+		'POSTGRES_DB=relentless',
+		'-p',
+		`${port}:5432`,
+		'postgres:16-alpine'
+	];
+	const { stdout } = await runCommand('docker', args);
+	const containerId = stdout.trim();
+	const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/relentless`;
+
+	try {
+		await waitForPostgres(connectionString);
+		return {
+			containerId,
+			connectionString,
+			async stop() {
+				await runCommand('docker', ['rm', '-f', containerId]);
+			}
+		};
+	} catch (error) {
+		await runCommand('docker', ['rm', '-f', containerId]).catch(() => {});
+		throw error;
+	}
+}
+
+let postgres;
+let pool;
+let repository;
+let projectId;
+
+// These tests exercise TrailRepository directly (bypassing the MCP tool layer's
+// actor/known_actors guardrail), so any non-empty actor string works.
+const TEST_AUDIT = { actor: 'test-actor', projectId: null };
+
+before(async () => {
+	postgres = await startPostgresContainer();
+	pool = new Pool({ connectionString: postgres.connectionString });
+	const schemaSql = await readFile(await resolveSchemaPath(), 'utf8');
+	await pool.query(schemaSql);
+	repository = new TrailRepository(pool);
+	projectId = await ensureProject(pool, `trail-repository-test-${randomUUID().slice(0, 8)}`);
+});
+
+after(async () => {
+	await pool?.end();
+	await postgres?.stop();
+});
+
+async function createTestTrail(overrides = {}) {
+	return await repository.createTrail(
+		{
+			projectId,
+			slug: `trail-${randomUUID().slice(0, 8)}`,
+			title: 'Test Trail',
+			trailheadPrompt: 'Figure out the thing.',
+			...overrides
+		},
+		TEST_AUDIT
+	);
+}
+
+describe('createTrail / addWaypoint numbering', () => {
+	test('creates a trail and numbers waypoints max+1 in insertion order', async () => {
+		const trail = await createTestTrail({ destination: 'A settled design', notes: 'Consult the domain model.' });
+		assert.equal(trail.status, 'active');
+		assert.equal(trail.destination, 'A settled design');
+		assert.equal(trail.outcomeKind, null);
+
+		const first = await repository.addWaypoint(trail.id, { title: 'Scope', question: 'What is in scope?' }, TEST_AUDIT);
+		const second = await repository.addWaypoint(trail.id, { title: 'Storage', question: 'Where does data live?' }, TEST_AUDIT);
+		const third = await repository.addWaypoint(trail.id, { title: 'Auth', question: 'Who can call this?' }, TEST_AUDIT);
+		assert.equal(first.waypointNumber, 1);
+		assert.equal(second.waypointNumber, 2);
+		assert.equal(third.waypointNumber, 3);
+		assert.equal(first.status, 'marked');
+	});
+
+	test('addWaypoint with an inline resolution inserts directly at reached with reached_at set', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(
+			trail.id,
+			{
+				title: 'Transport',
+				question: 'HTTP or stdio?',
+				approach: 'grilling',
+				resolution: { resolution: 'HTTP only.', resolutionGist: 'HTTP transport', rationale: 'Matches deployment.', reachedIn: 'session-1' }
+			},
+			TEST_AUDIT
+		);
+		assert.equal(waypoint.status, 'reached');
+		assert.equal(waypoint.resolution, 'HTTP only.');
+		assert.equal(waypoint.resolutionGist, 'HTTP transport');
+		assert.ok(waypoint.reachedAt !== null, 'reached_at must be stamped on inline resolution');
+		assert.equal(waypoint.reachedIn, 'session-1');
+	});
+
+	test('rejects a sighted waypoint carrying a resolution (fog is by definition unresolved)', async () => {
+		const trail = await createTestTrail();
+		await assert.rejects(
+			() =>
+				repository.addWaypoint(
+					trail.id,
+					{
+						title: 'Fog',
+						question: 'Something about caching?',
+						sighted: true,
+						resolution: { resolution: 'Nope.', resolutionGist: 'Nope' }
+					},
+					TEST_AUDIT
+				),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'sighted_cannot_resolve'
+		);
+	});
+});
+
+describe('claimWaypoint', () => {
+	test('claims a marked waypoint atomically; a second live claim is rejected', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Claim me', question: 'Who claims this?' }, TEST_AUDIT);
+
+		const claimed = await repository.claimWaypoint(waypoint.id, 'session-a', TEST_AUDIT);
+		assert.equal(claimed.status, 'claimed');
+		assert.equal(claimed.claimedBy, 'session-a');
+		assert.ok(claimed.claimedAt !== null);
+
+		await assert.rejects(
+			() => repository.claimWaypoint(waypoint.id, 'session-b', TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'already_claimed'
+		);
+	});
+
+	test('a stale claim (older than the TTL) is reclaimable in the same atomic UPDATE', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Stale claim', question: 'Reclaimable?' }, TEST_AUDIT);
+		await repository.claimWaypoint(waypoint.id, 'session-a', TEST_AUDIT);
+
+		// 0.0001 hours = 360ms: the live claim above goes stale almost immediately.
+		const shortTtlRepository = new TrailRepository(pool, undefined, { claimTtlHours: 0.0001 });
+		await new Promise((resolve) => setTimeout(resolve, 500));
+
+		const reclaimed = await shortTtlRepository.claimWaypoint(waypoint.id, 'session-b', TEST_AUDIT);
+		assert.equal(reclaimed.status, 'claimed');
+		assert.equal(reclaimed.claimedBy, 'session-b');
+	});
+
+	test('releaseWaypoint returns a claimed waypoint to marked and clears the claim', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Release me', question: 'Released?' }, TEST_AUDIT);
+		await repository.claimWaypoint(waypoint.id, 'session-a', TEST_AUDIT);
+
+		const released = await repository.releaseWaypoint(waypoint.id, TEST_AUDIT);
+		assert.equal(released.status, 'marked');
+		assert.equal(released.claimedBy, null);
+		assert.equal(released.claimedAt, null);
+	});
+});
+
+describe('reach / bypass transitions', () => {
+	test('reachWaypoint works straight from marked (the grilling rhythm — no claim step)', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Direct reach', question: 'Reachable from marked?' }, TEST_AUDIT);
+
+		const reached = await repository.reachWaypoint(
+			waypoint.id,
+			{ resolution: 'Yes, straight from marked.', resolutionGist: 'Reached from marked', reachedIn: 'session-x' },
+			TEST_AUDIT
+		);
+		assert.equal(reached.status, 'reached');
+		assert.equal(reached.resolutionGist, 'Reached from marked');
+		assert.ok(reached.reachedAt !== null);
+	});
+
+	test('bypassWaypoint works from sighted — fog can lie beyond the destination unsharpened', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Foggy', question: 'Something out there?', sighted: true }, TEST_AUDIT);
+		assert.equal(waypoint.status, 'sighted');
+
+		const bypassed = await repository.bypassWaypoint(waypoint.id, 'Beyond the destination.', TEST_AUDIT);
+		assert.equal(bypassed.status, 'bypassed');
+		assert.equal(bypassed.bypassReason, 'Beyond the destination.');
+	});
+});
+
+describe('getFrontier', () => {
+	test('excludes a blocked waypoint until its blocker is reached', async () => {
+		const trail = await createTestTrail();
+		const blocker = await repository.addWaypoint(trail.id, { title: 'Blocker', question: 'First?' }, TEST_AUDIT);
+		const blocked = await repository.addWaypoint(trail.id, { title: 'Blocked', question: 'Second?' }, TEST_AUDIT);
+		await repository.addWaypointDependency(blocker.id, blocked.id, TEST_AUDIT);
+
+		let frontier = await repository.getFrontier(trail.id);
+		assert.deepEqual(frontier.map((w) => w.id), [blocker.id], 'blocked waypoint stays off the frontier');
+
+		await repository.reachWaypoint(blocker.id, { resolution: 'Done.', resolutionGist: 'Done' }, TEST_AUDIT);
+		frontier = await repository.getFrontier(trail.id);
+		assert.deepEqual(frontier.map((w) => w.id), [blocked.id], 'reached blocker unblocks its dependent');
+	});
+
+	test('a bypassed blocker also unblocks its dependents — a scope ruling never deadlocks the frontier', async () => {
+		const trail = await createTestTrail();
+		const blocker = await repository.addWaypoint(trail.id, { title: 'Bypassed blocker', question: 'First?' }, TEST_AUDIT);
+		const blocked = await repository.addWaypoint(trail.id, { title: 'Waiting', question: 'Second?' }, TEST_AUDIT);
+		await repository.addWaypointDependency(blocker.id, blocked.id, TEST_AUDIT);
+
+		let frontier = await repository.getFrontier(trail.id);
+		assert.deepEqual(frontier.map((w) => w.id), [blocker.id]);
+
+		await repository.bypassWaypoint(blocker.id, 'Out of scope.', TEST_AUDIT);
+		frontier = await repository.getFrontier(trail.id);
+		assert.deepEqual(frontier.map((w) => w.id), [blocked.id], 'bypass unblocks just like reached');
+	});
+});
+
+describe('addWaypointDependency', () => {
+	test('rejects a cross-trail edge', async () => {
+		const trailA = await createTestTrail();
+		const trailB = await createTestTrail();
+		const inA = await repository.addWaypoint(trailA.id, { title: 'In A', question: 'A?' }, TEST_AUDIT);
+		const inB = await repository.addWaypoint(trailB.id, { title: 'In B', question: 'B?' }, TEST_AUDIT);
+
+		await assert.rejects(
+			() => repository.addWaypointDependency(inA.id, inB.id, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'cross_trail'
+		);
+	});
+
+	test('rejects an edge that would close a cycle', async () => {
+		const trail = await createTestTrail();
+		const one = await repository.addWaypoint(trail.id, { title: 'One', question: '1?' }, TEST_AUDIT);
+		const two = await repository.addWaypoint(trail.id, { title: 'Two', question: '2?' }, TEST_AUDIT);
+		const three = await repository.addWaypoint(trail.id, { title: 'Three', question: '3?' }, TEST_AUDIT);
+
+		await repository.addWaypointDependency(one.id, two.id, TEST_AUDIT);
+		await repository.addWaypointDependency(two.id, three.id, TEST_AUDIT);
+
+		await assert.rejects(
+			() => repository.addWaypointDependency(three.id, one.id, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'cycle'
+		);
+	});
+});
+
+describe('completeTrail', () => {
+	test("outcomeKind 'spec' creates the spec_pipeline.specs row and links outcome_spec_id in one transaction", async () => {
+		const trail = await createTestTrail();
+		const specSlug = `handed-off-${randomUUID().slice(0, 8)}`;
+
+		const { trail: completed, spec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', outcomeSummary: 'Handed off.', spec: { slug: specSlug, featureName: 'Handed-Off Feature' } },
+			TEST_AUDIT
+		);
+		assert.equal(completed.status, 'complete');
+		assert.equal(completed.outcomeKind, 'spec');
+		assert.ok(spec !== null);
+		assert.equal(spec.slug, specSlug);
+		assert.equal(completed.outcomeSpecId, spec.id);
+
+		const specRows = await pool.query(`select id, slug from spec_pipeline.specs where id = $1`, [spec.id]);
+		assert.equal(specRows.rowCount, 1);
+		assert.equal(specRows.rows[0].slug, specSlug);
+
+		const bySpec = await repository.getTrailBySpec(spec.id);
+		assert.ok(bySpec !== null, 'getTrailBySpec resolves the trail through outcome_spec_id');
+		assert.equal(bySpec.id, trail.id);
+	});
+
+	test("outcomeKind 'spec' without the spec input is rejected with spec_input_required", async () => {
+		const trail = await createTestTrail();
+		await assert.rejects(
+			() => repository.completeTrail(trail.id, { outcomeKind: 'spec' }, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'spec_input_required'
+		);
+	});
+
+	test("outcomeKind 'decision' completes without any spec involvement", async () => {
+		const trail = await createTestTrail();
+		const { trail: completed, spec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'decision', outcomeSummary: 'Decided; nothing to build.' },
+			TEST_AUDIT
+		);
+		assert.equal(completed.status, 'complete');
+		assert.equal(completed.outcomeKind, 'decision');
+		assert.equal(completed.outcomeSpecId, null);
+		assert.equal(spec, null);
+	});
+});
+
+describe('audit log', () => {
+	test('trail and waypoint writes each insert a schema-qualified audit_log row', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Audited', question: 'Audited?' }, TEST_AUDIT);
+
+		const trailAudit = await pool.query(
+			`select * from spec_pipeline.audit_log where table_name = 'discovery.trails' and row_id = $1`,
+			[trail.id]
+		);
+		assert.equal(trailAudit.rowCount, 1);
+		assert.equal(trailAudit.rows[0].actor, TEST_AUDIT.actor);
+		assert.equal(trailAudit.rows[0].action, 'insert');
+
+		const waypointAudit = await pool.query(
+			`select * from spec_pipeline.audit_log where table_name = 'discovery.waypoints' and row_id = $1`,
+			[waypoint.id]
+		);
+		assert.equal(waypointAudit.rowCount, 1);
+		assert.equal(waypointAudit.rows[0].actor, TEST_AUDIT.actor);
+	});
+});

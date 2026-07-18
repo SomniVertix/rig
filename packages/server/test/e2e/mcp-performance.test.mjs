@@ -182,6 +182,7 @@ test('MCP performance/capacity smoke check: 20 concurrent sessions with read/wri
 
 	const config = {
 		workspaceRoot,
+		actorsDir: join(repoRoot, 'packages', 'server', 'test', 'fixtures', 'actors'),
 		databaseUrl: postgres.connectionString,
 		concurrencyCap: 1,
 		defaultTimeoutMs: 60_000,

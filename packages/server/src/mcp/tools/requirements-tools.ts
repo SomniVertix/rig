@@ -24,7 +24,7 @@ import { ACTOR_DESCRIPTION, auditFrom, jsonResult, registerOrdinalDescriptionToo
  * handler body runs, so it's passed straight into `auditFrom` with no re-check.
  */
 export function registerRequirementsTools(server: McpServer, context: McpToolContext): void {
-	const repository = new SpecRepository(context.pool);
+	const repository = new SpecRepository(context.pool, context.events);
 	const userStoryFields = ['role', 'capability', 'benefit', 'rationale'];
 
 	server.registerTool(

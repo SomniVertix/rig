@@ -3,6 +3,7 @@
 import type { Pool, PoolClient } from 'pg';
 
 import { withTransaction } from './index.js';
+import type { SpecChangeEmitter, SpecChangeEvent } from './spec-change-emitter.js';
 
 /**
  * `SpecRepository` (T5.1): the persistence query layer for the whole spec pipeline --
@@ -45,7 +46,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /** Rewraps a raw Postgres FK/unique violation as a rule-naming `SpecRepositoryError`. */
-function wrapConstraintViolation(error: unknown, context: string): never {
+export function wrapConstraintViolation(error: unknown, context: string): never {
 	if (isForeignKeyViolation(error)) {
 		throw new SpecRepositoryError('parent_not_found', `${context}: referenced parent row does not exist`);
 	}
@@ -55,7 +56,7 @@ function wrapConstraintViolation(error: unknown, context: string): never {
 	throw error;
 }
 
-function toIso(value: string | Date): string {
+export function toIso(value: string | Date): string {
 	return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
@@ -75,12 +76,13 @@ export interface AuditInfo {
 	projectId: string | null;
 }
 
-/** Append-only by construction: this is the only call site in the codebase that
- * writes to `spec_pipeline.audit_log`, and it only ever INSERTs (Story 11.3). */
-async function insertAuditLogRow(
+/** Append-only by construction: this is the only function in the codebase that
+ * writes to `spec_pipeline.audit_log` (shared by `SpecRepository` and
+ * `TrailRepository`), and it only ever INSERTs (Story 11.3). */
+export async function insertAuditLogRow(
 	client: PoolClient,
 	audit: AuditInfo,
-	action: 'insert' | 'update' | 'delete' | 'finalize',
+	action: 'insert' | 'update' | 'delete' | 'finalize' | 'approve' | 'deny',
 	tableName: string,
 	rowId: string
 ): Promise<void> {
@@ -625,10 +627,26 @@ interface OrdinalDescriptionCrud {
 	list(parentId: string): Promise<OrdinalDescriptionRecord[]>;
 }
 
-function ordinalDescriptionCrud(pool: Pool, table: string, parentColumn: string): OrdinalDescriptionCrud {
+/** T5's spec-change-events wiring (Story 4 AC1, AC2): when supplied, every add/update/delete
+ * resolves the owning spec's id up the FK chain (inside the same transaction, via
+ * `resolveSpecId`) and emits a post-commit `spec_changed` event tagged with `stage`. Left
+ * `undefined` for instances whose stage isn't wired yet. */
+interface OrdinalDescriptionChangeEmission {
+	stage: SpecStageName;
+	resolveSpecId(client: PoolClient, parentId: string): Promise<string>;
+	emit(event: SpecChangeEvent): void;
+}
+
+function ordinalDescriptionCrud(
+	pool: Pool,
+	table: string,
+	parentColumn: string,
+	changeEmission?: OrdinalDescriptionChangeEmission
+): OrdinalDescriptionCrud {
 	return {
 		async add(parentId: string, description: string, audit: AuditInfo): Promise<OrdinalDescriptionRecord> {
-			return await withTransaction(pool, async (client) => {
+			let specId: string | null = null;
+			const record = await withTransaction(pool, async (client) => {
 				const ordinal = await nextOrdinal(client, table, 'ordinal', parentColumn, parentId);
 				try {
 					const result = await client.query<OrdinalDescriptionRow>(
@@ -640,16 +658,24 @@ function ordinalDescriptionCrud(pool: Pool, table: string, parentColumn: string)
 						throw new Error(`insert into ${table} did not return a row`);
 					}
 					await insertAuditLogRow(client, audit, 'insert', table, row.id);
+					if (changeEmission) {
+						specId = await changeEmission.resolveSpecId(client, parentId);
+					}
 					return rowToOrdinalDescription(row);
 				} catch (error) {
 					wrapConstraintViolation(error, `add ${table}`);
 				}
 			});
+			if (changeEmission && specId !== null) {
+				changeEmission.emit({ type: 'spec_changed', specId, stage: changeEmission.stage });
+			}
+			return record;
 		},
 		async update(id: string, description: string, audit: AuditInfo): Promise<OrdinalDescriptionRecord> {
-			return await withTransaction(pool, async (client) => {
+			let specId: string | null = null;
+			const record = await withTransaction(pool, async (client) => {
 				const result = await client.query<OrdinalDescriptionRow>(
-					`update spec_pipeline.${table} set description = $2 where id = $1 returning id, ordinal, description`,
+					`update spec_pipeline.${table} set description = $2 where id = $1 returning id, ordinal, description, ${parentColumn}`,
 					[id, description]
 				);
 				const row = result.rows[0];
@@ -657,17 +683,35 @@ function ordinalDescriptionCrud(pool: Pool, table: string, parentColumn: string)
 					throw new SpecRepositoryError('not_found', `${table} row not found: ${id}`);
 				}
 				await insertAuditLogRow(client, audit, 'update', table, row.id);
+				if (changeEmission) {
+					specId = await changeEmission.resolveSpecId(client, String(row[parentColumn]));
+				}
 				return rowToOrdinalDescription(row);
 			});
+			if (changeEmission && specId !== null) {
+				changeEmission.emit({ type: 'spec_changed', specId, stage: changeEmission.stage });
+			}
+			return record;
 		},
 		async delete(id: string, audit: AuditInfo): Promise<void> {
+			let specId: string | null = null;
 			await withTransaction(pool, async (client) => {
-				const result = await client.query(`delete from spec_pipeline.${table} where id = $1`, [id]);
-				if (result.rowCount === 0) {
+				const result = await client.query<Record<string, unknown>>(
+					`delete from spec_pipeline.${table} where id = $1 returning ${parentColumn}`,
+					[id]
+				);
+				const row = result.rows[0];
+				if (row === undefined) {
 					throw new SpecRepositoryError('not_found', `${table} row not found: ${id}`);
 				}
 				await insertAuditLogRow(client, audit, 'delete', table, id);
+				if (changeEmission) {
+					specId = await changeEmission.resolveSpecId(client, String(row[parentColumn]));
+				}
 			});
+			if (changeEmission && specId !== null) {
+				changeEmission.emit({ type: 'spec_changed', specId, stage: changeEmission.stage });
+			}
 		},
 		async list(parentId: string): Promise<OrdinalDescriptionRecord[]> {
 			const result = await pool.query<OrdinalDescriptionRow>(
@@ -691,6 +735,18 @@ export interface FinalizeStageResult {
 	status: string;
 }
 
+export interface ApproveStageResult {
+	stage: SpecStageName;
+	componentSlug?: string;
+	status: 'approved';
+}
+
+export interface DenyStageResult {
+	stage: SpecStageName;
+	componentSlug?: string;
+	status: 'not_started';
+}
+
 export interface GetNextStageResult {
 	actionableStage: SpecStageName | null;
 	laggingComponents?: string[];
@@ -702,6 +758,7 @@ export interface GetNextStageResult {
 
 export class SpecRepository {
 	private readonly pool: Pool;
+	private readonly emitter: SpecChangeEmitter | undefined;
 
 	private readonly nonGoals: OrdinalDescriptionCrud;
 	private readonly assumptionsOpenQuestions: OrdinalDescriptionCrud;
@@ -710,18 +767,157 @@ export class SpecRepository {
 	private readonly designFlags: OrdinalDescriptionCrud;
 	private readonly tasksFlags: OrdinalDescriptionCrud;
 
-	constructor(pool: Pool) {
+	/** `emitter` is optional (and defaulted `undefined`) so every existing call site that
+	 * constructs a `SpecRepository` without one keeps working; callers that care about
+	 * `spec_changed` fan-out (Story 4) pass the process-wide
+	 * `SpecChangeEmitter` singleton in. */
+	constructor(pool: Pool, emitter?: SpecChangeEmitter) {
 		this.pool = pool;
-		this.nonGoals = ordinalDescriptionCrud(pool, 'non_goals', 'requirements_id');
-		this.assumptionsOpenQuestions = ordinalDescriptionCrud(pool, 'assumptions_open_questions', 'requirements_id');
-		this.designAlternatives = ordinalDescriptionCrud(pool, 'design_alternatives_considered', 'design_id');
-		this.designOpenRisks = ordinalDescriptionCrud(pool, 'design_open_risks', 'design_id');
-		this.designFlags = ordinalDescriptionCrud(pool, 'design_flags', 'design_id');
+		this.emitter = emitter;
+		this.nonGoals = ordinalDescriptionCrud(pool, 'non_goals', 'requirements_id', {
+			stage: 'requirements',
+			resolveSpecId: (client, parentId) => this.resolveSpecIdFromRequirementsId(client, parentId),
+			emit: (event) => this.emitChange(event)
+		});
+		this.assumptionsOpenQuestions = ordinalDescriptionCrud(pool, 'assumptions_open_questions', 'requirements_id', {
+			stage: 'requirements',
+			resolveSpecId: (client, parentId) => this.resolveSpecIdFromRequirementsId(client, parentId),
+			emit: (event) => this.emitChange(event)
+		});
+		this.designAlternatives = ordinalDescriptionCrud(pool, 'design_alternatives_considered', 'design_id', {
+			stage: 'design',
+			resolveSpecId: (client, parentId) => this.resolveSpecIdFromDesignId(client, parentId),
+			emit: (event) => this.emitChange(event)
+		});
+		this.designOpenRisks = ordinalDescriptionCrud(pool, 'design_open_risks', 'design_id', {
+			stage: 'design',
+			resolveSpecId: (client, parentId) => this.resolveSpecIdFromDesignId(client, parentId),
+			emit: (event) => this.emitChange(event)
+		});
+		this.designFlags = ordinalDescriptionCrud(pool, 'design_flags', 'design_id', {
+			stage: 'design',
+			resolveSpecId: (client, parentId) => this.resolveSpecIdFromDesignId(client, parentId),
+			emit: (event) => this.emitChange(event)
+		});
 		this.tasksFlags = ordinalDescriptionCrud(pool, 'tasks_flags', 'tasks_doc_id');
 	}
 
 	private async withTx<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
 		return await withTransaction(this.pool, work);
+	}
+
+	/** Fans a `spec_changed` event out to the process-wide
+	 * emitter (Story 4 AC1, AC2). A no-op when this repository was constructed without
+	 * one. Always called *after* the mutation's `withTx` has resolved (i.e. committed),
+	 * never from inside the transaction callback, so a rolled-back mutation never emits. */
+	private emitChange(event: SpecChangeEvent): void {
+		this.emitter?.emit(event);
+	}
+
+	/** Resolves the owning spec's id from a `requirements_id` FK (Story 4 AC2) --
+	 * shared by every requirements-child mutation whose parent is the `requirements`
+	 * row itself (user stories, glossary terms, non-goals, assumptions/open questions). */
+	private async resolveSpecIdFromRequirementsId(client: PoolClient, requirementsId: string): Promise<string> {
+		const result = await client.query<{ spec_id: string }>(
+			`select spec_id from spec_pipeline.requirements where id = $1`,
+			[requirementsId]
+		);
+		const row = result.rows[0];
+		if (row === undefined) {
+			throw new Error(`resolveSpecIdFromRequirementsId: requirements row not found: ${requirementsId}`);
+		}
+		return row.spec_id;
+	}
+
+	/** Resolves the owning spec's id from a `user_story_id` FK by joining up through
+	 * `requirements` (Story 4 AC2) -- shared by acceptance-criterion mutations, whose
+	 * parent is a user story rather than the requirements row directly. */
+	private async resolveSpecIdFromUserStoryId(client: PoolClient, userStoryId: string): Promise<string> {
+		const result = await client.query<{ spec_id: string }>(
+			`select r.spec_id from spec_pipeline.user_stories us
+			 join spec_pipeline.requirements r on r.id = us.requirements_id
+			 where us.id = $1`,
+			[userStoryId]
+		);
+		const row = result.rows[0];
+		if (row === undefined) {
+			throw new Error(`resolveSpecIdFromUserStoryId: user_story row not found: ${userStoryId}`);
+		}
+		return row.spec_id;
+	}
+
+	/** Resolves the owning spec's id from a `design_id` FK (Story 4 AC2) -- shared by
+	 * every design-child mutation whose parent is the `design` row itself (components,
+	 * data model entries, traceability rows, alternatives, open risks, flags). */
+	private async resolveSpecIdFromDesignId(client: PoolClient, designId: string): Promise<string> {
+		const result = await client.query<{ spec_id: string }>(
+			`select spec_id from spec_pipeline.designs where id = $1`,
+			[designId]
+		);
+		const row = result.rows[0];
+		if (row === undefined) {
+			throw new Error(`resolveSpecIdFromDesignId: design row not found: ${designId}`);
+		}
+		return row.spec_id;
+	}
+
+	/** Resolves the owning spec's id AND component slug from a `tasks_doc_id` FK (Story
+	 * 4 AC1, AC2) -- every `tasks_docs` row is already scoped to exactly one component, so
+	 * both fields come from a single lookup. Shared by every tasks-child mutation whose
+	 * parent is the `tasks_docs` row itself (task items, parallel batches, tasks flags). */
+	private async resolveSpecAndComponentFromTasksDocId(
+		client: PoolClient,
+		tasksDocId: string
+	): Promise<{ specId: string; component: string }> {
+		const result = await client.query<{ spec_id: string; component_slug: string }>(
+			`select spec_id, component_slug from spec_pipeline.tasks_docs where id = $1`,
+			[tasksDocId]
+		);
+		const row = result.rows[0];
+		if (row === undefined) {
+			throw new Error(`resolveSpecAndComponentFromTasksDocId: tasks_docs row not found: ${tasksDocId}`);
+		}
+		return { specId: row.spec_id, component: row.component_slug };
+	}
+
+	/** Resolves the owning spec's id AND component slug from a `task_item_id` FK by
+	 * joining up through `tasks_docs` (Story 4 AC1, AC2) -- shared by task_files_touched
+	 * mutations, whose parent is a task item rather than the tasks_docs row directly. */
+	private async resolveSpecAndComponentFromTaskItemId(
+		client: PoolClient,
+		taskItemId: string
+	): Promise<{ specId: string; component: string }> {
+		const result = await client.query<{ spec_id: string; component_slug: string }>(
+			`select td.spec_id, td.component_slug from spec_pipeline.task_items ti
+			 join spec_pipeline.tasks_docs td on td.id = ti.tasks_doc_id
+			 where ti.id = $1`,
+			[taskItemId]
+		);
+		const row = result.rows[0];
+		if (row === undefined) {
+			throw new Error(`resolveSpecAndComponentFromTaskItemId: task_item row not found: ${taskItemId}`);
+		}
+		return { specId: row.spec_id, component: row.component_slug };
+	}
+
+	/** Resolves the owning spec's id AND component slug from a `batch_id` FK by joining
+	 * up through `tasks_docs` (Story 4 AC1, AC2) -- shared by parallel_batch_members
+	 * mutations, whose parent is a parallel batch rather than the tasks_docs row directly. */
+	private async resolveSpecAndComponentFromBatchId(
+		client: PoolClient,
+		batchId: string
+	): Promise<{ specId: string; component: string }> {
+		const result = await client.query<{ spec_id: string; component_slug: string }>(
+			`select td.spec_id, td.component_slug from spec_pipeline.parallel_batches pb
+			 join spec_pipeline.tasks_docs td on td.id = pb.tasks_doc_id
+			 where pb.id = $1`,
+			[batchId]
+		);
+		const row = result.rows[0];
+		if (row === undefined) {
+			throw new Error(`resolveSpecAndComponentFromBatchId: parallel_batch row not found: ${batchId}`);
+		}
+		return { specId: row.spec_id, component: row.component_slug };
 	}
 
 	// ---------------------------------------------------------------------------
@@ -791,9 +987,10 @@ export class SpecRepository {
 		return row === undefined ? null : rowToRequirements(row);
 	}
 
-	/** Upserts the requirements row's `## Overview` + feature name. */
+	/** Upserts the requirements row's `## Overview` + feature name. `specId` is already
+	 * the mutation's own argument, so no FK-chain resolution is needed before emitting. */
 	async setRequirementsOverview(specId: string, input: { featureName: string; overview: string }, audit: AuditInfo): Promise<RequirementsRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<RequirementsRow>(
 				`insert into spec_pipeline.requirements (spec_id, feature_name, overview)
 				 values ($1, $2, $3)
@@ -808,6 +1005,8 @@ export class SpecRepository {
 			await insertAuditLogRow(client, audit, 'insert', 'requirements', row.id);
 			return rowToRequirements(row);
 		});
+		this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		return record;
 	}
 
 	async listUserStories(requirementsId: string): Promise<UserStoryRecord[]> {
@@ -823,7 +1022,8 @@ export class SpecRepository {
 		input: { title: string; role: string; capability: string; benefit: string; rationale: string },
 		audit: AuditInfo
 	): Promise<UserStoryRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const storyNumber = await nextOrdinal(client, 'user_stories', 'story_number', 'requirements_id', requirementsId);
 			try {
 				const result = await client.query<UserStoryRow>(
@@ -836,11 +1036,16 @@ export class SpecRepository {
 					throw new Error('addUserStory: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'user_stories', row.id);
+				specId = await this.resolveSpecIdFromRequirementsId(client, requirementsId);
 				return rowToUserStory(row);
 			} catch (error) {
 				wrapConstraintViolation(error, 'add_user_story');
 			}
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
+		return record;
 	}
 
 	async updateUserStory(
@@ -848,7 +1053,8 @@ export class SpecRepository {
 		input: Partial<{ title: string; role: string; capability: string; benefit: string; rationale: string }>,
 		audit: AuditInfo
 	): Promise<UserStoryRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<UserStoryRow>(
 				`update spec_pipeline.user_stories set
 					title = coalesce($2, title),
@@ -864,18 +1070,32 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `user_story not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'user_stories', row.id);
+			specId = await this.resolveSpecIdFromRequirementsId(client, row.requirements_id);
 			return rowToUserStory(row);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
+		return record;
 	}
 
 	async deleteUserStory(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | null = null;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.user_stories where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ requirements_id: string }>(
+				`delete from spec_pipeline.user_stories where id = $1 returning requirements_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `user_story not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'user_stories', id);
+			specId = await this.resolveSpecIdFromRequirementsId(client, row.requirements_id);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
 	}
 
 	async listAcceptanceCriteria(userStoryId: string): Promise<AcceptanceCriterionRecord[]> {
@@ -898,7 +1118,8 @@ export class SpecRepository {
 		},
 		audit: AuditInfo
 	): Promise<AcceptanceCriterionRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const criterionNumber = await nextOrdinal(client, 'acceptance_criteria', 'criterion_number', 'user_story_id', userStoryId);
 			try {
 				const result = await client.query<AcceptanceCriterionRow>(
@@ -921,11 +1142,16 @@ export class SpecRepository {
 					throw new Error('addAcceptanceCriterion: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'acceptance_criteria', row.id);
+				specId = await this.resolveSpecIdFromUserStoryId(client, userStoryId);
 				return rowToAcceptanceCriterion(row);
 			} catch (error) {
 				wrapConstraintViolation(error, 'add_acceptance_criterion');
 			}
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
+		return record;
 	}
 
 	async updateAcceptanceCriterion(
@@ -940,7 +1166,8 @@ export class SpecRepository {
 		}>,
 		audit: AuditInfo
 	): Promise<AcceptanceCriterionRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<AcceptanceCriterionRow>(
 				`update spec_pipeline.acceptance_criteria set
 					ears_pattern = coalesce($2, ears_pattern),
@@ -968,18 +1195,32 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `acceptance_criterion not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'acceptance_criteria', row.id);
+			specId = await this.resolveSpecIdFromUserStoryId(client, row.user_story_id);
 			return rowToAcceptanceCriterion(row);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
+		return record;
 	}
 
 	async deleteAcceptanceCriterion(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | null = null;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.acceptance_criteria where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ user_story_id: string }>(
+				`delete from spec_pipeline.acceptance_criteria where id = $1 returning user_story_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `acceptance_criterion not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'acceptance_criteria', id);
+			specId = await this.resolveSpecIdFromUserStoryId(client, row.user_story_id);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
 	}
 
 	async listNonGoals(requirementsId: string): Promise<OrdinalDescriptionRecord[]> {
@@ -1021,7 +1262,8 @@ export class SpecRepository {
 		input: { term: string; definition?: string | null; externalReference?: string | null },
 		audit: AuditInfo
 	): Promise<GlossaryTermRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			try {
 				const result = await client.query<GlossaryTermRow>(
 					`insert into spec_pipeline.requirement_glossary_terms (requirements_id, term, definition, external_reference)
@@ -1033,11 +1275,16 @@ export class SpecRepository {
 					throw new Error('addGlossaryTerm: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'requirement_glossary_terms', row.id);
+				specId = await this.resolveSpecIdFromRequirementsId(client, requirementsId);
 				return rowToGlossaryTerm(row);
 			} catch (error) {
 				wrapConstraintViolation(error, 'add_glossary_term');
 			}
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
+		return record;
 	}
 
 	async updateGlossaryTerm(
@@ -1045,7 +1292,8 @@ export class SpecRepository {
 		input: Partial<{ term: string; definition: string | null; externalReference: string | null }>,
 		audit: AuditInfo
 	): Promise<GlossaryTermRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<GlossaryTermRow>(
 				`update spec_pipeline.requirement_glossary_terms set
 					term = coalesce($2, term),
@@ -1066,18 +1314,32 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `glossary_term not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'requirement_glossary_terms', row.id);
+			specId = await this.resolveSpecIdFromRequirementsId(client, row.requirements_id);
 			return rowToGlossaryTerm(row);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
+		return record;
 	}
 
 	async deleteGlossaryTerm(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | null = null;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.requirement_glossary_terms where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ requirements_id: string }>(
+				`delete from spec_pipeline.requirement_glossary_terms where id = $1 returning requirements_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `glossary_term not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'requirement_glossary_terms', id);
+			specId = await this.resolveSpecIdFromRequirementsId(client, row.requirements_id);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'requirements' });
+		}
 	}
 
 	// ---------------------------------------------------------------------------
@@ -1091,7 +1353,7 @@ export class SpecRepository {
 	}
 
 	async setDesignOverview(specId: string, input: { featureName: string; overview: string }, audit: AuditInfo): Promise<DesignRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<DesignRow>(
 				`insert into spec_pipeline.designs (spec_id, feature_name, overview, architecture)
 				 values ($1, $2, $3, '')
@@ -1106,10 +1368,12 @@ export class SpecRepository {
 			await insertAuditLogRow(client, audit, 'insert', 'designs', row.id);
 			return rowToDesign(row);
 		});
+		this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		return record;
 	}
 
 	async setDesignArchitecture(specId: string, architecture: string, audit: AuditInfo): Promise<DesignRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<DesignRow>(
 				`insert into spec_pipeline.designs (spec_id, feature_name, overview, architecture)
 				 values ($1, '', '', $2)
@@ -1124,6 +1388,8 @@ export class SpecRepository {
 			await insertAuditLogRow(client, audit, 'insert', 'designs', row.id);
 			return rowToDesign(row);
 		});
+		this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		return record;
 	}
 
 	async listDesignComponents(designId: string): Promise<DesignComponentRecord[]> {
@@ -1135,7 +1401,8 @@ export class SpecRepository {
 	}
 
 	async addDesignComponent(designId: string, input: { slug: string; displayName: string }, audit: AuditInfo): Promise<DesignComponentRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const ordinal = await nextOrdinal(client, 'design_components', 'ordinal', 'design_id', designId);
 			try {
 				const result = await client.query<DesignComponentRow>(
@@ -1148,6 +1415,7 @@ export class SpecRepository {
 					throw new Error('addDesignComponent: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'design_components', row.id);
+				specId = await this.resolveSpecIdFromDesignId(client, designId);
 				return rowToDesignComponent(row);
 			} catch (error) {
 				if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23514') {
@@ -1159,6 +1427,10 @@ export class SpecRepository {
 				wrapConstraintViolation(error, 'add_design_component');
 			}
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
+		return record;
 	}
 
 	/** Repositioning a component (its ordinal) requires this explicit call -- never automatic (Story 6.4). */
@@ -1167,7 +1439,8 @@ export class SpecRepository {
 		input: Partial<{ slug: string; displayName: string; ordinal: number }>,
 		audit: AuditInfo
 	): Promise<DesignComponentRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			try {
 				const result = await client.query<DesignComponentRow>(
 					`update spec_pipeline.design_components set
@@ -1182,6 +1455,7 @@ export class SpecRepository {
 					throw new SpecRepositoryError('not_found', `design_component not found: ${id}`);
 				}
 				await insertAuditLogRow(client, audit, 'update', 'design_components', row.id);
+				specId = await this.resolveSpecIdFromDesignId(client, row.design_id);
 				return rowToDesignComponent(row);
 			} catch (error) {
 				if (error instanceof SpecRepositoryError) {
@@ -1193,16 +1467,29 @@ export class SpecRepository {
 				wrapConstraintViolation(error, 'update_design_component');
 			}
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
+		return record;
 	}
 
 	async deleteDesignComponent(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | null = null;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.design_components where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ design_id: string }>(
+				`delete from spec_pipeline.design_components where id = $1 returning design_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `design_component not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'design_components', id);
+			specId = await this.resolveSpecIdFromDesignId(client, row.design_id);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
 	}
 
 	async listDesignDataModelEntries(designId: string): Promise<DesignDataModelEntryRecord[]> {
@@ -1218,7 +1505,8 @@ export class SpecRepository {
 		input: { name: string; kind: string; content: string },
 		audit: AuditInfo
 	): Promise<DesignDataModelEntryRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const ordinal = await nextOrdinal(client, 'design_data_model_entries', 'ordinal', 'design_id', designId);
 			try {
 				const result = await client.query<DesignDataModelEntryRow>(
@@ -1231,11 +1519,16 @@ export class SpecRepository {
 					throw new Error('addDesignDataModelEntry: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'design_data_model_entries', row.id);
+				specId = await this.resolveSpecIdFromDesignId(client, designId);
 				return rowToDesignDataModelEntry(row);
 			} catch (error) {
 				wrapConstraintViolation(error, 'add_design_data_model_entry');
 			}
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
+		return record;
 	}
 
 	async updateDesignDataModelEntry(
@@ -1243,7 +1536,8 @@ export class SpecRepository {
 		input: Partial<{ name: string; kind: string; content: string }>,
 		audit: AuditInfo
 	): Promise<DesignDataModelEntryRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<DesignDataModelEntryRow>(
 				`update spec_pipeline.design_data_model_entries set
 					name = coalesce($2, name), kind = coalesce($3, kind), content = coalesce($4, content)
@@ -1255,18 +1549,32 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `design_data_model_entry not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'design_data_model_entries', row.id);
+			specId = await this.resolveSpecIdFromDesignId(client, row.design_id);
 			return rowToDesignDataModelEntry(row);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
+		return record;
 	}
 
 	async deleteDesignDataModelEntry(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | null = null;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.design_data_model_entries where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ design_id: string }>(
+				`delete from spec_pipeline.design_data_model_entries where id = $1 returning design_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `design_data_model_entry not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'design_data_model_entries', id);
+			specId = await this.resolveSpecIdFromDesignId(client, row.design_id);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
 	}
 
 	async listDesignTraceability(designId: string): Promise<DesignTraceabilityRecord[]> {
@@ -1282,7 +1590,8 @@ export class SpecRepository {
 		input: { userStoryId?: string | null; requirementLabel: string; addressedBy: string },
 		audit: AuditInfo
 	): Promise<DesignTraceabilityRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const ordinal = await nextOrdinal(client, 'design_traceability', 'ordinal', 'design_id', designId);
 			try {
 				const result = await client.query<DesignTraceabilityRow>(
@@ -1295,11 +1604,16 @@ export class SpecRepository {
 					throw new Error('addDesignTraceability: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'design_traceability', row.id);
+				specId = await this.resolveSpecIdFromDesignId(client, designId);
 				return rowToDesignTraceability(row);
 			} catch (error) {
 				wrapConstraintViolation(error, 'add_design_traceability');
 			}
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
+		return record;
 	}
 
 	async updateDesignTraceability(
@@ -1307,7 +1621,8 @@ export class SpecRepository {
 		input: Partial<{ userStoryId: string | null; requirementLabel: string; addressedBy: string }>,
 		audit: AuditInfo
 	): Promise<DesignTraceabilityRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | null = null;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<DesignTraceabilityRow>(
 				`update spec_pipeline.design_traceability set
 					user_story_id = case when $2::boolean then $3 else user_story_id end,
@@ -1321,18 +1636,32 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `design_traceability not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'design_traceability', row.id);
+			specId = await this.resolveSpecIdFromDesignId(client, row.design_id);
 			return rowToDesignTraceability(row);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
+		return record;
 	}
 
 	async deleteDesignTraceability(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | null = null;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.design_traceability where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ design_id: string }>(
+				`delete from spec_pipeline.design_traceability where id = $1 returning design_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `design_traceability not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'design_traceability', id);
+			specId = await this.resolveSpecIdFromDesignId(client, row.design_id);
 		});
+		if (specId !== null) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'design' });
+		}
 	}
 
 	async listDesignAlternatives(designId: string): Promise<OrdinalDescriptionRecord[]> {
@@ -1434,7 +1763,7 @@ export class SpecRepository {
 		},
 		audit: AuditInfo
 	): Promise<TaskItemRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const tasksDocId = await this.resolveTasksDocId(client, specId, componentSlug);
 			const parentItemId = input.parentItemId ?? null;
 			let itemId: string;
@@ -1483,6 +1812,8 @@ export class SpecRepository {
 			await insertAuditLogRow(client, audit, 'insert', 'task_items', row.id);
 			return rowToTaskItem(row);
 		});
+		this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component: componentSlug });
+		return record;
 	}
 
 	async updateTaskItem(
@@ -1497,7 +1828,9 @@ export class SpecRepository {
 		}>,
 		audit: AuditInfo
 	): Promise<TaskItemRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | undefined;
+		let component: string | undefined;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<TaskItemRow>(
 				`update spec_pipeline.task_items set
 					title = coalesce($2, title),
@@ -1522,18 +1855,37 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `task_item not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'task_items', row.id);
+			const resolved = await this.resolveSpecAndComponentFromTasksDocId(client, row.tasks_doc_id);
+			specId = resolved.specId;
+			component = resolved.component;
 			return rowToTaskItem(row);
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
+		return record;
 	}
 
 	async deleteTaskItem(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | undefined;
+		let component: string | undefined;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.task_items where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ tasks_doc_id: string }>(
+				`delete from spec_pipeline.task_items where id = $1 returning tasks_doc_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `task_item not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'task_items', id);
+			const resolved = await this.resolveSpecAndComponentFromTasksDocId(client, row.tasks_doc_id);
+			specId = resolved.specId;
+			component = resolved.component;
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
 	}
 
 	async listTaskFilesTouched(taskItemId: string): Promise<TaskFileTouchedRecord[]> {
@@ -1545,7 +1897,9 @@ export class SpecRepository {
 	}
 
 	async addTaskFileTouched(taskItemId: string, filePath: string, audit: AuditInfo): Promise<TaskFileTouchedRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | undefined;
+		let component: string | undefined;
+		const record = await this.withTx(async (client) => {
 			const ordinal = await nextOrdinal(client, 'task_files_touched', 'ordinal', 'task_item_id', taskItemId);
 			try {
 				const result = await client.query<TaskFileTouchedRow>(
@@ -1557,15 +1911,24 @@ export class SpecRepository {
 					throw new Error('addTaskFileTouched: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'task_files_touched', row.id);
+				const resolved = await this.resolveSpecAndComponentFromTaskItemId(client, taskItemId);
+				specId = resolved.specId;
+				component = resolved.component;
 				return rowToTaskFileTouched(row);
 			} catch (error) {
 				wrapConstraintViolation(error, 'add_task_file_touched');
 			}
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
+		return record;
 	}
 
 	async updateTaskFileTouched(id: string, filePath: string, audit: AuditInfo): Promise<TaskFileTouchedRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | undefined;
+		let component: string | undefined;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<TaskFileTouchedRow>(
 				`update spec_pipeline.task_files_touched set file_path = $2 where id = $1 returning *`,
 				[id, filePath]
@@ -1575,18 +1938,37 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `task_file_touched not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'task_files_touched', row.id);
+			const resolved = await this.resolveSpecAndComponentFromTaskItemId(client, row.task_item_id);
+			specId = resolved.specId;
+			component = resolved.component;
 			return rowToTaskFileTouched(row);
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
+		return record;
 	}
 
 	async deleteTaskFileTouched(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | undefined;
+		let component: string | undefined;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.task_files_touched where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ task_item_id: string }>(
+				`delete from spec_pipeline.task_files_touched where id = $1 returning task_item_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `task_file_touched not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'task_files_touched', id);
+			const resolved = await this.resolveSpecAndComponentFromTaskItemId(client, row.task_item_id);
+			specId = resolved.specId;
+			component = resolved.component;
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
 	}
 
 	async listParallelBatches(tasksDocId: string): Promise<ParallelBatchRecord[]> {
@@ -1599,7 +1981,7 @@ export class SpecRepository {
 
 	/** `batch_label` (`P1`, `P2`, ...) is derived from the auto-assigned `batch_order`, never caller-supplied. */
 	async addParallelBatch(specId: string, componentSlug: string, audit: AuditInfo): Promise<ParallelBatchRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const tasksDocId = await this.resolveTasksDocId(client, specId, componentSlug);
 			const batchOrder = await nextOrdinal(client, 'parallel_batches', 'batch_order', 'tasks_doc_id', tasksDocId);
 			const result = await client.query<ParallelBatchRow>(
@@ -1613,11 +1995,15 @@ export class SpecRepository {
 			await insertAuditLogRow(client, audit, 'insert', 'parallel_batches', row.id);
 			return rowToParallelBatch(row);
 		});
+		this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component: componentSlug });
+		return record;
 	}
 
 	/** Repositioning a batch (its label/order) requires this explicit call -- never automatic reindex (Story 6.4). */
 	async updateParallelBatch(id: string, input: Partial<{ batchLabel: string; batchOrder: number }>, audit: AuditInfo): Promise<ParallelBatchRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | undefined;
+		let component: string | undefined;
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<ParallelBatchRow>(
 				`update spec_pipeline.parallel_batches set
 					batch_label = coalesce($2, batch_label), batch_order = coalesce($3, batch_order)
@@ -1629,18 +2015,37 @@ export class SpecRepository {
 				throw new SpecRepositoryError('not_found', `parallel_batch not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'update', 'parallel_batches', row.id);
+			const resolved = await this.resolveSpecAndComponentFromTasksDocId(client, row.tasks_doc_id);
+			specId = resolved.specId;
+			component = resolved.component;
 			return rowToParallelBatch(row);
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
+		return record;
 	}
 
 	async deleteParallelBatch(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | undefined;
+		let component: string | undefined;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.parallel_batches where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ tasks_doc_id: string }>(
+				`delete from spec_pipeline.parallel_batches where id = $1 returning tasks_doc_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `parallel_batch not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'parallel_batches', id);
+			const resolved = await this.resolveSpecAndComponentFromTasksDocId(client, row.tasks_doc_id);
+			specId = resolved.specId;
+			component = resolved.component;
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
 	}
 
 	async listParallelBatchMembers(batchId: string): Promise<ParallelBatchMemberRecord[]> {
@@ -1652,7 +2057,9 @@ export class SpecRepository {
 	}
 
 	async addParallelBatchMember(batchId: string, taskItemId: string, audit: AuditInfo): Promise<ParallelBatchMemberRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | undefined;
+		let component: string | undefined;
+		const record = await this.withTx(async (client) => {
 			try {
 				const result = await client.query<ParallelBatchMemberRow>(
 					`insert into spec_pipeline.parallel_batch_members (batch_id, task_item_id) values ($1, $2) returning *`,
@@ -1663,16 +2070,25 @@ export class SpecRepository {
 					throw new Error('addParallelBatchMember: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'parallel_batch_members', row.id);
+				const resolved = await this.resolveSpecAndComponentFromBatchId(client, batchId);
+				specId = resolved.specId;
+				component = resolved.component;
 				return rowToParallelBatchMember(row);
 			} catch (error) {
 				wrapConstraintViolation(error, 'add_parallel_batch_member');
 			}
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
+		return record;
 	}
 
 	/** Changes which task_item a batch membership points to. */
 	async updateParallelBatchMember(id: string, taskItemId: string, audit: AuditInfo): Promise<ParallelBatchMemberRecord> {
-		return await this.withTx(async (client) => {
+		let specId: string | undefined;
+		let component: string | undefined;
+		const record = await this.withTx(async (client) => {
 			try {
 				const result = await client.query<ParallelBatchMemberRow>(
 					`update spec_pipeline.parallel_batch_members set task_item_id = $2 where id = $1 returning *`,
@@ -1683,6 +2099,9 @@ export class SpecRepository {
 					throw new SpecRepositoryError('not_found', `parallel_batch_member not found: ${id}`);
 				}
 				await insertAuditLogRow(client, audit, 'update', 'parallel_batch_members', row.id);
+				const resolved = await this.resolveSpecAndComponentFromBatchId(client, row.batch_id);
+				specId = resolved.specId;
+				component = resolved.component;
 				return rowToParallelBatchMember(row);
 			} catch (error) {
 				if (error instanceof SpecRepositoryError) {
@@ -1691,44 +2110,115 @@ export class SpecRepository {
 				wrapConstraintViolation(error, 'update_parallel_batch_member');
 			}
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
+		return record;
 	}
 
 	async deleteParallelBatchMember(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | undefined;
+		let component: string | undefined;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.parallel_batch_members where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ batch_id: string }>(
+				`delete from spec_pipeline.parallel_batch_members where id = $1 returning batch_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `parallel_batch_member not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'parallel_batch_members', id);
+			const resolved = await this.resolveSpecAndComponentFromBatchId(client, row.batch_id);
+			specId = resolved.specId;
+			component = resolved.component;
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
 	}
 
 	async listTasksFlags(tasksDocId: string): Promise<OrdinalDescriptionRecord[]> {
 		return await this.tasksFlags.list(tasksDocId);
 	}
-	/** Resolves the component slug to its `tasks_docs.id` before delegating to the shared ordinal helper. */
+	/**
+	 * Deliberately does not delegate to the shared `tasksFlags` (`OrdinalDescriptionCrud`)
+	 * helper used for the other five ordinal-description tables -- `tasks_flags` is the
+	 * only one of those six scoped to the tasks stage, and its `spec_changed` event
+	 * (spec-change-events, Story 4 AC1/AC2) needs a `component`, which the shared
+	 * `resolveSpecId`-only emission hook can't carry. `specId`/`componentSlug` are already
+	 * known from the caller here, so no extra resolution query is needed.
+	 */
 	async addTasksFlag(specId: string, componentSlug: string, description: string, audit: AuditInfo): Promise<OrdinalDescriptionRecord> {
-		const tasksDocId = await this.requireTasksDocId(specId, componentSlug);
-		return await this.tasksFlags.add(tasksDocId, description, audit);
+		const record = await this.withTx(async (client) => {
+			const tasksDocId = await this.resolveTasksDocId(client, specId, componentSlug);
+			const ordinal = await nextOrdinal(client, 'tasks_flags', 'ordinal', 'tasks_doc_id', tasksDocId);
+			try {
+				const result = await client.query<OrdinalDescriptionRow>(
+					`insert into spec_pipeline.tasks_flags (tasks_doc_id, ordinal, description) values ($1, $2, $3) returning id, ordinal, description`,
+					[tasksDocId, ordinal, description]
+				);
+				const row = result.rows[0];
+				if (row === undefined) {
+					throw new Error('addTasksFlag: insert did not return a row');
+				}
+				await insertAuditLogRow(client, audit, 'insert', 'tasks_flags', row.id);
+				return rowToOrdinalDescription(row);
+			} catch (error) {
+				wrapConstraintViolation(error, 'add_tasks_flag');
+			}
+		});
+		this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component: componentSlug });
+		return record;
 	}
+	/** `tasks_flags.id` doesn't carry `specId`/`component` itself, so those are resolved
+	 * from the updated row's `tasks_doc_id` (via `resolveSpecAndComponentFromTasksDocId`,
+	 * spec-change-events Story 4 AC1/AC2) inside the same transaction as the update. */
 	async updateTasksFlag(id: string, description: string, audit: AuditInfo): Promise<OrdinalDescriptionRecord> {
-		return await this.tasksFlags.update(id, description, audit);
+		let specId: string | undefined;
+		let component: string | undefined;
+		const record = await this.withTx(async (client) => {
+			const result = await client.query<OrdinalDescriptionRow & { tasks_doc_id: string }>(
+				`update spec_pipeline.tasks_flags set description = $2 where id = $1 returning id, ordinal, description, tasks_doc_id`,
+				[id, description]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
+				throw new SpecRepositoryError('not_found', `tasks_flags row not found: ${id}`);
+			}
+			await insertAuditLogRow(client, audit, 'update', 'tasks_flags', row.id);
+			const resolved = await this.resolveSpecAndComponentFromTasksDocId(client, row.tasks_doc_id);
+			specId = resolved.specId;
+			component = resolved.component;
+			return rowToOrdinalDescription(row);
+		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
+		return record;
 	}
 	async deleteTasksFlag(id: string, audit: AuditInfo): Promise<void> {
-		await this.tasksFlags.delete(id, audit);
+		let specId: string | undefined;
+		let component: string | undefined;
+		await this.withTx(async (client) => {
+			const result = await client.query<{ tasks_doc_id: string }>(
+				`delete from spec_pipeline.tasks_flags where id = $1 returning tasks_doc_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
+				throw new SpecRepositoryError('not_found', `tasks_flags row not found: ${id}`);
+			}
+			await insertAuditLogRow(client, audit, 'delete', 'tasks_flags', id);
+			const resolved = await this.resolveSpecAndComponentFromTasksDocId(client, row.tasks_doc_id);
+			specId = resolved.specId;
+			component = resolved.component;
+		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks', component });
+		}
 	}
 
-	private async requireTasksDocId(specId: string, componentSlug: string): Promise<string> {
-		const result = await this.pool.query<{ id: string } & Record<string, unknown>>(
-			`select id from spec_pipeline.tasks_docs where spec_id = $1 and component_slug = $2`,
-			[specId, componentSlug]
-		);
-		const row = result.rows[0];
-		if (row === undefined) {
-			throw new SpecRepositoryError('unknown_component', `component not found for this spec: ${componentSlug}`);
-		}
-		return row.id;
-	}
 
 	// Definition of Done -- spec-scoped, shared across every component (Story 16.9).
 
@@ -1740,8 +2230,12 @@ export class SpecRepository {
 		return result.rows.map(rowToDefinitionOfDoneItem);
 	}
 
+	/** `specId` is a direct param, so no FK-chain resolution query is needed for the
+	 * post-commit `spec_changed` event -- Definition of Done items are spec-wide (Story
+	 * 16.9), not per-component, so the event carries no `component` (spec-change-events,
+	 * Story 4 AC1/AC2). */
 	async addDefinitionOfDoneItem(specId: string, description: string, audit: AuditInfo): Promise<DefinitionOfDoneItemRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const ordinal = await nextOrdinal(client, 'definition_of_done_items', 'ordinal', 'spec_id', specId);
 			try {
 				const result = await client.query<DefinitionOfDoneItemRow>(
@@ -1758,6 +2252,8 @@ export class SpecRepository {
 				wrapConstraintViolation(error, 'add_definition_of_done_item');
 			}
 		});
+		this.emitChange({ type: 'spec_changed', specId, stage: 'tasks' });
+		return record;
 	}
 
 	async updateDefinitionOfDoneItem(
@@ -1765,7 +2261,7 @@ export class SpecRepository {
 		input: Partial<{ description: string; isChecked: boolean }>,
 		audit: AuditInfo
 	): Promise<DefinitionOfDoneItemRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const result = await client.query<DefinitionOfDoneItemRow>(
 				`update spec_pipeline.definition_of_done_items set
 					description = coalesce($2, description),
@@ -1780,16 +2276,27 @@ export class SpecRepository {
 			await insertAuditLogRow(client, audit, 'update', 'definition_of_done_items', row.id);
 			return rowToDefinitionOfDoneItem(row);
 		});
+		this.emitChange({ type: 'spec_changed', specId: record.specId, stage: 'tasks' });
+		return record;
 	}
 
 	async deleteDefinitionOfDoneItem(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | undefined;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.definition_of_done_items where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ spec_id: string }>(
+				`delete from spec_pipeline.definition_of_done_items where id = $1 returning spec_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `definition_of_done_item not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'definition_of_done_items', id);
+			specId = row.spec_id;
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks' });
+		}
 	}
 
 	// Cross-component task dependency edges (Story 16). No cycle check here on
@@ -1808,7 +2315,7 @@ export class SpecRepository {
 		input: { fromTaskItemId: string; toTaskItemId: string },
 		audit: AuditInfo
 	): Promise<TaskDependencyEdgeRecord> {
-		return await this.withTx(async (client) => {
+		const record = await this.withTx(async (client) => {
 			const endpointsResult = await client.query<{ id: string; tasks_doc_id: string }>(
 				`select id, tasks_doc_id from spec_pipeline.task_items where id in ($1, $2)`,
 				[input.fromTaskItemId, input.toTaskItemId]
@@ -1843,16 +2350,30 @@ export class SpecRepository {
 				wrapConstraintViolation(error, 'add_task_dependency_edge');
 			}
 		});
+		// Cross-component by construction (Story 16.2 rejects same-component edges), so
+		// there's no single owning component for the `spec_changed` event to carry
+		// (spec-change-events, Story 4 AC1/AC2) -- `specId` is already a direct param.
+		this.emitChange({ type: 'spec_changed', specId, stage: 'tasks' });
+		return record;
 	}
 
 	async deleteTaskDependencyEdge(id: string, audit: AuditInfo): Promise<void> {
+		let specId: string | undefined;
 		await this.withTx(async (client) => {
-			const result = await client.query(`delete from spec_pipeline.task_dependency_edges where id = $1`, [id]);
-			if (result.rowCount === 0) {
+			const result = await client.query<{ spec_id: string }>(
+				`delete from spec_pipeline.task_dependency_edges where id = $1 returning spec_id`,
+				[id]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
 				throw new SpecRepositoryError('not_found', `task_dependency_edge not found: ${id}`);
 			}
 			await insertAuditLogRow(client, audit, 'delete', 'task_dependency_edges', id);
+			specId = row.spec_id;
 		});
+		if (specId !== undefined) {
+			this.emitChange({ type: 'spec_changed', specId, stage: 'tasks' });
+		}
 	}
 
 	// ---------------------------------------------------------------------------
@@ -1892,7 +2413,7 @@ export class SpecRepository {
 	}
 
 	async finalizeStage(specId: string, stage: SpecStageName, componentSlug: string | undefined, audit: AuditInfo): Promise<FinalizeStageResult> {
-		return await this.withTx(async (client) => {
+		const result = await this.withTx(async (client) => {
 			const stagesResult = await client.query<{ stage_name: string; status: string }>(
 				`select stage_name, status from spec_pipeline.spec_stages where spec_id = $1`,
 				[specId]
@@ -2008,6 +2529,78 @@ export class SpecRepository {
 			await insertAuditLogRow(client, audit, 'finalize', 'tasks_docs', tasksDocId);
 			return { stage, componentSlug, status: 'in_review' };
 		});
+		this.emitChange({ type: 'spec_changed', specId, stage: result.stage, component: result.componentSlug });
+		return result;
+	}
+
+	// ---------------------------------------------------------------------------
+	// approve_stage / deny_stage (stage-approval-write-path)
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Shared implementation behind `approveStage`/`denyStage`: symmetric with
+	 * `finalizeStage`'s per-stage dispatch, running inside the same `withTx` pattern
+	 * so the status update and its `audit_log` row commit atomically. For
+	 * `requirements`/`design` the target is the `spec_stages` row; for `tasks` it's
+	 * the `tasks_docs` row resolved via `resolveTasksDocId` (component required).
+	 * Both directions require the current status to be `'in_review'` -- approving or
+	 * denying a stage that hasn't been finalized (or was already decided) is rejected
+	 * with `not_in_review` rather than silently overwriting state. Deny intentionally
+	 * reuses the `'not_started'` status (design §Alternatives) rather than a separate
+	 * redraft/denied enum value, putting the stage back at its pre-finalize state.
+	 */
+	private async transitionStageStatus<Status extends 'approved' | 'not_started'>(
+		specId: string,
+		stage: SpecStageName,
+		componentSlug: string | undefined,
+		targetStatus: Status,
+		action: 'approve' | 'deny',
+		audit: AuditInfo
+	): Promise<{ stage: SpecStageName; componentSlug?: string; status: Status }> {
+		return await this.withTx(async (client) => {
+			if (stage === 'requirements' || stage === 'design') {
+				const result = await client.query<{ id: string; status: string }>(
+					`select id, status from spec_pipeline.spec_stages where spec_id = $1 and stage_name = $2`,
+					[specId, stage]
+				);
+				const row = result.rows[0];
+				if (row === undefined || row.status !== 'in_review') {
+					throw new SpecRepositoryError('not_in_review', `${stage} stage is not in_review`);
+				}
+				await client.query(`update spec_pipeline.spec_stages set status = $2 where id = $1`, [row.id, targetStatus]);
+				await insertAuditLogRow(client, audit, action, 'spec_stages', row.id);
+				return { stage, status: targetStatus };
+			}
+
+			// stage === 'tasks'
+			if (componentSlug === undefined) {
+				throw new SpecRepositoryError('component_required', `component is required to ${action} the tasks stage`);
+			}
+			const tasksDocId = await this.resolveTasksDocId(client, specId, componentSlug);
+			const statusResult = await client.query<{ status: string }>(
+				`select status from spec_pipeline.tasks_docs where id = $1`,
+				[tasksDocId]
+			);
+			const currentStatus = statusResult.rows[0]?.status;
+			if (currentStatus !== 'in_review') {
+				throw new SpecRepositoryError('not_in_review', `tasks stage for component '${componentSlug}' is not in_review`);
+			}
+			await client.query(`update spec_pipeline.tasks_docs set status = $2 where id = $1`, [tasksDocId, targetStatus]);
+			await insertAuditLogRow(client, audit, action, 'tasks_docs', tasksDocId);
+			return { stage, componentSlug, status: targetStatus };
+		});
+	}
+
+	async approveStage(specId: string, stage: SpecStageName, componentSlug: string | undefined, audit: AuditInfo): Promise<ApproveStageResult> {
+		const result = await this.transitionStageStatus(specId, stage, componentSlug, 'approved', 'approve', audit);
+		this.emitChange({ type: 'spec_changed', specId, stage: result.stage, component: result.componentSlug });
+		return result;
+	}
+
+	async denyStage(specId: string, stage: SpecStageName, componentSlug: string | undefined, audit: AuditInfo): Promise<DenyStageResult> {
+		const result = await this.transitionStageStatus(specId, stage, componentSlug, 'not_started', 'deny', audit);
+		this.emitChange({ type: 'spec_changed', specId, stage: result.stage, component: result.componentSlug });
+		return result;
 	}
 
 	// ---------------------------------------------------------------------------
@@ -2160,7 +2753,9 @@ export class SpecRepository {
 		lines.push('## Components', '');
 		lines.push('| Slug | Display name | Status | Component tasks document |', '|---|---|---|---|');
 		for (const doc of docs) {
-			lines.push(`| \`${doc.componentSlug}\` | ${doc.componentName} | ${doc.status} | \`${doc.componentSlug}-tasks.md\` |`);
+			lines.push(
+				`| \`${doc.componentSlug}\` | ${doc.componentName} | ${doc.status} | \`render_document(stage: "tasks", component: "${doc.componentSlug}")\` |`,
+			);
 		}
 		lines.push('');
 		lines.push('## Cross-Component Dependencies', '');

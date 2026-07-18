@@ -1,0 +1,1 @@
+A directory with no SKILL.md -- guardrails.test.mjs asserts this is skipped, not registered as an actor.

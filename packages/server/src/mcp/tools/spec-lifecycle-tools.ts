@@ -16,7 +16,7 @@ import { ACTOR_DESCRIPTION, auditFrom, jsonResult, withToolErrorHandling } from 
  * (T6.2) and inserts exactly one `audit_log` row in the same transaction (T6.3).
  */
 export function registerSpecLifecycleTools(server: McpServer, context: McpToolContext): void {
-	const repository = new SpecRepository(context.pool);
+	const repository = new SpecRepository(context.pool, context.events);
 
 	server.registerTool(
 		'create_spec',

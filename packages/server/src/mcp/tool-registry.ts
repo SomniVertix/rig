@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { PersistenceBundle } from '@relentless/persistence';
+import type { PersistenceBundle, SpecChangeEmitter } from '@relentless/persistence';
 
 import { registerSpecDocTools } from './tools/index.js';
 
@@ -8,11 +8,19 @@ import { registerSpecDocTools } from './tools/index.js';
  * the rest of the persistence layer, plus the project this MCP session is bound
  * to. The bound project is implicit for every tool call within the session --
  * no tool call ever carries an explicit project argument (Story 5.5).
+ *
+ * `events` is the shared `SpecChangeEmitter` (spec-change-events) used to
+ * broadcast document mutations for streaming UIs; it is optional so contexts
+ * built without change-event streaming wired up continue to compile and run.
  */
 export interface McpToolContext {
 	pool: PersistenceBundle['pool'];
 	projectId: string;
 	projectSlug: string;
+	events?: SpecChangeEmitter;
+	/** RELENTLESS_CLAIM_TTL (hours) for discovery waypoint claim recovery;
+	 * `TrailRepository` falls back to its own default when absent. */
+	claimTtlHours?: number;
 }
 
 /**

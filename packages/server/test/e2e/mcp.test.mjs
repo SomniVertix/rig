@@ -139,6 +139,20 @@ function parseToolResponse(result) {
   }
 }
 
+// Approve/deny is a human-only action (T6.6) -- deliberately not exposed by any
+// MCP tool -- so tests emulate the human's approval directly in the database.
+async function humanApprove(connectionString, specId, stage) {
+  const pool = new Pool({ connectionString });
+  try {
+    if (stage === 'tasks') {
+      await pool.query(`update spec_pipeline.tasks_docs set status = 'approved' where spec_id = $1`, [specId]);
+    }
+    await pool.query(`update spec_pipeline.spec_stages set status = 'approved' where spec_id = $1 and stage_name = $2`, [specId, stage]);
+  } finally {
+    await pool.end();
+  }
+}
+
 // Helper to create an MCP client and perform proper initialization handshake
 async function createAndConnectMcpClient(host, port, bearerToken, projectSlug) {
   const transportUrl = new URL(`http://${host}:${port}/mcp/${projectSlug}`);
@@ -176,6 +190,7 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
 
   const config = {
     workspaceRoot,
+    actorsDir: join(repoRoot, 'packages', 'server', 'test', 'fixtures', 'actors'),
     databaseUrl: postgres.connectionString,
     concurrencyCap: 1,
     defaultTimeoutMs: 60_000,
@@ -297,26 +312,31 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     const us2Data = parseToolResponse(userStory2Result);
     assert.equal(us2Data.userStory.storyNumber, 2, 'Second user story should have ordinal 2');
 
-    // Add acceptance criteria for user stories
-    await client1.callTool({
+    // Add acceptance criteria for user stories (earsPattern must be one of the
+    // six EARS enum values -- see requirements.template.md)
+    parseToolResponse(await client1.callTool({
       name: 'add_acceptance_criterion',
       arguments: {
         actor: 'requirements-compiler',
         userStoryId: us1Data.userStory.id,
-        earsPattern: 'SHALL',
-        fullText: 'SHALL log in successfully with valid credentials'
+        earsPattern: 'event_driven',
+        triggerClause: 'a user submits valid credentials',
+        responseClause: 'log them in',
+        fullText: 'WHEN a user submits valid credentials, THE SYSTEM SHALL log them in'
       }
-    });
+    }));
 
-    await client1.callTool({
+    parseToolResponse(await client1.callTool({
       name: 'add_acceptance_criterion',
       arguments: {
         actor: 'requirements-compiler',
         userStoryId: us2Data.userStory.id,
-        earsPattern: 'SHALL',
-        fullText: 'SHALL reset password via email link'
+        earsPattern: 'event_driven',
+        triggerClause: 'a user requests a reset',
+        responseClause: 'send a password reset email link',
+        fullText: 'WHEN a user requests a reset, THE SYSTEM SHALL send a password reset email link'
       }
-    });
+    }));
 
     // Test T5.4: Add design components with kebab-case validation
     const setDesignOverviewResult = await client1.callTool({
@@ -378,6 +398,9 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     assert.equal(finalReqData.stage, 'requirements', 'Should finalize requirements stage');
     assert.equal(finalReqData.status, 'in_review', 'Status should be in_review');
 
+    // Design finalization gates on requirements being approved (predecessor_not_approved)
+    await humanApprove(postgres.connectionString, spec1Id, 'requirements');
+
     // Test T5.6: Finalize design (this creates task documents for each component)
     const finalizeDesignResult = await client1.callTool({
       name: 'finalize_stage',
@@ -389,6 +412,9 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     });
     const finalDesignData = parseToolResponse(finalizeDesignResult);
     assert.equal(finalDesignData.stage, 'design', 'Should finalize design stage');
+
+    // Tasks finalization gates on design being approved (predecessor_not_approved)
+    await humanApprove(postgres.connectionString, spec1Id, 'design');
 
     // Test T5.5: Add tasks for components (after finalization creates task documents)
     const taskItem1Result = await client1.callTool({
@@ -404,8 +430,19 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
       }
     });
     const task1Data = parseToolResponse(taskItem1Result);
-    assert.equal(task1Data.taskItem.ordinal, 1, 'First task should have ordinal 1');
+    assert.equal(task1Data.taskItem.executionOrder, 1, 'First task should have execution order 1');
+    assert.equal(task1Data.taskItem.itemId, '1', 'First task should have derived item id "1"');
     const taskItem1Id = task1Data.taskItem.id;
+
+    // Finalizing tasks requires every top-level item to declare files touched
+    parseToolResponse(await client1.callTool({
+      name: 'add_task_file_touched',
+      arguments: {
+        actor: 'tasks-drafter',
+        taskItemId: taskItem1Id,
+        filePath: 'src/auth/oauth2-provider.ts'
+      }
+    }));
 
     // Test T5.5: Cross-component dependency should succeed instantly (no cycle check yet)
     const taskItem2Result = await client1.callTool({
@@ -423,17 +460,26 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     const task2Data = parseToolResponse(taskItem2Result);
     const taskItem2Id = task2Data.taskItem.id;
 
+    parseToolResponse(await client1.callTool({
+      name: 'add_task_file_touched',
+      arguments: {
+        actor: 'tasks-drafter',
+        taskItemId: taskItem2Id,
+        filePath: 'src/auth/jwt-signing.ts'
+      }
+    }));
+
     const edgeResult = await client1.callTool({
       name: 'add_task_dependency_edge',
       arguments: {
         actor: 'tasks-drafter',
         specId: spec1Id,
-        fromTaskId: taskItem1Id,
-        toTaskId: taskItem2Id
+        fromTaskItemId: taskItem1Id,
+        toTaskItemId: taskItem2Id
       }
     });
     const edgeData = parseToolResponse(edgeResult);
-    assert(edgeData.edge, 'Cross-component edge should be created');
+    assert(edgeData.taskDependencyEdge, 'Cross-component edge should be created');
 
     // Test T5.6: Finalize tasks for each component
     const finalizeTasks1Result = await client1.callTool({
@@ -460,6 +506,9 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     });
     const finalTasks2Data = parseToolResponse(finalizeTasks2Result);
     assert.equal(finalTasks2Data.componentSlug, 'token-service', 'Should target second component');
+
+    // get_next_stage only reports null once every stage/component is approved
+    await humanApprove(postgres.connectionString, spec1Id, 'tasks');
 
     // Test T5.7: get_next_stage after all finalization
     const nextStage2Result = await client1.callTool({
@@ -523,15 +572,25 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     assert(renderTasksComponentData.markdown.includes('Implement OAuth2'), 'Should include component tasks');
 
     // Test T6.6: Approve/deny exclusion - try to call a non-existent approve tool
+    // (the SDK may surface an unknown tool as a thrown error or as an isError result)
     let approveFailed = false;
     try {
-      await client1.callTool({
+      const approveResult = await client1.callTool({
         name: 'approve_spec',
         arguments: {
           actor: 'reviewer',
           specId: spec1Id
         }
       });
+      if (approveResult.isError === true) {
+        approveFailed = true;
+      } else {
+        try {
+          parseToolResponse(approveResult);
+        } catch {
+          approveFailed = true;
+        }
+      }
     } catch (error) {
       approveFailed = true;
     }
@@ -558,6 +617,7 @@ test('MCP cycle detection in task dependencies', async () => {
 
   const config = {
     workspaceRoot,
+    actorsDir: join(repoRoot, 'packages', 'server', 'test', 'fixtures', 'actors'),
     databaseUrl: postgres.connectionString,
     concurrencyCap: 1,
     defaultTimeoutMs: 60_000,
@@ -625,8 +685,8 @@ test('MCP cycle detection in task dependencies', async () => {
       }
     });
 
-    // Add requirements to finalize
-    await client.callTool({
+    // Add requirements to finalize (needs >=1 story with >=1 criterion)
+    const cycleReqResult = await client.callTool({
       name: 'set_requirements_overview',
       arguments: {
         actor: 'requirements-compiler',
@@ -635,25 +695,55 @@ test('MCP cycle detection in task dependencies', async () => {
         overview: 'Testing cycle detection'
       }
     });
+    const cycleReqData = parseToolResponse(cycleReqResult);
 
-    // Finalize requirements and design first (this creates task documents)
-    await client.callTool({
+    const cycleStoryResult = await client.callTool({
+      name: 'add_user_story',
+      arguments: {
+        actor: 'requirements-compiler',
+        requirementsId: cycleReqData.requirements.id,
+        title: 'Ordering safety',
+        role: 'drafter',
+        capability: 'declare task dependencies',
+        benefit: 'safe execution order',
+        rationale: 'cycles would deadlock implementation'
+      }
+    });
+    const cycleStoryData = parseToolResponse(cycleStoryResult);
+
+    parseToolResponse(await client.callTool({
+      name: 'add_acceptance_criterion',
+      arguments: {
+        actor: 'requirements-compiler',
+        userStoryId: cycleStoryData.userStory.id,
+        earsPattern: 'unwanted_behavior',
+        conditionClause: 'a dependency cycle exists',
+        responseClause: 'reject finalization',
+        fullText: 'IF a dependency cycle exists, THEN THE SYSTEM SHALL reject finalization'
+      }
+    }));
+
+    // Finalize requirements and design first (this creates task documents);
+    // approve/deny between stages is human-only, emulated via SQL.
+    parseToolResponse(await client.callTool({
       name: 'finalize_stage',
       arguments: {
         actor: 'design-drafter',
         specId,
         stage: 'requirements'
       }
-    });
+    }));
+    await humanApprove(postgres.connectionString, specId, 'requirements');
 
-    await client.callTool({
+    parseToolResponse(await client.callTool({
       name: 'finalize_stage',
       arguments: {
         actor: 'design-drafter',
         specId,
         stage: 'design'
       }
-    });
+    }));
+    await humanApprove(postgres.connectionString, specId, 'design');
 
     // Add tasks to components (after finalization creates task documents)
     const taskAResult = await client.callTool({
@@ -671,6 +761,11 @@ test('MCP cycle detection in task dependencies', async () => {
     const taskAData = parseToolResponse(taskAResult);
     const taskAId = taskAData.taskItem.id;
 
+    parseToolResponse(await client.callTool({
+      name: 'add_task_file_touched',
+      arguments: { actor: 'tasks-drafter', taskItemId: taskAId, filePath: 'src/component-a.ts' }
+    }));
+
     const taskBResult = await client.callTool({
       name: 'add_task_item',
       arguments: {
@@ -686,14 +781,19 @@ test('MCP cycle detection in task dependencies', async () => {
     const taskBData = parseToolResponse(taskBResult);
     const taskBId = taskBData.taskItem.id;
 
+    parseToolResponse(await client.callTool({
+      name: 'add_task_file_touched',
+      arguments: { actor: 'tasks-drafter', taskItemId: taskBId, filePath: 'src/component-b.ts' }
+    }));
+
     // Create a cycle: A -> B -> A
     await client.callTool({
       name: 'add_task_dependency_edge',
       arguments: {
         actor: 'tasks-drafter',
         specId,
-        fromTaskId: taskAId,
-        toTaskId: taskBId
+        fromTaskItemId: taskAId,
+        toTaskItemId: taskBId
       }
     });
 
@@ -702,15 +802,15 @@ test('MCP cycle detection in task dependencies', async () => {
       arguments: {
         actor: 'tasks-drafter',
         specId,
-        fromTaskId: taskBId,
-        toTaskId: taskAId
+        fromTaskItemId: taskBId,
+        toTaskItemId: taskAId
       }
     });
 
     // Test T5.6: Trying to finalize tasks with a cycle should fail
-    let cycleFailed = false;
+    let cycleError = null;
     try {
-      await client.callTool({
+      parseToolResponse(await client.callTool({
         name: 'finalize_stage',
         arguments: {
           actor: 'tasks-drafter',
@@ -718,11 +818,12 @@ test('MCP cycle detection in task dependencies', async () => {
           stage: 'tasks',
           component: 'component-a'
         }
-      });
+      }));
     } catch (error) {
-      cycleFailed = true;
+      cycleError = error;
     }
-    assert(cycleFailed, 'Should reject finalization with cycle present');
+    assert(cycleError !== null, 'Should reject finalization with cycle present');
+    assert.equal(cycleError.rule, 'cycle_detected', `Rejection should be cycle_detected, got: ${cycleError.rule ?? cycleError.message}`);
 
     await client.close();
 

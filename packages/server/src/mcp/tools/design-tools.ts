@@ -19,7 +19,7 @@ import { ACTOR_DESCRIPTION, auditFrom, jsonResult, registerOrdinalDescriptionToo
  * successful write inserts exactly one `audit_log` row in the same transaction (T6.3).
  */
 export function registerDesignTools(server: McpServer, context: McpToolContext): void {
-	const repository = new SpecRepository(context.pool);
+	const repository = new SpecRepository(context.pool, context.events);
 
 	server.registerTool(
 		'set_design_overview',

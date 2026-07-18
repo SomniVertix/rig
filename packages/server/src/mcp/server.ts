@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 
-import type { PersistenceBundle } from '@relentless/persistence';
+import type { PersistenceBundle, SpecChangeEmitter } from '@relentless/persistence';
 
 import { isAuthorizedRequest } from './auth.js';
 import { createMcpSessionManager } from './session.js';
@@ -20,6 +20,9 @@ export interface McpTransportOptions {
 	host: string;
 	port: number;
 	bearerToken: string;
+	events?: SpecChangeEmitter;
+	/** RELENTLESS_CLAIM_TTL (hours) threaded into every session's tool context. */
+	claimTtlHours?: number;
 }
 
 export interface McpTransportHandle {
@@ -63,7 +66,7 @@ async function dispatch(req: IncomingMessage, res: ServerResponse, sessions: Mcp
  * layer itself (T4.1).
  */
 export async function startMcpTransport(options: McpTransportOptions): Promise<McpTransportHandle> {
-	const sessions = createMcpSessionManager(options.pool);
+	const sessions = createMcpSessionManager(options.pool, options.events, options.claimTtlHours);
 
 	const httpServer: HttpServer = createServer((req, res) => {
 		dispatch(req, res, sessions, options.bearerToken, options.host).catch((error: unknown) => {

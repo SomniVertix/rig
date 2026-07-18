@@ -31,7 +31,7 @@ import { ACTOR_DESCRIPTION, auditFrom, jsonResult, withToolErrorHandling } from 
  * transaction as the status transition (T6.3).
  */
 export function registerFinalizeStageTool(server: McpServer, context: McpToolContext): void {
-	const repository = new SpecRepository(context.pool);
+	const repository = new SpecRepository(context.pool, context.events);
 
 	server.registerTool(
 		'finalize_stage',

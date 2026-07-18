@@ -1,4 +1,5 @@
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import type { Pool } from 'pg';
 
@@ -24,37 +25,64 @@ export async function requireKnownActor(pool: Pool, actor: unknown): Promise<str
 }
 
 /**
- * T6.4: boot-time known-actors registry sync. Scans `spec-templates/agents/*.md`
- * for agent names and upserts each into `known_actors` (`source =
- * 'spec-templates/agents'`), refreshing `updated_at` on every boot via `ON CONFLICT
- * (actor) DO UPDATE`.
+ * T6.4 (revised, Story 11.5-follow-up): boot-time known-actors registry sync.
+ *
+ * Agents and Claude Code skills are separate concepts. An "actor" here means
+ * something that is actually allowed to attribute a write to a relentless MCP
+ * tool -- the seven pipeline agents (`requirements-compiler`, `design-drafter`,
+ * `tasks-drafter`, `spec-implementation-orchestrator`, `code-implementer`,
+ * `test-writer`, `code-reviewer`) plus the discovery-stage skills that write
+ * directly (`grilling`, and `wayfinder` if present). It does NOT mean "anything
+ * that happens to be installed as a Claude Code skill" -- unrelated skills like
+ * a caveman-mode formatter or a keybindings helper have no business attributing
+ * a spec-pipeline write and must never be registered just because they live in
+ * the same `~/.claude/skills` tree.
+ *
+ * This function therefore scans a **curated actors directory**
+ * (`<actorsDirectory>/<name>`), never the general Claude Code skills directory.
+ * That directory is expected to contain, for every legitimate actor, either a
+ * symlink back into `~/.claude/skills/<name>` (for actors that are also
+ * runnable skills, which is every actor today) or a real directory -- either
+ * way it must resolve to something containing a `SKILL.md`, which doubles as
+ * an integrity check that the entry isn't a stale/typo'd reference to a skill
+ * that no longer exists. The actor name is the directory name, not a filename.
+ *
+ * Every entry found here is registered into `known_actors`
+ * (`source = 'claude-skills'`), refreshing `updated_at` on every boot via
+ * `ON CONFLICT (actor) DO UPDATE`. Re-running only refreshes `updated_at`; it
+ * never removes an actor no longer present on disk.
  *
  * No Pi-equivalent local agent-definition directory exists to scan:
  * `packages/executors/src/index.ts`'s `PiExecutor` dynamically imports the
  * `@earendil-works/pi-coding-agent` npm package and calls its `createAgentSession`
- * API directly -- Pi agents are not defined via local markdown files the way Claude
- * Code's `spec-templates/agents/*.md` are, so Story 11.5's "if one exists" clause
- * resolves to false for Pi. This is a deliberate, confirmed scope boundary, not an
- * unresolved gap.
+ * API directly -- Pi agents are not defined via local skill/subagent files the way
+ * Claude Code's are, so Story 11.5's "if one exists" clause resolves to false for
+ * Pi. This is a deliberate, confirmed scope boundary, not an unresolved gap.
  */
-export async function syncKnownActorsFromAgentDefinitions(
+export async function syncKnownActorsFromActorsDirectory(
 	pool: Pool,
-	agentsDirectory: string,
-	source = 'spec-templates/agents'
+	actorsDirectory: string,
+	source = 'claude-skills'
 ): Promise<string[]> {
-	let entries: string[];
+	let dirEntries;
 	try {
-		entries = (await readdir(agentsDirectory, { withFileTypes: true }))
-			.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
-			.map((entry) => entry.name);
+		dirEntries = (await readdir(actorsDirectory, { withFileTypes: true })).filter((entry) => entry.isDirectory());
 	} catch {
 		return [];
 	}
 
 	const actors: string[] = [];
-	for (const fileName of entries) {
-		const actor = fileName.slice(0, fileName.length - '.md'.length);
+	for (const dirEntry of dirEntries) {
+		const actor = dirEntry.name;
 		if (actor.length === 0) {
+			continue;
+		}
+		try {
+			const skillFileStat = await stat(join(actorsDirectory, actor, 'SKILL.md'));
+			if (!skillFileStat.isFile()) {
+				continue;
+			}
+		} catch {
 			continue;
 		}
 		actors.push(actor);

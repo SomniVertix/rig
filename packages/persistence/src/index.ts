@@ -675,3 +675,5 @@ export async function createEphemeralDatabaseName(prefix = 'relentless'): Promis
 
 export * from './library-store.js';
 export * from './spec-repository.js';
+export * from './trail-repository.js';
+export * from './spec-change-emitter.js';

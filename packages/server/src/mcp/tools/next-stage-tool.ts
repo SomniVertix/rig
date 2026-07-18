@@ -14,7 +14,7 @@ import { jsonResult, withToolErrorHandling } from './tool-helpers.js';
  * a read -- no `actor` argument required.
  */
 export function registerNextStageTool(server: McpServer, context: McpToolContext): void {
-	const repository = new SpecRepository(context.pool);
+	const repository = new SpecRepository(context.pool, context.events);
 
 	server.registerTool(
 		'get_next_stage',
