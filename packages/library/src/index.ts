@@ -2,15 +2,15 @@ import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { WorkflowDef } from '@relentless/schema';
-import { WorkflowDefSchema } from '@relentless/schema';
-import type { JsonValue as PersistenceJsonValue, Pool } from '@relentless/persistence';
+import type { WorkflowDef } from '@rig/schema';
+import { WorkflowDefSchema } from '@rig/schema';
+import type { JsonValue as PersistenceJsonValue, Pool } from '@rig/persistence';
 import {
 	resolvePrompt as resolvePromptRow,
 	getWorkflow as getWorkflowRow,
 	seedBundledPrompt,
 	seedBundledWorkflow
-} from '@relentless/persistence';
+} from '@rig/persistence';
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -127,7 +127,7 @@ async function resolveFirstExisting(paths: string[]): Promise<{ path: string; co
 
 function searchRoots(projectRoot: string | undefined, globalRoot: string | undefined, subdir: string, id: string, extensions: string[]): string[] {
 	const roots = [
-		projectRoot ? resolve(projectRoot, '.relentless', subdir) : null,
+		projectRoot ? resolve(projectRoot, '.rig', subdir) : null,
 		globalRoot ? resolve(globalRoot, subdir) : null
 	].filter((entry): entry is string => entry !== null);
 	const candidates: string[] = [];
@@ -319,8 +319,8 @@ export function createFileSystemLibraryResolver(options: LibraryResolverOptions 
 
 /**
  * DB-backed `LibraryResolver` (Story 1.2, 2.1, 3.1, 4.4): prompts/agents and
- * workflows resolve from `@relentless/persistence`'s `library-store` (T3.1,
- * T3.2) instead of `.relentless/{agents,prompts,workflows}`. Templates/tools
+ * workflows resolve from `@rig/persistence`'s `library-store` (T3.1,
+ * T3.2) instead of `.rig/{agents,prompts,workflows}`. Templates/tools
  * remain file-based and continue to delegate to a `FileSystemLibraryResolver`
  * -- out of scope for DB-backing per this component's traceability.
  */

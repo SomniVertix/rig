@@ -1,6 +1,6 @@
 <!--
   design.template.md
-  Describes the section shape that mcp__relentless__render_document (stage: "design")
+  Describes the section shape that mcp__rig__render_document (stage: "design")
   produces from rows written via set_design_overview / set_design_architecture /
   add_design_component / add_design_data_model_entry / add_design_traceability /
   add_design_alternative / add_design_open_risk / add_design_flag. Nothing is hand-filled

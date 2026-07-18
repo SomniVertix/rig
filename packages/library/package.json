@@ -1,5 +1,5 @@
 {
-  "name": "@relentless/library",
+  "name": "@rig/library",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/library/src/index.js",
@@ -11,8 +11,8 @@
     }
   },
   "dependencies": {
-    "@relentless/schema": "workspace:*",
-    "@relentless/persistence": "workspace:*"
+    "@rig/schema": "workspace:*",
+    "@rig/persistence": "workspace:*"
   },
   "scripts": {
     "build": "tsc",

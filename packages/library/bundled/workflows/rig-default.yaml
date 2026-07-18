@@ -1,5 +1,5 @@
-id: relentless-default
-name: Relentless Default Workflow
+id: rig-default
+name: Rig Default Workflow
 entry: compile-requirements
 inputs:
   - name: decisions.md

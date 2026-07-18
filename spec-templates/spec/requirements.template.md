@@ -1,6 +1,6 @@
 <!--
   requirements.template.md
-  Describes the section shape that mcp__relentless__render_document (stage: "requirements")
+  Describes the section shape that mcp__rig__render_document (stage: "requirements")
   produces from rows written via set_requirements_overview / add_user_story /
   add_acceptance_criterion / add_non_goal / add_assumption_open_question /
   add_glossary_term. Nothing is hand-filled from this file — it's reference structure for

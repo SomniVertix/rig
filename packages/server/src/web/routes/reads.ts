@@ -3,8 +3,8 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Pool } from 'pg';
 import { z } from 'zod/v4';
 
-import type { SpecStageRecord } from '@relentless/persistence';
-import { SpecRepository, SpecRepositoryError, ensureProject } from '@relentless/persistence';
+import type { SpecStageRecord } from '@rig/persistence';
+import { SpecRepository, SpecRepositoryError, ensureProject } from '@rig/persistence';
 
 /**
  * rest-bff-api (T4): the REST BFF's read-only surface -- every route here calls

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SpecRepositoryError, TrailRepository } from '@relentless/persistence';
+import { SpecRepositoryError, TrailRepository } from '@rig/persistence';
 
 import type { McpToolContext } from '../tool-registry.js';
 import { withGuardrails } from '../guardrails/index.js';
@@ -283,7 +283,7 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 		'claim_waypoint',
 		{
 			description:
-				'Atomically claims a marked waypoint for a resolving conversation. A claim older than the server claim TTL (RELENTLESS_CLAIM_TTL) is stale and reclaimable in the same statement; a live claim rejects with already_claimed.',
+				'Atomically claims a marked waypoint for a resolving conversation. A claim older than the server claim TTL (RIG_CLAIM_TTL) is stale and reclaimable in the same statement; a live claim rejects with already_claimed.',
 			inputSchema: {
 				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
 				waypointId: z.string().min(1),

@@ -81,7 +81,7 @@ async function waitForPostgres(connectionString) {
 
 async function startPostgresContainer() {
   const port = await getFreePort();
-  const containerName = `relentless-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const containerName = `rig-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const args = [
     'run',
     '--rm',
@@ -89,13 +89,13 @@ async function startPostgresContainer() {
     '--name', containerName,
     '-e', 'POSTGRES_USER=postgres',
     '-e', 'POSTGRES_PASSWORD=postgres',
-    '-e', 'POSTGRES_DB=relentless',
+    '-e', 'POSTGRES_DB=rig',
     '-p', `${port}:5432`,
     'postgres:16-alpine'
   ];
   const { stdout } = await runCommand('docker', args);
   const containerId = stdout.trim();
-  const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/relentless`;
+  const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/rig`;
 
   try {
     await waitForPostgres(connectionString);
@@ -115,7 +115,7 @@ async function startPostgresContainer() {
 test('SSE endpoint streams spec changes from both SpecRepository writes and event emissions', async () => {
   const postgres = await startPostgresContainer();
   const workspaceRoot = repoRoot;
-  const mirrorRoot = await mkdtemp(join(tmpdir(), 'relentless-mirror-'));
+  const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-mirror-'));
   const ssePort = await getFreePort();
 
   const executor = new FakeAgentExecutor('pi');
@@ -132,7 +132,7 @@ test('SSE endpoint streams spec changes from both SpecRepository writes and even
     defaultModel: undefined,
     maxNodeExecutions: 100,
     mirrorRoot,
-    configPath: join(workspaceRoot, 'relentless.config.ts')
+    configPath: join(workspaceRoot, 'rig.config.ts')
   };
 
   const composition = await buildComposition(config, { executor });

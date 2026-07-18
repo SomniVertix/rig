@@ -7,7 +7,7 @@ import { ZodError } from 'zod';
 
 import { executorKindSchema, logLevelSchema, serverConfigSchema, type ServerConfig, type ServerConfigSource } from './schema.js';
 
-const DEFAULT_CONFIG_FILE = 'relentless.config.ts';
+const DEFAULT_CONFIG_FILE = 'rig.config.ts';
 
 export class ConfigError extends Error {
 	constructor(
@@ -75,7 +75,7 @@ async function loadConfigFile(filePath: string): Promise<Record<string, unknown>
 }
 
 function normalizeConfig(raw: Record<string, unknown>, source: ServerConfigSource): ServerConfig {
-	const workspaceRoot = source.workspaceRoot ?? process.env.RELENTLESS_WORKSPACE_ROOT ?? (typeof raw.workspaceRoot === 'string' ? raw.workspaceRoot : undefined) ?? process.cwd();
+	const workspaceRoot = source.workspaceRoot ?? process.env.RIG_WORKSPACE_ROOT ?? (typeof raw.workspaceRoot === 'string' ? raw.workspaceRoot : undefined) ?? process.cwd();
 	const databaseUrl = source.env?.DATABASE_URL ?? process.env.DATABASE_URL ?? (typeof raw.databaseUrl === 'string' ? raw.databaseUrl : undefined);
 	if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
 		throw new ConfigError('DATABASE_URL', 'DATABASE_URL is required');
@@ -85,85 +85,85 @@ function normalizeConfig(raw: Record<string, unknown>, source: ServerConfigSourc
 		workspaceRoot,
 		databaseUrl,
 		concurrencyCap:
-			parseInteger(source.env?.RELENTLESS_CONCURRENCY_CAP ?? process.env.RELENTLESS_CONCURRENCY_CAP, 'concurrencyCap') ??
+			parseInteger(source.env?.RIG_CONCURRENCY_CAP ?? process.env.RIG_CONCURRENCY_CAP, 'concurrencyCap') ??
 			(typeof raw.concurrencyCap === 'number' ? raw.concurrencyCap : undefined) ??
 			4,
 		// discovery-schema claim recovery: hours before a waypoint claim goes stale
 		// and becomes reclaimable in the same atomic claim UPDATE (no separate steal
 		// step). Not stored in the database -- claimed_at is the only stored fact.
 		claimTtlHours:
-			parseInteger(source.env?.RELENTLESS_CLAIM_TTL ?? process.env.RELENTLESS_CLAIM_TTL, 'claimTtlHours') ??
+			parseInteger(source.env?.RIG_CLAIM_TTL ?? process.env.RIG_CLAIM_TTL, 'claimTtlHours') ??
 			(typeof raw.claimTtlHours === 'number' ? raw.claimTtlHours : undefined) ??
 			24,
 		defaultTimeoutMs:
-			parseInteger(source.env?.RELENTLESS_DEFAULT_TIMEOUT_MS ?? process.env.RELENTLESS_DEFAULT_TIMEOUT_MS, 'defaultTimeoutMs') ??
+			parseInteger(source.env?.RIG_DEFAULT_TIMEOUT_MS ?? process.env.RIG_DEFAULT_TIMEOUT_MS, 'defaultTimeoutMs') ??
 			(typeof raw.defaultTimeoutMs === 'number' ? raw.defaultTimeoutMs : undefined) ??
 			60_000,
 		librarySearchPaths:
-			parseStringList(source.env?.RELENTLESS_LIBRARY_SEARCH_PATHS ?? process.env.RELENTLESS_LIBRARY_SEARCH_PATHS) ??
+			parseStringList(source.env?.RIG_LIBRARY_SEARCH_PATHS ?? process.env.RIG_LIBRARY_SEARCH_PATHS) ??
 			(Array.isArray(raw.librarySearchPaths) ? raw.librarySearchPaths.filter((entry): entry is string => typeof entry === 'string') : undefined) ??
 			[],
 		logLevel:
-			logLevelSchema.safeParse(source.env?.RELENTLESS_LOG_LEVEL ?? process.env.RELENTLESS_LOG_LEVEL).success &&
-			typeof (source.env?.RELENTLESS_LOG_LEVEL ?? process.env.RELENTLESS_LOG_LEVEL) === 'string'
-				? (source.env?.RELENTLESS_LOG_LEVEL ?? process.env.RELENTLESS_LOG_LEVEL)
+			logLevelSchema.safeParse(source.env?.RIG_LOG_LEVEL ?? process.env.RIG_LOG_LEVEL).success &&
+			typeof (source.env?.RIG_LOG_LEVEL ?? process.env.RIG_LOG_LEVEL) === 'string'
+				? (source.env?.RIG_LOG_LEVEL ?? process.env.RIG_LOG_LEVEL)
 				: typeof raw.logLevel === 'string'
 					? raw.logLevel
 					: 'info',
 		defaultExecutor:
-			executorKindSchema.safeParse(source.env?.RELENTLESS_DEFAULT_EXECUTOR ?? process.env.RELENTLESS_DEFAULT_EXECUTOR).success &&
-			typeof (source.env?.RELENTLESS_DEFAULT_EXECUTOR ?? process.env.RELENTLESS_DEFAULT_EXECUTOR) === 'string'
-				? (source.env?.RELENTLESS_DEFAULT_EXECUTOR as ServerConfig['defaultExecutor'])
+			executorKindSchema.safeParse(source.env?.RIG_DEFAULT_EXECUTOR ?? process.env.RIG_DEFAULT_EXECUTOR).success &&
+			typeof (source.env?.RIG_DEFAULT_EXECUTOR ?? process.env.RIG_DEFAULT_EXECUTOR) === 'string'
+				? (source.env?.RIG_DEFAULT_EXECUTOR as ServerConfig['defaultExecutor'])
 				: typeof raw.defaultExecutor === 'string'
 					? raw.defaultExecutor
 					: 'pi',
 		defaultModel:
-			typeof (source.env?.RELENTLESS_DEFAULT_MODEL ?? process.env.RELENTLESS_DEFAULT_MODEL) === 'string'
-				? (source.env?.RELENTLESS_DEFAULT_MODEL ?? process.env.RELENTLESS_DEFAULT_MODEL)
+			typeof (source.env?.RIG_DEFAULT_MODEL ?? process.env.RIG_DEFAULT_MODEL) === 'string'
+				? (source.env?.RIG_DEFAULT_MODEL ?? process.env.RIG_DEFAULT_MODEL)
 				: typeof raw.defaultModel === 'string'
 					? raw.defaultModel
 					: undefined,
 		maxNodeExecutions:
-			parseInteger(source.env?.RELENTLESS_MAX_NODE_EXECUTIONS ?? process.env.RELENTLESS_MAX_NODE_EXECUTIONS, 'maxNodeExecutions') ??
+			parseInteger(source.env?.RIG_MAX_NODE_EXECUTIONS ?? process.env.RIG_MAX_NODE_EXECUTIONS, 'maxNodeExecutions') ??
 			(typeof raw.maxNodeExecutions === 'number' ? raw.maxNodeExecutions : undefined) ??
 			1000,
 		mirrorRoot:
-			typeof (source.env?.RELENTLESS_MIRROR_ROOT ?? process.env.RELENTLESS_MIRROR_ROOT) === 'string'
-				? (source.env?.RELENTLESS_MIRROR_ROOT ?? process.env.RELENTLESS_MIRROR_ROOT)
+			typeof (source.env?.RIG_MIRROR_ROOT ?? process.env.RIG_MIRROR_ROOT) === 'string'
+				? (source.env?.RIG_MIRROR_ROOT ?? process.env.RIG_MIRROR_ROOT)
 				: typeof raw.mirrorRoot === 'string'
 					? raw.mirrorRoot
 					: undefined,
 		actorsDir:
-			typeof (source.env?.RELENTLESS_ACTORS_DIR ?? process.env.RELENTLESS_ACTORS_DIR) === 'string'
-				? (source.env?.RELENTLESS_ACTORS_DIR ?? process.env.RELENTLESS_ACTORS_DIR)
+			typeof (source.env?.RIG_ACTORS_DIR ?? process.env.RIG_ACTORS_DIR) === 'string'
+				? (source.env?.RIG_ACTORS_DIR ?? process.env.RIG_ACTORS_DIR)
 				: typeof raw.actorsDir === 'string'
 					? raw.actorsDir
 					: undefined,
 		configPath: source.configPath ?? (typeof raw.configPath === 'string' ? raw.configPath : undefined),
 		mcpBearerToken:
-			typeof (source.env?.RELENTLESS_MCP_BEARER_TOKEN ?? process.env.RELENTLESS_MCP_BEARER_TOKEN) === 'string'
-				? (source.env?.RELENTLESS_MCP_BEARER_TOKEN ?? process.env.RELENTLESS_MCP_BEARER_TOKEN)
+			typeof (source.env?.RIG_MCP_BEARER_TOKEN ?? process.env.RIG_MCP_BEARER_TOKEN) === 'string'
+				? (source.env?.RIG_MCP_BEARER_TOKEN ?? process.env.RIG_MCP_BEARER_TOKEN)
 				: typeof raw.mcpBearerToken === 'string'
 					? raw.mcpBearerToken
 					: undefined,
 		mcpHost:
-			typeof (source.env?.RELENTLESS_MCP_HOST ?? process.env.RELENTLESS_MCP_HOST) === 'string'
-				? (source.env?.RELENTLESS_MCP_HOST ?? process.env.RELENTLESS_MCP_HOST)
+			typeof (source.env?.RIG_MCP_HOST ?? process.env.RIG_MCP_HOST) === 'string'
+				? (source.env?.RIG_MCP_HOST ?? process.env.RIG_MCP_HOST)
 				: typeof raw.mcpHost === 'string'
 					? raw.mcpHost
 					: '127.0.0.1',
 		mcpPort:
-			parseInteger(source.env?.RELENTLESS_MCP_PORT ?? process.env.RELENTLESS_MCP_PORT, 'mcpPort') ??
+			parseInteger(source.env?.RIG_MCP_PORT ?? process.env.RIG_MCP_PORT, 'mcpPort') ??
 			(typeof raw.mcpPort === 'number' ? raw.mcpPort : undefined) ??
 			8787,
 		webHost:
-			typeof (source.env?.RELENTLESS_WEB_HOST ?? process.env.RELENTLESS_WEB_HOST) === 'string'
-				? (source.env?.RELENTLESS_WEB_HOST ?? process.env.RELENTLESS_WEB_HOST)
+			typeof (source.env?.RIG_WEB_HOST ?? process.env.RIG_WEB_HOST) === 'string'
+				? (source.env?.RIG_WEB_HOST ?? process.env.RIG_WEB_HOST)
 				: typeof raw.webHost === 'string'
 					? raw.webHost
 					: '0.0.0.0',
 		webPort:
-			parseInteger(source.env?.RELENTLESS_WEB_PORT ?? process.env.RELENTLESS_WEB_PORT, 'webPort') ??
+			parseInteger(source.env?.RIG_WEB_PORT ?? process.env.RIG_WEB_PORT, 'webPort') ??
 			(typeof raw.webPort === 'number' ? raw.webPort : undefined)
 	};
 
@@ -181,8 +181,8 @@ function normalizeConfig(raw: Record<string, unknown>, source: ServerConfigSourc
 
 export async function loadServerConfig(source: ServerConfigSource = {}): Promise<ServerConfig> {
 	const env = source.env ?? process.env;
-	const workspaceRoot = source.workspaceRoot ?? env.RELENTLESS_WORKSPACE_ROOT ?? process.cwd();
-	const configPath = source.configPath ?? env.RELENTLESS_CONFIG ?? join(workspaceRoot, DEFAULT_CONFIG_FILE);
+	const workspaceRoot = source.workspaceRoot ?? env.RIG_WORKSPACE_ROOT ?? process.cwd();
+	const configPath = source.configPath ?? env.RIG_CONFIG ?? join(workspaceRoot, DEFAULT_CONFIG_FILE);
 	const rawConfig = await loadConfigFile(resolve(configPath));
 	return normalizeConfig(rawConfig, { ...source, env, workspaceRoot, configPath: resolve(configPath) });
 }

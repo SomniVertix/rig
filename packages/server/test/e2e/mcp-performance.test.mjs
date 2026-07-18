@@ -84,7 +84,7 @@ async function waitForPostgres(connectionString) {
 
 async function startPostgresContainer() {
 	const port = await getFreePort();
-	const containerName = `relentless-perf-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	const containerName = `rig-perf-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	const args = [
 		'run',
 		'--rm',
@@ -92,13 +92,13 @@ async function startPostgresContainer() {
 		'--name', containerName,
 		'-e', 'POSTGRES_USER=postgres',
 		'-e', 'POSTGRES_PASSWORD=postgres',
-		'-e', 'POSTGRES_DB=relentless',
+		'-e', 'POSTGRES_DB=rig',
 		'-p', `${port}:5432`,
 		'postgres:16-alpine'
 	];
 	const { stdout } = await runCommand('docker', args);
 	const containerId = stdout.trim();
-	const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/relentless`;
+	const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/rig`;
 
 	try {
 		await waitForPostgres(connectionString);
@@ -173,7 +173,7 @@ async function callMcpTool(client, toolName, toolArgs) {
 test('MCP performance/capacity smoke check: 20 concurrent sessions with read/write operations', async () => {
 	const postgres = await startPostgresContainer();
 	const workspaceRoot = repoRoot;
-	const mirrorRoot = await mkdtemp(join(tmpdir(), 'relentless-perf-'));
+	const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-perf-'));
 	const mcpPort = await getFreePort();
 	const bearerToken = 'test-bearer-token-12345';
 
@@ -192,7 +192,7 @@ test('MCP performance/capacity smoke check: 20 concurrent sessions with read/wri
 		defaultModel: undefined,
 		maxNodeExecutions: 100,
 		mirrorRoot,
-		configPath: join(workspaceRoot, 'relentless.config.ts'),
+		configPath: join(workspaceRoot, 'rig.config.ts'),
 		mcpBearerToken: bearerToken,
 		mcpHost: '127.0.0.1',
 		mcpPort: mcpPort

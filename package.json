@@ -1,5 +1,5 @@
 {
-  "name": "relentless-monorepo",
+  "name": "rig-monorepo",
   "version": "0.1.0",
   "description": "AI Workflow Engine with user-defined state machines",
   "private": true,

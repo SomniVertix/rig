@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SpecRepository } from '@relentless/persistence';
+import { SpecRepository } from '@rig/persistence';
 
 import type { McpToolContext } from '../tool-registry.js';
 import { withGuardrails } from '../guardrails/index.js';

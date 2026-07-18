@@ -1,6 +1,6 @@
 <!--
   component-tasks.template.md
-  Describes the section shape that mcp__relentless__render_document (stage: "tasks",
+  Describes the section shape that mcp__rig__render_document (stage: "tasks",
   component: "<component-slug>") produces for one component, from task_items /
   parallel_batches / parallel_batch_members / tasks_flags rows scoped to that component's
   tasks_doc. Nothing is hand-filled from this file — it's reference structure for the

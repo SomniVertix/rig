@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
-import type { RunState } from '@relentless/schema';
+import type { RunState } from '@rig/schema';
 
 import type { ServerComposition } from '../composition/index.js';
 

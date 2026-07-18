@@ -12,7 +12,7 @@ import { Pool } from 'pg';
 import { buildComposition, createServerScheduler } from '../../dist/server/src/index.js';
 import { buildApp } from '../../dist/server/src/web/app.js';
 import { FakeAgentExecutor } from '../../../test-support/dist/index.js';
-import { SpecRepository, ensureProject } from '@relentless/persistence';
+import { SpecRepository, ensureProject } from '@rig/persistence';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
@@ -82,7 +82,7 @@ async function waitForPostgres(connectionString) {
 
 async function startPostgresContainer() {
 	const port = await getFreePort();
-	const containerName = `relentless-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	const containerName = `rig-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	const args = [
 		'run',
 		'--rm',
@@ -90,13 +90,13 @@ async function startPostgresContainer() {
 		'--name', containerName,
 		'-e', 'POSTGRES_USER=postgres',
 		'-e', 'POSTGRES_PASSWORD=postgres',
-		'-e', 'POSTGRES_DB=relentless',
+		'-e', 'POSTGRES_DB=rig',
 		'-p', `${port}:5432`,
 		'postgres:16-alpine'
 	];
 	const { stdout } = await runCommand('docker', args);
 	const containerId = stdout.trim();
-	const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/relentless`;
+	const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/rig`;
 
 	try {
 		await waitForPostgres(connectionString);
@@ -153,7 +153,7 @@ async function makeRequest(app, method, path, body = null) {
 test('REST BFF API: read operations, write operations, error handling, and SPA fallback', async () => {
 	const postgres = await startPostgresContainer();
 	const workspaceRoot = repoRoot;
-	const mirrorRoot = await mkdtemp(join(tmpdir(), 'relentless-mirror-'));
+	const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-mirror-'));
 
 	const executor = new FakeAgentExecutor('pi');
 	executor.setPlan('compile-requirements', { status: 'ok', text: 'requirements draft v1\n' });
@@ -172,7 +172,7 @@ test('REST BFF API: read operations, write operations, error handling, and SPA f
 		defaultModel: undefined,
 		maxNodeExecutions: 100,
 		mirrorRoot,
-		configPath: join(workspaceRoot, 'relentless.config.ts')
+		configPath: join(workspaceRoot, 'rig.config.ts')
 	};
 
 	const composition = await buildComposition(config, { executor });

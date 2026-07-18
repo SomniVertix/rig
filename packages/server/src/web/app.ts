@@ -10,7 +10,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type { Pool } from 'pg';
 
-import type { SpecChangeEmitter } from '@relentless/persistence';
+import type { SpecChangeEmitter } from '@rig/persistence';
 
 import { specRepositoryErrorHandler } from './error-handler.js';
 import { registerEventsRoute } from './routes/events.js';
@@ -87,7 +87,7 @@ export function buildWebApp(options: BuildWebAppOptions): FastifyInstance {
 	void app.register(fastifySwagger, {
 		openapi: {
 			info: {
-				title: 'Relentless Spec Pipeline API',
+				title: 'Rig Spec Pipeline API',
 				version: '0.1.0'
 			}
 		},

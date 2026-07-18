@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Pool } from 'pg';
 import { z } from 'zod/v4';
 
-import { SpecRepository } from '@relentless/persistence';
+import { SpecRepository } from '@rig/persistence';
 
 /**
  * rest-bff-api (T5): the REST BFF's approve/deny write surface -- like reads.ts (T4),

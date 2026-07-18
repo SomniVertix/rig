@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import type { SpecChangeEmitter } from '@relentless/persistence';
+import type { SpecChangeEmitter } from '@rig/persistence';
 
 /**
  * sse-endpoint (Story 4 AC1): every ~15s, in the absence of any other traffic, this

@@ -4,12 +4,12 @@ import path from 'node:path';
 const root = path.resolve(process.cwd());
 const engineRoot = path.join(root, 'packages', 'engine');
 const enginePackageJsonPath = path.join(engineRoot, 'package.json');
-const allowedWorkspaceDependency = '@relentless/schema';
+const allowedWorkspaceDependency = '@rig/schema';
 const forbiddenWorkspaceDependencies = [
-  '@relentless/persistence',
-  '@relentless/executors',
-  '@relentless/library',
-  '@relentless/server'
+  '@rig/persistence',
+  '@rig/executors',
+  '@rig/library',
+  '@rig/server'
 ];
 
 function readJson(filePath) {
@@ -64,7 +64,7 @@ for (const filePath of sourceFiles) {
         }
         continue;
       }
-      if (specifier.startsWith('@relentless/')) {
+      if (specifier.startsWith('@rig/')) {
         if (!allowedDependencies.has(specifier)) {
           fail(`engine source imports forbidden workspace package: ${path.relative(root, filePath)} -> ${specifier}`);
         }

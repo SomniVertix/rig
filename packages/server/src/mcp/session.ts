@@ -3,8 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { ensureProject } from '@relentless/persistence';
-import type { PersistenceBundle, SpecChangeEmitter } from '@relentless/persistence';
+import { ensureProject } from '@rig/persistence';
+import type { PersistenceBundle, SpecChangeEmitter } from '@rig/persistence';
 
 import { registerTools } from './tool-registry.js';
 
@@ -46,7 +46,7 @@ export function createMcpSessionManager(pool: PersistenceBundle['pool'], events?
 
 	async function createSession(projectSlug: string): Promise<McpSessionEntry> {
 		const projectId = await ensureProject(pool, projectSlug);
-		const server = new McpServer({ name: 'relentless-spec-pipeline', version: '0.1.0' });
+		const server = new McpServer({ name: 'rig-spec-pipeline', version: '0.1.0' });
 		registerTools(server, { pool, projectId, projectSlug, events, claimTtlHours });
 
 		let entry: McpSessionEntry;

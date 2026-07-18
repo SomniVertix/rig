@@ -1,4 +1,18 @@
-name: relentless
+# Compose project name pinned to "rig" (renamed from the W4-era stopgap pin
+# of "relentless"). NOTE: this repoints the derived volume name from
+# relentless_postgres-data to rig_postgres-data and the DB name below from
+# relentless to rig -- neither renames existing persisted state in place.
+# Before the next `docker-compose up` against an existing deployment, run
+# this one-time migration so the live data isn't silently orphaned:
+#   docker compose stop server
+#   docker exec relentless-postgres-1 psql -U postgres -c \
+#     "ALTER DATABASE relentless RENAME TO rig;"
+#   docker volume create rig_postgres-data
+#   docker run --rm -v relentless_postgres-data:/from -v rig_postgres-data:/to \
+#     alpine sh -c "cp -a /from/. /to/"
+#   docker compose down && docker compose up -d
+# Once verified, the old relentless_postgres-data volume can be removed.
+name: rig
 
 services:
   postgres:
@@ -6,13 +20,13 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: relentless
+      POSTGRES_DB: rig
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d relentless"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rig"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,38 +37,38 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/relentless
-      RELENTLESS_DEFAULT_EXECUTOR: ${RELENTLESS_DEFAULT_EXECUTOR:-pi}
-      RELENTLESS_MCP_BEARER_TOKEN: ${RELENTLESS_MCP_BEARER_TOKEN:-dev-local-token}
-      RELENTLESS_MCP_PORT: "8787"
-      RELENTLESS_LOG_LEVEL: ${RELENTLESS_LOG_LEVEL:-info}
-      RELENTLESS_WEB_PORT: "${RELENTLESS_WEB_PORT:-8788}"
-      # known-actors sourcing: scans <mounted-claude-dir>/relentless-actors for
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/rig
+      RIG_DEFAULT_EXECUTOR: ${RIG_DEFAULT_EXECUTOR:-pi}
+      RIG_MCP_BEARER_TOKEN: ${RIG_MCP_BEARER_TOKEN:-dev-local-token}
+      RIG_MCP_PORT: "8787"
+      RIG_LOG_LEVEL: ${RIG_LOG_LEVEL:-info}
+      RIG_WEB_PORT: "${RIG_WEB_PORT:-8788}"
+      # known-actors sourcing: scans <mounted-claude-dir>/rig-actors for
       # <name> actor entries at boot (actor-registry.ts). This is a CURATED
       # actors directory, not the general ~/.claude/skills tree -- it should
       # contain one entry per legitimate actor (the pipeline agents +
       # grilling/wayfinder), as a RELATIVE symlink back into the sibling
       # `skills/<name>` directory, e.g. (run once on the host, under ~/.claude):
-      #   mkdir -p relentless-actors
-      #   ln -s ../skills/grilling relentless-actors/grilling
-      #   ln -s ../skills/design-drafter relentless-actors/design-drafter
+      #   mkdir -p rig-actors
+      #   ln -s ../skills/grilling rig-actors/grilling
+      #   ln -s ../skills/design-drafter rig-actors/design-drafter
       #   ... (repeat per actor)
       # Relative symlinks matter here: we bind-mount the whole ~/.claude
-      # directory (not just relentless-actors) so that `../skills/<name>`
+      # directory (not just rig-actors) so that `../skills/<name>`
       # still resolves correctly from inside the container, where the host
       # path doesn't exist. An absolute host-path symlink would silently
       # break the moment it crosses the bind-mount boundary.
       # No default here on purpose -- Compose does not expand `~` inside a
       # ${VAR:-default}, so a tilde-containing fallback would pass through
-      # literally and fail; unset RELENTLESS_CLAUDE_HOST_DIR should fail fast
+      # literally and fail; unset RIG_CLAUDE_HOST_DIR should fail fast
       # rather than mount somewhere wrong. Set it in a local .env, e.g.
-      # RELENTLESS_CLAUDE_HOST_DIR=/Users/you/.claude
-      RELENTLESS_ACTORS_DIR: /claude/relentless-actors
+      # RIG_CLAUDE_HOST_DIR=/Users/you/.claude
+      RIG_ACTORS_DIR: /claude/rig-actors
     ports:
       - "8787:8787"
-      - "127.0.0.1:${RELENTLESS_WEB_PORT:-8788}:${RELENTLESS_WEB_PORT:-8788}"
+      - "127.0.0.1:${RIG_WEB_PORT:-8788}:${RIG_WEB_PORT:-8788}"
     volumes:
-      - ${RELENTLESS_CLAUDE_HOST_DIR}:/claude:ro
+      - ${RIG_CLAUDE_HOST_DIR}:/claude:ro
 
 volumes:
   postgres-data:

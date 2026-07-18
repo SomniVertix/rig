@@ -2,10 +2,10 @@
   tasks.template.md
   RETIRED as a standalone authoring template — kept only as a pointer so nothing that
   references this filename by habit is left stranded. There was never a single "tasks.md"
-  file to begin with once the relentless MCP server took over spec storage; the tasks
+  file to begin with once the rig MCP server took over spec storage; the tasks
   stage produces a per-component document scheme instead, to match design's mandatory
   Components section (see design.template.md), all as rows rendered on demand via
-  mcp__relentless__render_document — nothing here is hand-filled or written to disk.
+  mcp__rig__render_document — nothing here is hand-filled or written to disk.
 
   Use these two templates instead (both describing render_document output shape):
     - tasks-index.template.md      — the ONE spec-wide document: component list +
@@ -25,7 +25,7 @@
 
 This file is intentionally not a fillable template body — there is no `tasks.md` file at
 all. A tasks stage drafting tasks for a feature must instead produce, via
-`mcp__relentless__*` tool calls (never file writes):
+`mcp__rig__*` tool calls (never file writes):
 
 1. Exactly one spec-wide index matching `tasks-index.template.md`'s shape (rendered via
    `render_document` with `component: "all"`).

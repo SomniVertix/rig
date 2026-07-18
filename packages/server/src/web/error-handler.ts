@@ -1,6 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 
-import { SpecRepositoryError } from '@relentless/persistence';
+import { SpecRepositoryError } from '@rig/persistence';
 
 /**
  * rest-bff-api (T3): maps `SpecRepositoryError.rule` (T5.1's persistence-layer error

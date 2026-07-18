@@ -1,6 +1,6 @@
 <!--
   tasks-index.template.md
-  Describes the section shape that mcp__relentless__render_document (stage: "tasks",
+  Describes the section shape that mcp__rig__render_document (stage: "tasks",
   component: "all") produces spec-wide: design_components' status, task_dependency_edges,
   and definition_of_done_items. Nothing is hand-filled from this file — it's reference
   structure for the tasks-drafter agent, not a file that gets copied or edited per-feature.

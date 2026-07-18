@@ -17,7 +17,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
 	const daemon = await startDaemon({ config });
 	const scheduler = createServerScheduler(daemon.composition);
 	await scheduler.start();
-	console.log(`relentless server started with ${daemon.config.defaultExecutor} executor`);
+	console.log(`rig server started with ${daemon.config.defaultExecutor} executor`);
 
 	let shuttingDown = false;
 	const shutdown = async (signal: string): Promise<void> => {

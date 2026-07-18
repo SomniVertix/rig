@@ -7,7 +7,7 @@
  * `SpecRepository`'s mutation methods.
  *
  * The actual `INSERT INTO spec_pipeline.audit_log` statement lives in
- * `@relentless/persistence`'s `SpecRepository` (not here), and deliberately so:
+ * `@rig/persistence`'s `SpecRepository` (not here), and deliberately so:
  * Story 11.2 requires the audit row to land in the *same transaction/commit* as the
  * mutation it records, and only the code already holding that transaction's
  * `PoolClient` -- `SpecRepository`'s own `withTx` callbacks -- can guarantee that.

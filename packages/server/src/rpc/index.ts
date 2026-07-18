@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 
-import { validateWorkflow } from '@relentless/engine';
-import { createWorkflow as createWorkflowRow, updateWorkflow as updateWorkflowRow, listWorkflows, listPrompts, type JsonValue } from '@relentless/persistence';
+import { validateWorkflow } from '@rig/engine';
+import { createWorkflow as createWorkflowRow, updateWorkflow as updateWorkflowRow, listWorkflows, listPrompts, type JsonValue } from '@rig/persistence';
 import type {
 	ArtifactMetadataResponse,
 	ArtifactReadResponse,
@@ -18,7 +18,7 @@ import type {
 	WorkflowSnapshotDiffResponse,
 	WorkflowSummary,
 	WorkflowValidateResponse
-} from '@relentless/proto';
+} from '@rig/proto';
 
 import type { ServerComposition } from '../composition/index.js';
 
@@ -56,7 +56,7 @@ function serializeWorkflow(workflow: unknown): string {
 }
 
 function runWorkspaceRoot(composition: ServerComposition, runId: string): string {
-	return join(composition.config.workspaceRoot, '.relentless', 'runs', runId, 'workspace');
+	return join(composition.config.workspaceRoot, '.rig', 'runs', runId, 'workspace');
 }
 
 async function ensureDirectory(filePath: string): Promise<void> {

@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { AuditInfo } from '@relentless/persistence';
-import { SpecRepositoryError } from '@relentless/persistence';
-import type { OrdinalDescriptionRecord } from '@relentless/persistence';
+import type { AuditInfo } from '@rig/persistence';
+import { SpecRepositoryError } from '@rig/persistence';
+import type { OrdinalDescriptionRecord } from '@rig/persistence';
 import type { Pool } from 'pg';
 
 import { requireKnownActor } from '../guardrails/index.js';

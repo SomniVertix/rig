@@ -82,7 +82,7 @@ async function waitForPostgres(connectionString) {
 
 async function startPostgresContainer() {
   const port = await getFreePort();
-  const containerName = `relentless-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const containerName = `rig-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const args = [
     'run',
     '--rm',
@@ -90,13 +90,13 @@ async function startPostgresContainer() {
     '--name', containerName,
     '-e', 'POSTGRES_USER=postgres',
     '-e', 'POSTGRES_PASSWORD=postgres',
-    '-e', 'POSTGRES_DB=relentless',
+    '-e', 'POSTGRES_DB=rig',
     '-p', `${port}:5432`,
     'postgres:16-alpine'
   ];
   const { stdout } = await runCommand('docker', args);
   const containerId = stdout.trim();
-  const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/relentless`;
+  const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/rig`;
 
   try {
     await waitForPostgres(connectionString);
@@ -168,7 +168,7 @@ async function createAndConnectMcpClient(host, port, bearerToken, projectSlug) {
 
   // Create client
   const client = new Client({
-    name: 'relentless-test-client',
+    name: 'rig-test-client',
     version: '0.1.0'
   });
 
@@ -181,7 +181,7 @@ async function createAndConnectMcpClient(host, port, bearerToken, projectSlug) {
 test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and finalization', async () => {
   const postgres = await startPostgresContainer();
   const workspaceRoot = repoRoot;
-  const mirrorRoot = await mkdtemp(join(tmpdir(), 'relentless-mirror-'));
+  const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-mirror-'));
   const mcpBearerToken = 'test-bearer-token';
   const mcpPort = await getFreePort();
   const mcpHost = '127.0.0.1';
@@ -200,7 +200,7 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     defaultModel: undefined,
     maxNodeExecutions: 100,
     mirrorRoot,
-    configPath: join(workspaceRoot, 'relentless.config.ts'),
+    configPath: join(workspaceRoot, 'rig.config.ts'),
     mcpBearerToken,
     mcpHost,
     mcpPort
@@ -608,7 +608,7 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
 test('MCP cycle detection in task dependencies', async () => {
   const postgres = await startPostgresContainer();
   const workspaceRoot = repoRoot;
-  const mirrorRoot = await mkdtemp(join(tmpdir(), 'relentless-mirror-'));
+  const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-mirror-'));
   const mcpBearerToken = 'test-bearer-token';
   const mcpPort = await getFreePort();
   const mcpHost = '127.0.0.1';
@@ -627,7 +627,7 @@ test('MCP cycle detection in task dependencies', async () => {
     defaultModel: undefined,
     maxNodeExecutions: 100,
     mirrorRoot,
-    configPath: join(workspaceRoot, 'relentless.config.ts'),
+    configPath: join(workspaceRoot, 'rig.config.ts'),
     mcpBearerToken,
     mcpHost,
     mcpPort

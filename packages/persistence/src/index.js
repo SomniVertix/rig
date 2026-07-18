@@ -447,6 +447,6 @@ export function createPersistenceBundle(options) {
         pool
     };
 }
-export async function createEphemeralDatabaseName(prefix = 'relentless') {
+export async function createEphemeralDatabaseName(prefix = 'rig') {
     return `${prefix}_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
 }

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package relentless.api;
+package rig.api;
 
 message ValidationIssue {
   string rule = 1;

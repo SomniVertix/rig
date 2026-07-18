@@ -1,12 +1,12 @@
-# Relentless — Functionality Breakdown
+# Rig — Functionality Breakdown
 
 ## What it is
 
-**Relentless** is an AI workflow engine + spec-driven development pipeline. It runs as a long-lived server (MCP tool server + REST/web dashboard) backed by Postgres, and orchestrates AI agents (Claude Code or an alternate "Pi" backend) through a structured, human-gated feature-development lifecycle: **idea → requirements → design → tasks → implementation**.
+**Rig** is an AI workflow engine + spec-driven development pipeline. It runs as a long-lived server (MCP tool server + REST/web dashboard) backed by Postgres, and orchestrates AI agents (Claude Code or an alternate "Pi" backend) through a structured, human-gated feature-development lifecycle: **idea → requirements → design → tasks → implementation**.
 
 Two things live in the same repo:
 1. A **generic YAML workflow engine** (nodes, guards, human-in-the-loop steps) — the reusable "AI Workflow Engine with user-defined state machines."
-2. A **concrete spec pipeline** built on top of it — the actual product surface most agents interact with via `mcp__relentless__*` tools.
+2. A **concrete spec pipeline** built on top of it — the actual product surface most agents interact with via `mcp__rig__*` tools.
 
 ---
 
@@ -26,18 +26,18 @@ A "spec" (feature) is **not a file** — it's rows in Postgres (`spec_pipeline` 
 Each stage ends with `finalize_stage` (submits to `in_review`); **approve/deny is human-only** and not exposed via any MCP tool — the human reviews rendered markdown and flips the status externally (via the web UI). Denials come back as a short freeform reason for the drafting agent to incorporate on redraft.
 
 ### 2. Trails (`discovery` schema)
-Stage 0's storage. The old grilling tables (`grilling_sessions`/`decisions`/`decision_terms`), their MCP tools, and the `/grilling` dashboard view are **removed**, along with the wayfinder skill's local file store (`.relentless/tickets/`) — both skills now write into the `discovery` Postgres schema through one shared tool set. A **trail** is one effort to turn a loose idea into a destination; a **waypoint** is one question driven to a decision through the lifecycle `sighted → marked → claimed → reached | bypassed` (both terminal states unblock dependents). Tools: trail lifecycle (`create_trail`, `get_trail`, `get_trail_by_spec`, `list_trails`, `update_trail`, `complete_trail`, `abandon_trail`), waypoint lifecycle (`add_waypoint`, `update_waypoint`, `claim_waypoint`, `release_waypoint`, `reach_waypoint`, `bypass_waypoint`, `get_frontier`), plus `add_waypoint_dependency` / `remove_waypoint_dependency`, `add_waypoint_asset` / `list_waypoint_assets`, and `add_trail_term` / `update_trail_term`. `complete_trail` with outcome `spec` creates the spec and sets `discovery.trails.outcome_spec_id` in one transaction (at most one trail per spec); `requirements-compiler` reads that linked trail's reached waypoints as its decisions transcript. Stuck claims recover via `release_waypoint`, or lapse after `RELENTLESS_CLAIM_TTL` (hours, default 24).
+Stage 0's storage. The old grilling tables (`grilling_sessions`/`decisions`/`decision_terms`), their MCP tools, and the `/grilling` dashboard view are **removed**, along with the wayfinder skill's local file store (`.rig/tickets/`) — both skills now write into the `discovery` Postgres schema through one shared tool set. A **trail** is one effort to turn a loose idea into a destination; a **waypoint** is one question driven to a decision through the lifecycle `sighted → marked → claimed → reached | bypassed` (both terminal states unblock dependents). Tools: trail lifecycle (`create_trail`, `get_trail`, `get_trail_by_spec`, `list_trails`, `update_trail`, `complete_trail`, `abandon_trail`), waypoint lifecycle (`add_waypoint`, `update_waypoint`, `claim_waypoint`, `release_waypoint`, `reach_waypoint`, `bypass_waypoint`, `get_frontier`), plus `add_waypoint_dependency` / `remove_waypoint_dependency`, `add_waypoint_asset` / `list_waypoint_assets`, and `add_trail_term` / `update_trail_term`. `complete_trail` with outcome `spec` creates the spec and sets `discovery.trails.outcome_spec_id` in one transaction (at most one trail per spec); `requirements-compiler` reads that linked trail's reached waypoints as its decisions transcript. Stuck claims recover via `release_waypoint`, or lapse after `RIG_CLAIM_TTL` (hours, default 24).
 
 ### 3. Guardrails & Audit
-Every write tool requires an `actor` argument, validated against a `known_actors` Postgres table. That table is synced at boot by scanning a mounted, curated actors directory (`<dir>/<name>`, resolving through to a `SKILL.md`) — deliberately not the general Claude Code skills directory, since agents and skills are separate concepts and an unrelated installed skill has no business attributing a relentless write. Every mutation writes one `audit_log` row in the same transaction.
+Every write tool requires an `actor` argument, validated against a `known_actors` Postgres table. That table is synced at boot by scanning a mounted, curated actors directory (`<dir>/<name>`, resolving through to a `SKILL.md`) — deliberately not the general Claude Code skills directory, since agents and skills are separate concepts and an unrelated installed skill has no business attributing a rig write. Every mutation writes one `audit_log` row in the same transaction.
 
 ### 4. Generic Workflow Engine
-A separate, more general layer: YAML workflow definitions (`packages/library/bundled/workflows/relentless-default.yaml`) describe nodes of kind `agent` / `human` / `guard` / `script`, wired with `reads`/`writes`/`goto` transitions and approve/deny-style signals. The bundled `relentless-default` workflow literally encodes the spec pipeline this way (compile → review → gate, repeated three times) — the concrete pipeline is one instance of the generic engine. A polling scheduler (`packages/server/src/scheduler`) claims runnable runs and drives the interpreter node-by-node in the background, independent of the interactive MCP tool-call flow.
+A separate, more general layer: YAML workflow definitions (`packages/library/bundled/workflows/rig-default.yaml`) describe nodes of kind `agent` / `human` / `guard` / `script`, wired with `reads`/`writes`/`goto` transitions and approve/deny-style signals. The bundled `rig-default` workflow literally encodes the spec pipeline this way (compile → review → gate, repeated three times) — the concrete pipeline is one instance of the generic engine. A polling scheduler (`packages/server/src/scheduler`) claims runnable runs and drives the interpreter node-by-node in the background, independent of the interactive MCP tool-call flow.
 
-A separate, proto-defined admin API (`packages/proto/proto/relentless.proto`, implemented in `packages/server/src/rpc/index.ts`) exposes `WorkflowsService` / `PromptsService` / `RunsService` / `ArtifactsService` for managing these generic workflows/runs — distinct from the spec-pipeline MCP tool catalog.
+A separate, proto-defined admin API (`packages/proto/proto/rig.proto`, implemented in `packages/server/src/rpc/index.ts`) exposes `WorkflowsService` / `PromptsService` / `RunsService` / `ArtifactsService` for managing these generic workflows/runs — distinct from the spec-pipeline MCP tool catalog.
 
 ### 5. Dual Executors
-Agent steps run through a pluggable `AgentExecutor` interface — either `ClaudeExecutor` (Claude Code) or `PiExecutor` (wraps `@earendil-works/pi-coding-agent`), selected via `RELENTLESS_DEFAULT_EXECUTOR`.
+Agent steps run through a pluggable `AgentExecutor` interface — either `ClaudeExecutor` (Claude Code) or `PiExecutor` (wraps `@earendil-works/pi-coding-agent`), selected via `RIG_DEFAULT_EXECUTOR`.
 
 ---
 
@@ -75,7 +75,7 @@ Agent steps run through a pluggable `AgentExecutor` interface — either `Claude
   - Web REST/dashboard on `8788` (bound to `127.0.0.1` on the host)
   - Mounts a host `~/.claude/skills` directory read-only at `/skills` for known-actor sync.
 - No separate migrations runner: `spec-templates/spec/db/schema.sql` is a single idempotent DDL file applied on every boot — the full clean-database bootstrap (`spec_pipeline` + `discovery` + the `public` run-engine tables, with the legacy grilling tables never existing), cut over 2026-07-17 from a wiped database.
-- Key env vars: `DATABASE_URL`, `RELENTLESS_DEFAULT_EXECUTOR` (`pi`/`claude`), `RELENTLESS_MCP_BEARER_TOKEN`, `RELENTLESS_ACTORS_DIR` (points at the curated actors directory, not the general skills directory — see docker-compose.yml), `RELENTLESS_DEFAULT_MODEL`, `RELENTLESS_CONCURRENCY_CAP`, `RELENTLESS_LOG_LEVEL`, `RELENTLESS_CLAIM_TTL` (hours before a stale waypoint claim becomes reclaimable, default 24).
+- Key env vars: `DATABASE_URL`, `RIG_DEFAULT_EXECUTOR` (`pi`/`claude`), `RIG_MCP_BEARER_TOKEN`, `RIG_ACTORS_DIR` (points at the curated actors directory, not the general skills directory — see docker-compose.yml), `RIG_DEFAULT_MODEL`, `RIG_CONCURRENCY_CAP`, `RIG_LOG_LEVEL`, `RIG_CLAIM_TTL` (hours before a stale waypoint claim becomes reclaimable, default 24).
 
 ---
 
@@ -101,4 +101,4 @@ All are manual-only (no auto-trigger) and each re-fetches spec state cold via `g
 
 1. **Approve/deny endpoint has no auth.** `POST /api/specs/:specId/stages/:stage/{approve,deny}` (the only place a stage can actually become `approved`) is unauthenticated and always attributes the write to a fixed literal actor `'web-ui'` — it bypasses the `known_actors` check every MCP write tool enforces. Acceptable only while the web dashboard stays bound to `127.0.0.1`; with the doc discrepancies fixed, this now stands alone as the known auth gap.
 
-2. **Trails have no web-dashboard surface in v1.** Nothing in the SPA renders the `discovery` schema, and the `trail_changed`/`waypoint_changed` SSE events have no UI consumer. Human recovery of a stuck waypoint claim is the `release_waypoint` MCP tool from any session, psql as the override of last resort, or waiting out `RELENTLESS_CLAIM_TTL`.
+2. **Trails have no web-dashboard surface in v1.** Nothing in the SPA renders the `discovery` schema, and the `trail_changed`/`waypoint_changed` SSE events have no UI consumer. Human recovery of a stuck waypoint claim is the `release_waypoint` MCP tool from any session, psql as the override of last resort, or waiting out `RIG_CLAIM_TTL`.

@@ -10,7 +10,7 @@ import {
   FakeArtifactStore,
   FakeClock,
   FakeRunStore,
-  buildRelentlessDefaultWorkflowShape
+  buildRigDefaultWorkflowShape
 } from '../../../test-support/dist/index.js';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -25,7 +25,7 @@ function countNodeEnters(history, nodeId) {
 }
 
 test('default workflow reaches done through a deny loop and writes artifacts', async () => {
-  const workflow = buildRelentlessDefaultWorkflowShape();
+  const workflow = buildRigDefaultWorkflowShape();
   const runStore = new FakeRunStore();
   const artifactStore = new FakeArtifactStore();
   const clock = new FakeClock(new Date('2026-01-01T00:00:00.000Z'));
@@ -61,7 +61,7 @@ test('default workflow reaches done through a deny loop and writes artifacts', a
     workflowId: workflow.id,
     snapshotHash: 'snapshot-1',
     currentNodeId: workflow.entry,
-    workspacePath: '/tmp/relentless-default-workflow'
+    workspacePath: '/tmp/rig-default-workflow'
   });
 
   let action = await engine.interpret(workflow, initialState);
@@ -139,7 +139,7 @@ test('agent failure without onError ends the run failed with last-error context'
     workflowId: workflow.id,
     snapshotHash: 'snapshot-2',
     currentNodeId: workflow.entry,
-    workspacePath: '/tmp/relentless-failure-workflow'
+    workspacePath: '/tmp/rig-failure-workflow'
   });
 
   const action = await engine.interpret(workflow, initialState);

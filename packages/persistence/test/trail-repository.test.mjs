@@ -93,7 +93,7 @@ async function waitForPostgres(connectionString) {
 
 async function startPostgresContainer() {
 	const port = await getFreePort();
-	const containerName = `relentless-trail-repo-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	const containerName = `rig-trail-repo-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	const args = [
 		'run',
 		'--rm',
@@ -105,14 +105,14 @@ async function startPostgresContainer() {
 		'-e',
 		'POSTGRES_PASSWORD=postgres',
 		'-e',
-		'POSTGRES_DB=relentless',
+		'POSTGRES_DB=rig',
 		'-p',
 		`${port}:5432`,
 		'postgres:16-alpine'
 	];
 	const { stdout } = await runCommand('docker', args);
 	const containerId = stdout.trim();
-	const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/relentless`;
+	const connectionString = `postgres://postgres:postgres@127.0.0.1:${port}/rig`;
 
 	try {
 		await waitForPostgres(connectionString);

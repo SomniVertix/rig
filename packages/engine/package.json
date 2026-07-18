@@ -1,5 +1,5 @@
 {
-  "name": "@relentless/engine",
+  "name": "@rig/engine",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,7 @@
     }
   },
   "dependencies": {
-    "@relentless/schema": "workspace:*"
+    "@rig/schema": "workspace:*"
   },
   "scripts": {
     "build": "tsc",

@@ -275,7 +275,7 @@ export interface ServiceDescriptor {
 }
 
 export const WorkflowsService = {
-  typeName: 'relentless.api.WorkflowsService',
+  typeName: 'rig.api.WorkflowsService',
   methods: {
     list: { name: 'List', kind: 'unary', inputType: 'WorkflowListRequest', outputType: 'WorkflowListResponse' },
     get: { name: 'Get', kind: 'unary', inputType: 'WorkflowGetRequest', outputType: 'WorkflowGetResponse' },
@@ -287,7 +287,7 @@ export const WorkflowsService = {
 } as const satisfies ServiceDescriptor;
 
 export const PromptsService = {
-  typeName: 'relentless.api.PromptsService',
+  typeName: 'rig.api.PromptsService',
   methods: {
     list: { name: 'List', kind: 'unary', inputType: 'PromptListRequest', outputType: 'PromptListResponse' },
     get: { name: 'Get', kind: 'unary', inputType: 'PromptGetRequest', outputType: 'PromptGetResponse' },
@@ -296,7 +296,7 @@ export const PromptsService = {
 } as const satisfies ServiceDescriptor;
 
 export const RunsService = {
-  typeName: 'relentless.api.RunsService',
+  typeName: 'rig.api.RunsService',
   methods: {
     start: { name: 'Start', kind: 'unary', inputType: 'RunsStartRequest', outputType: 'RunsStartResponse' },
     get: { name: 'Get', kind: 'unary', inputType: 'RunsGetRequest', outputType: 'RunsGetResponse' },
@@ -309,7 +309,7 @@ export const RunsService = {
 } as const satisfies ServiceDescriptor;
 
 export const ArtifactsService = {
-  typeName: 'relentless.api.ArtifactsService',
+  typeName: 'rig.api.ArtifactsService',
   methods: {
     read: { name: 'Read', kind: 'unary', inputType: 'ArtifactReadRequest', outputType: 'ArtifactReadResponse' },
     metadata: { name: 'Metadata', kind: 'unary', inputType: 'ArtifactMetadataRequest', outputType: 'ArtifactMetadataResponse' }

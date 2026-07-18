@@ -16,7 +16,7 @@ import type {
 	RunState,
 	RunStore,
 	WorkflowDef
-} from '@relentless/schema';
+} from '@rig/schema';
 
 function cloneValue<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T;
@@ -301,10 +301,10 @@ export function buildMinimalWorkflowDef(): WorkflowDef {
 	};
 }
 
-export function buildRelentlessDefaultWorkflowShape(): WorkflowDef {
+export function buildRigDefaultWorkflowShape(): WorkflowDef {
 	return {
-		id: 'relentless-default',
-		name: 'Relentless Default Workflow',
+		id: 'rig-default',
+		name: 'Rig Default Workflow',
 		entry: 'compile-requirements',
 		inputs: [{ name: 'decisions.md', required: true }],
 		artifacts: ['requirements.md', 'design.md', 'tasks.md'],

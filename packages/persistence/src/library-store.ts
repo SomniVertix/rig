@@ -9,7 +9,7 @@ import { withTransaction, type JsonValue } from './index.js';
  * DB-backed prompt/agent + workflow library store (Stories 2, 3, 4, 13). Reads
  * and writes `spec_pipeline.prompts`/`prompt_snapshots` and
  * `spec_pipeline.workflows`/`workflow_snapshots` (T1.6/T1.7), replacing the
- * file-based `.relentless/{agents,prompts,workflows}` path for normal
+ * file-based `.rig/{agents,prompts,workflows}` path for normal
  * operation (Story 1.2, 2.3, 3.1). Templates/tools remain file-based --
  * out of scope for this module.
  */
@@ -324,7 +324,7 @@ export async function listWorkflows(pool: Pool): Promise<WorkflowRecord[]> {
 
 /**
  * Creates a workflow definition row in `spec_pipeline.workflows`, replacing
- * the file-based `.relentless/workflows/*.yaml` write path for normal
+ * the file-based `.rig/workflows/*.yaml` write path for normal
  * operation (Story 2.1).
  */
 export async function createWorkflow(pool: Pool, input: CreateWorkflowInput): Promise<WorkflowRecord> {
@@ -347,7 +347,7 @@ export async function createWorkflow(pool: Pool, input: CreateWorkflowInput): Pr
  * Updates a workflow's definition. Before the row is updated, the prior
  * definition is captured as a `workflow_snapshots` row keyed by its content
  * hash, so both the current row and a history row are persisted to Postgres,
- * never to `.relentless/workflows/*.yaml` (Story 2.1, 2.2).
+ * never to `.rig/workflows/*.yaml` (Story 2.1, 2.2).
  */
 export async function updateWorkflow(pool: Pool, id: string, input: UpdateWorkflowInput): Promise<WorkflowRecord> {
 	return await withTransaction(pool, async (client) => {

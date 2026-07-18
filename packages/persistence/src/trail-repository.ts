@@ -23,7 +23,7 @@ import type { SpecChangeEmitter, SpecChangeEvent } from './spec-change-emitter.j
  *
  * The claim TTL is *not* schema: `claimed_at` is the only stored fact, and the
  * claim/frontier queries treat a claim older than `claimTtlHours`
- * (RELENTLESS_CLAIM_TTL, default 24) as reclaimable inside the same atomic
+ * (RIG_CLAIM_TTL, default 24) as reclaimable inside the same atomic
  * UPDATE — no separate steal step.
  */
 
@@ -266,7 +266,7 @@ export interface TrailMap {
 // =============================================================================
 
 export interface TrailRepositoryOptions {
-	/** Hours after which a claim is considered stale and reclaimable (RELENTLESS_CLAIM_TTL). */
+	/** Hours after which a claim is considered stale and reclaimable (RIG_CLAIM_TTL). */
 	claimTtlHours?: number;
 }
 

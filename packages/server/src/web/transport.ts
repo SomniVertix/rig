@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 
-import type { SpecChangeEmitter } from '@relentless/persistence';
+import type { SpecChangeEmitter } from '@rig/persistence';
 
 import { buildApp } from './app.js';
 import { registerEventsRoute } from './routes/events.js';

@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { PersistenceBundle, SpecChangeEmitter } from '@relentless/persistence';
+import type { PersistenceBundle, SpecChangeEmitter } from '@rig/persistence';
 
 import { registerSpecDocTools } from './tools/index.js';
 
@@ -18,7 +18,7 @@ export interface McpToolContext {
 	projectId: string;
 	projectSlug: string;
 	events?: SpecChangeEmitter;
-	/** RELENTLESS_CLAIM_TTL (hours) for discovery waypoint claim recovery;
+	/** RIG_CLAIM_TTL (hours) for discovery waypoint claim recovery;
 	 * `TrailRepository` falls back to its own default when absent. */
 	claimTtlHours?: number;
 }

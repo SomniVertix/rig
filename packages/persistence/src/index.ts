@@ -669,7 +669,7 @@ export function createPersistenceBundle(options: PersistenceOptions): Persistenc
 	};
 }
 
-export async function createEphemeralDatabaseName(prefix = 'relentless'): Promise<string> {
+export async function createEphemeralDatabaseName(prefix = 'rig'): Promise<string> {
 	return `${prefix}_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
 }
 

@@ -27,14 +27,14 @@
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
-      "@relentless/schema": ["packages/schema/src"],
-      "@relentless/proto": ["packages/proto/src"],
-      "@relentless/engine": ["packages/engine/src"],
-      "@relentless/persistence": ["packages/persistence/src"],
-      "@relentless/executors": ["packages/executors/src"],
-      "@relentless/library": ["packages/library/src"],
-      "@relentless/server": ["packages/server/src"],
-      "@relentless/test-support": ["packages/test-support/src"]
+      "@rig/schema": ["packages/schema/src"],
+      "@rig/proto": ["packages/proto/src"],
+      "@rig/engine": ["packages/engine/src"],
+      "@rig/persistence": ["packages/persistence/src"],
+      "@rig/executors": ["packages/executors/src"],
+      "@rig/library": ["packages/library/src"],
+      "@rig/server": ["packages/server/src"],
+      "@rig/test-support": ["packages/test-support/src"]
     }
   },
   "include": [],

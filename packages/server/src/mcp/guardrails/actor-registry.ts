@@ -28,7 +28,7 @@ export async function requireKnownActor(pool: Pool, actor: unknown): Promise<str
  * T6.4 (revised, Story 11.5-follow-up): boot-time known-actors registry sync.
  *
  * Agents and Claude Code skills are separate concepts. An "actor" here means
- * something that is actually allowed to attribute a write to a relentless MCP
+ * something that is actually allowed to attribute a write to a rig MCP
  * tool -- the seven pipeline agents (`requirements-compiler`, `design-drafter`,
  * `tasks-drafter`, `spec-implementation-orchestrator`, `code-implementer`,
  * `test-writer`, `code-reviewer`) plus the discovery-stage skills that write

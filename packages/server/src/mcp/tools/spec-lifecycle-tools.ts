@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SpecRepository } from '@relentless/persistence';
+import { SpecRepository } from '@rig/persistence';
 
 import type { McpToolContext } from '../tool-registry.js';
 import { withGuardrails } from '../guardrails/index.js';
@@ -22,7 +22,7 @@ export function registerSpecLifecycleTools(server: McpServer, context: McpToolCo
 		'create_spec',
 		{
 			description:
-				"Creates a new spec (a .relentless/specs/<feature-slug>/ equivalent), scoped to this session's bound project. Auto-seeds the three spec_stages rows (requirements/design/tasks, all not_started).",
+				"Creates a new spec (a .rig/specs/<feature-slug>/ equivalent), scoped to this session's bound project. Auto-seeds the three spec_stages rows (requirements/design/tasks, all not_started).",
 			inputSchema: {
 				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
 				slug: z.string().min(1).describe('Kebab-case feature slug, unique within this project.'),

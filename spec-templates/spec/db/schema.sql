@@ -23,8 +23,8 @@
 -- idea into a destination; a WAYPOINT is one question being driven to a
 -- decision. This domain replaces both the old grilling_sessions/decisions/
 -- decision_terms tables and wayfinder's local file store
--- (.relentless/tickets/) entirely: there is no local storage layer, and
--- skills hard-fail without the relentless MCP server.
+-- (.rig/tickets/) entirely: there is no local storage layer, and
+-- skills hard-fail without the rig MCP server.
 --
 -- The `spec_pipeline` domain is the delivery layer: specs move through
 -- requirements -> design -> tasks, each stage drafted by an agent and
@@ -217,7 +217,7 @@
 -- -----------------------------------------------------------------------------
 --
 -- Claim TTL is *not* schema: claimed_at is the only stored fact. The claim
--- and frontier queries treat a claim older than RELENTLESS_CLAIM_TTL (server
+-- and frontier queries treat a claim older than RIG_CLAIM_TTL (server
 -- config, recommended default 24h) as reclaimable in the same atomic UPDATE —
 -- no separate steal step. release_waypoint (an MCP tool) works manually at
 -- any time. The web dashboard has no trails surface in v1 — human recovery

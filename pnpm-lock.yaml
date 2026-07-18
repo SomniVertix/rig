@@ -42,28 +42,28 @@ importers:
 
   packages/engine:
     dependencies:
-      '@relentless/schema':
+      '@rig/schema':
         specifier: workspace:*
         version: link:../schema
 
   packages/executors:
     dependencies:
-      '@relentless/schema':
+      '@rig/schema':
         specifier: workspace:*
         version: link:../schema
 
   packages/library:
     dependencies:
-      '@relentless/persistence':
+      '@rig/persistence':
         specifier: workspace:*
         version: link:../persistence
-      '@relentless/schema':
+      '@rig/schema':
         specifier: workspace:*
         version: link:../schema
 
   packages/persistence:
     dependencies:
-      '@relentless/schema':
+      '@rig/schema':
         specifier: workspace:*
         version: link:../schema
       pg:
@@ -88,25 +88,25 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
-      '@relentless/engine':
+      '@rig/engine':
         specifier: workspace:*
         version: link:../engine
-      '@relentless/executors':
+      '@rig/executors':
         specifier: workspace:*
         version: link:../executors
-      '@relentless/library':
+      '@rig/library':
         specifier: workspace:*
         version: link:../library
-      '@relentless/persistence':
+      '@rig/persistence':
         specifier: workspace:*
         version: link:../persistence
-      '@relentless/proto':
+      '@rig/proto':
         specifier: workspace:*
         version: link:../proto
-      '@relentless/schema':
+      '@rig/schema':
         specifier: workspace:*
         version: link:../schema
-      '@relentless/test-support':
+      '@rig/test-support':
         specifier: workspace:*
         version: link:../test-support
       fastify:
@@ -121,7 +121,7 @@ importers:
 
   packages/test-support:
     dependencies:
-      '@relentless/schema':
+      '@rig/schema':
         specifier: workspace:*
         version: link:../schema
 

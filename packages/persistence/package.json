@@ -1,5 +1,5 @@
 {
-  "name": "@relentless/persistence",
+  "name": "@rig/persistence",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,7 @@
     }
   },
   "dependencies": {
-    "@relentless/schema": "workspace:*",
+    "@rig/schema": "workspace:*",
     "pg": "^8.22.0"
   },
   "scripts": {

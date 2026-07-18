@@ -27,4 +27,4 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
-.relentless/
+.rig/

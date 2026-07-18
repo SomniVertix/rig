@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 
-import type { PersistenceBundle, SpecChangeEmitter } from '@relentless/persistence';
+import type { PersistenceBundle, SpecChangeEmitter } from '@rig/persistence';
 
 import { isAuthorizedRequest } from './auth.js';
 import { createMcpSessionManager } from './session.js';
@@ -21,7 +21,7 @@ export interface McpTransportOptions {
 	port: number;
 	bearerToken: string;
 	events?: SpecChangeEmitter;
-	/** RELENTLESS_CLAIM_TTL (hours) threaded into every session's tool context. */
+	/** RIG_CLAIM_TTL (hours) threaded into every session's tool context. */
 	claimTtlHours?: number;
 }
 

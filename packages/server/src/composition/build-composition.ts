@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { ClaudeExecutor, PiExecutor, type AgentExecutor } from '@relentless/executors';
-import { createInterpreter, type Interpreter } from '@relentless/engine';
-import { createPostgresLibraryResolver, seedBundledLibrary, type LibraryResolver } from '@relentless/library';
-import { createPersistenceBundle, SpecChangeEmitter, type PersistenceBundle } from '@relentless/persistence';
-import type { ArtifactStore, Clock, RunStore } from '@relentless/schema';
+import { ClaudeExecutor, PiExecutor, type AgentExecutor } from '@rig/executors';
+import { createInterpreter, type Interpreter } from '@rig/engine';
+import { createPostgresLibraryResolver, seedBundledLibrary, type LibraryResolver } from '@rig/library';
+import { createPersistenceBundle, SpecChangeEmitter, type PersistenceBundle } from '@rig/persistence';
+import type { ArtifactStore, Clock, RunStore } from '@rig/schema';
 
 import type { ServerConfig } from '../config/index.js';
 import { startMcpTransport, type McpTransportHandle } from '../mcp/index.js';
@@ -96,15 +96,15 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 	// actor-registry.ts's doc comment for the full rationale. Run on every boot,
 	// same as the library seed pass above -- re-running only refreshes
 	// `updated_at`, it never removes an actor no longer present on disk. Defaults
-	// to a project-local `.claude/relentless-actors` under workspaceRoot when
+	// to a project-local `.claude/rig-actors` under workspaceRoot when
 	// config.actorsDir is unset (local/non-Docker dev); Docker overrides via
-	// RELENTLESS_ACTORS_DIR to point at the bind-mounted curated actors
+	// RIG_ACTORS_DIR to point at the bind-mounted curated actors
 	// directory (see docker-compose.yml).
-	await syncKnownActorsFromActorsDirectory(bundle.pool, config.actorsDir ?? join(config.workspaceRoot, '.claude', 'relentless-actors'));
+	await syncKnownActorsFromActorsDirectory(bundle.pool, config.actorsDir ?? join(config.workspaceRoot, '.claude', 'rig-actors'));
 
 	// library-store (Story 1.2, 2.1, 3.1): prompts and workflows resolve from
-	// Postgres via `@relentless/persistence`'s library-store, replacing the
-	// file-based `.relentless/{agents,prompts,workflows}` path for normal
+	// Postgres via `@rig/persistence`'s library-store, replacing the
+	// file-based `.rig/{agents,prompts,workflows}` path for normal
 	// operation. Templates/tools stay file-based, delegated to a
 	// `FileSystemLibraryResolver` internally -- out of scope for DB-backing.
 	// This composition is not yet project-bound (project-scoped MCP sessions

@@ -4,7 +4,7 @@ node_modules
 **/*.tsbuildinfo
 .git
 .claude
-.relentless
+.rig
 coverage
 *.log
 npm-debug.log*

@@ -5,8 +5,8 @@
 -- against an empty database; it includes schema.sql (the canonical DDL) and
 -- leaves the session's search_path pointed at spec_pipeline.
 --
---   createdb relentless_specs
---   psql -d relentless_specs -f init.sql
+--   createdb rig_specs
+--   psql -d rig_specs -f init.sql
 --
 -- schema.sql is also safe to run standalone (e.g. by migration/diff tooling)
 -- since it is self-contained (creates its own extension and schema).

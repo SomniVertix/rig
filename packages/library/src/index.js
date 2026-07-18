@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { WorkflowDefSchema } from '@relentless/schema';
+import { WorkflowDefSchema } from '@rig/schema';
 function isPlainObject(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -67,7 +67,7 @@ async function resolveFirstExisting(paths) {
 }
 function searchRoots(projectRoot, globalRoot, subdir, id, extensions) {
     const roots = [
-        projectRoot ? resolve(projectRoot, '.relentless', subdir) : null,
+        projectRoot ? resolve(projectRoot, '.rig', subdir) : null,
         globalRoot ? resolve(globalRoot, subdir) : null
     ].filter((entry) => entry !== null);
     const candidates = [];
