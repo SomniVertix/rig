@@ -46,7 +46,8 @@ Two different kinds of things exist. Do not confuse them:
 - **Instances** — real, per-feature data, held entirely by the `relentless` MCP server as
   rows scoped to the session's bound project. There is no `.relentless/specs/<slug>/`
   directory. A spec instance is identified purely by the `specId` returned from
-  `mcp__relentless__create_spec`, and every subsequent tool call for that spec takes that
+  `mcp__relentless__complete_trail` (which creates the spec when a trail completes with a
+  spec outcome — see Stage 0), and every subsequent tool call for that spec takes that
   `specId` (or an id/slug derived from it, e.g. `componentSlug`).
 
 ```
@@ -56,10 +57,18 @@ spec-templates/spec/
   design.template.md
   tasks-index.template.md
   component-tasks.template.md
-  tasks.template.md            <- retired pointer; see below
+  tasks.template.md            <- retired pointer (superseded by the two files above;
+                                  kept only so stale references aren't stranded)
+  db/                          <- reference SQL schema for the relentless server's storage
+  pre/                         <- pre-migration grilling transcript (history only — models
+                                  the old file-based flow, not current behavior)
 
-relentless MCP server (Postgres, spec_pipeline schema)
-  specs                        (one row per feature, scoped to a project)
+relentless MCP server (Postgres, discovery + spec_pipeline schemas)
+  discovery.trails             (one row per discovery effort — Stage 0)
+    discovery.waypoints        (one question each) + waypoint_assets + dependency edges
+    discovery.trail_terms      (per-trail terminology)
+    trails.outcome_spec_id ──► the spec a completed trail produced
+  spec_pipeline.specs          (one row per feature, scoped to a project)
     spec_stages                (per-stage approve/deny state, replaces status.json)
     requirements + user_stories + acceptance_criteria + non_goals + ...
     designs + design_components + design_traceability + ...
@@ -73,54 +82,67 @@ relentless MCP server (Postgres, spec_pipeline schema)
 human idea
    │
    ▼
-[grilling session]  (type: session — takes over the active agent session)
-   │  interviews the human until requirements are unambiguous
-   │  produces a Q&A transcript held only in the session's context — nothing is
-   │  written to a file. There is no MCP tool for grilling/decisions data.
+[trail]  (discovery schema — grilling and/or wayfinder skills)
+   │  each question becomes a WAYPOINT driven to a decision
+   │  (sighted → marked → claimed → reached | bypassed), persisted live via the
+   │  mcp__relentless__* trail tools — nothing lives only in session context
    ▼
-decisions Q&A (in-context only) ──handed directly, verbatim, into the invocation
-   │                              of whichever agent performs Stage 1 next
+complete_trail (outcome: spec) ──creates the spec AND links the trail to it
+   │                             (trails.outcome_spec_id) in one transaction
    ▼
 [requirements compile]  (mechanical, via mcp__relentless__* tools)
-   │  decisions Q&A -> requirements rows, using requirements.template.md as the
-   │  target shape
+   │  the trail's reached waypoints (read via get_trail_by_spec) -> requirements
+   │  rows, using requirements.template.md as the target shape
    ▼
 requirements  ──[approve/deny gate]──►  design  ──[approve/deny gate]──►  tasks  ──[approve/deny gate]──►  implementation
    (autonomous draft)                     (autonomous draft)                (orchestrator)
 ```
 
-**The grilling interview is the last point of deep human interaction in the entire
-pipeline.** Every stage after requirements compilation is autonomous AI work. The human's
+**The trail — the grilling interview and any wayfinder campaign around it — is the last
+point of deep human interaction in the entire pipeline.** Every stage after requirements compilation is autonomous AI work. The human's
 only remaining involvement is a quick **approve/deny** review at the end of each stage —
 never another interview.
 
 ### Feature slug
 
 Derive a short kebab-case slug from the feature's working title as stated at the start of
-the interview (e.g. "dark mode toggle" → `dark-mode-toggle`). Call
+the trail (e.g. "dark mode toggle" → `dark-mode-toggle`). Call
 `mcp__relentless__list_specs` and check whether that slug is already in use in this
-project; if so, append a numeric suffix (`-2`, `-3`, ...) until it's free, then call
-`mcp__relentless__create_spec` with that slug. Keep the returned `specId` — everything
-downstream is addressed by it, not by the slug.
+project; if so, append a numeric suffix (`-2`, `-3`, ...) until it's free, then pass it to
+`mcp__relentless__complete_trail` when the trail completes with a spec outcome. Keep the
+returned `specId` — everything downstream is addressed by it, not by the slug.
 
-## Stage 0 — Requirements gathering (`grilling`, type: `session`)
+## Stage 0 — Discovery (a trail, via the `grilling` and `wayfinder` skills)
 
-A session-type skill takes over the active agent session and interviews the human about
-the feature idea until requirements are concrete, testable, and free of ambiguity. It
-produces only a raw Q&A transcript — not a formal document, and **not a file**. No
-`mcp__relentless__*` tool exists for grilling sessions or decisions, so there is nothing to
-persist here: the transcript lives in the session's own context and is handed directly,
-verbatim, into the Stage 1 invocation. Once that handoff happens, the transcript is not
-retained anywhere durable — it exists only for as long as it's needed to compile
-requirements from it.
+Stage 0 is a **trail**: one effort to turn a loose idea into a destination, stored in the
+`discovery` schema and worked entirely through `mcp__relentless__*` tools (`create_trail`,
+`add_waypoint`, `reach_waypoint`, `bypass_waypoint`, `get_frontier`, ... — the skills
+hard-fail without the relentless MCP server; there is no local storage layer). Each
+question is a **waypoint** driven to a decision through the lifecycle
+sighted → marked → claimed → reached | bypassed.
+
+There is no structural difference between a quick grilling conversation and a long
+wayfinder campaign: a grill adds a waypoint and reaches it in the same breath (no claim
+step); a campaign marks waypoints and lets later conversations claim them off the frontier
+(`claim_waypoint` / `get_frontier`; a stale claim is reclaimable after the server's
+`RELENTLESS_CLAIM_TTL`, or released manually via `release_waypoint`). Either way, every
+decision is persisted durably as it's made — nothing lives only in the session's context,
+and there is no verbatim in-context handoff to Stage 1.
+
+The trail ends with `mcp__relentless__complete_trail` (`outcome_kind: "spec"`), which
+creates the spec **and** links the trail to it (`trails.outcome_spec_id`) in a single
+transaction. At most one trail can stand behind any spec.
 
 ## Stage 1 — Requirements compile (mechanical)
 
-Given the decisions Q&A transcript (passed in-context, not read from a file), produce the
-spec's requirements using `requirements.template.md` as the target section shape, via these
+The decisions transcript is the spec's linked trail: call
+`mcp__relentless__get_trail_by_spec` with the `specId` and read its reached waypoints
+(resolution + gist, in reached order) as the decisions, its bypassed waypoints as
+out-of-scope rulings, and its trail terms as terminology. Produce the spec's requirements
+from that using `requirements.template.md` as the target section shape, via these
 `mcp__relentless__*` calls:
 
-1. If this is a new spec, `create_spec` first and keep the returned `specId`.
+1. The spec already exists — `complete_trail` created it. Do not create one here.
 2. `set_requirements_overview` for the `## Overview` section.
 3. `add_user_story` per story, then `add_acceptance_criterion` per EARS criterion under
    each returned `userStoryId`.

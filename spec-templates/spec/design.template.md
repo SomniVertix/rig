@@ -17,8 +17,8 @@
 ## Overview
 
 <!-- Plain-prose summary of the technical approach. Explicitly reference which
-     requirements/user stories (by name, from requirements.md) this design
-     addresses. -->
+     requirements/user stories (by name, from the approved requirements document)
+     this design addresses. -->
 
 ## Architecture
 
@@ -48,9 +48,9 @@
 
 ## Requirement Traceability
 
-<!-- Explicit mapping: every user story / requirement from requirements.md maps to
-     the specific part of this design that satisfies it. Nothing should be able to
-     silently fall through the cracks between stages. -->
+<!-- Explicit mapping: every user story / requirement from the requirements document
+     maps to the specific part of this design that satisfies it. Nothing should be
+     able to silently fall through the cracks between stages. -->
 
 | Requirement | Addressed by |
 |---|---|
@@ -76,7 +76,7 @@
 ## Flags
 
 <!-- Concerns, gaps, or assumptions encountered while drafting this design because
-     requirements.md was insufficient or ambiguous on some point. Always draft your
+     the requirements were insufficient or ambiguous on some point. Always draft your
      best-effort design regardless — record the concern here instead of halting to
      ask the human. The human reviews this section during the approve/deny gate. -->
 

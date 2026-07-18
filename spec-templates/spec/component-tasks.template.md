@@ -18,7 +18,7 @@
 
 # Tasks: <feature name> — Component: <component-slug> (<Component Display Name>)
 
-<!-- `<component-slug>` MUST match a slug row in design.md's Components section
+<!-- `<component-slug>` MUST match a slug row in the design's Components section
      exactly (kebab-case). This document exists 1:1 with that declared component. -->
 
 ## Order
@@ -54,8 +54,9 @@
     run concurrently.
   - Batches run in sequence (P1, then P2, then P3...).
   - Keep runtime completion state in Order/Task List checkboxes, not here.
-  - Dependencies on OTHER components are not represented here — see this spec's
-    tasks-index.md Cross-Component Dependencies section instead.
+  - Dependencies on OTHER components are not represented here — see the spec-wide
+    tasks index's Cross-Component Dependencies section instead (rendered via
+    render_document with component: "all").
 -->
 
 - **P1 (parallel):** 1.1, 1.2
@@ -70,15 +71,16 @@
     ID              stable identifier referenced by Order and subtasks.
     Description     what to build/change.
     Traceability    requirement(s) + design section(s) this task implements,
-                    including this component's row in design.md's Components table.
+                    including this component's row in the design's Components table.
     Files/areas     explicit list — the auditable task blast radius.
                     touched
     Suggested agent take inventory of the agent types currently available and name
                     the best-suited one for this task. `none` if no available
                     agent is a good fit — the implementer falls back to its
                     default agent.
-    Subtasks        required numbered checklist in run order; each subtask includes
-                    ID, description, suggested agent (or `none`), and acceptance.
+    Subtasks        numbered checklist in run order, when the task has subtasks;
+                    each includes ID, description, suggested agent (or `none`),
+                    and acceptance.
     Acceptance      how the implementer knows this task is done. Derive from the
     check           relevant EARS criteria / design details, not a vague restatement
                     of the description.
@@ -108,7 +110,7 @@
 
 ## Flags
 
-<!-- Concerns, gaps, or assumptions encountered while breaking design.md into tasks
+<!-- Concerns, gaps, or assumptions encountered while breaking the design into tasks
      for THIS COMPONENT because it was insufficient or ambiguous on some point.
      Always draft your best-effort task list regardless — record the concern here
      instead of halting to ask the human. The human reviews this section during the

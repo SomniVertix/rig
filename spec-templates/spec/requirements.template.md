@@ -64,9 +64,10 @@ As a <role>, I want <capability>, so that <benefit>.
 
 ## Assumptions / Open Questions
 
-<!-- Anything the compile step could not resolve from decisions.md and had to ask the
-     human about directly, or anything left genuinely ambiguous and flagged for the
-     design stage to be aware of. Do not silently drop gaps — record them here. -->
+<!-- Anything the compile step could not resolve from the trail's decisions transcript,
+     or anything left genuinely ambiguous and flagged for the design stage to be aware
+     of. The compiler cannot pause to ask the human — recording the gap here is the
+     mechanism, reviewed at the approve/deny gate. Do not silently drop gaps. -->
 
 -
 
