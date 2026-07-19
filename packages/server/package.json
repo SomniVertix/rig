@@ -29,6 +29,6 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm -r build && node --test ./test/e2e/api.test.mjs ./test/e2e/mcp.test.mjs ./test/e2e/web-api.test.mjs ./test/e2e/sse.test.mjs ./test/unit/guardrails.test.mjs ./test/unit/load-config.test.mjs"
+    "test": "pnpm -r build && node --test ./test/e2e/api.test.mjs ./test/e2e/mcp.test.mjs ./test/e2e/web-api.test.mjs ./test/e2e/sse.test.mjs ./test/unit/guardrails.test.mjs ./test/unit/load-config.test.mjs ./test/unit/trail-tools.test.mjs"
   }
 }
