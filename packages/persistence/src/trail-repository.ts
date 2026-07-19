@@ -415,36 +415,51 @@ export class TrailRepository {
 		if (input.outcomeKind !== 'spec' && input.spec !== undefined) {
 			throw new SpecRepositoryError('spec_input_forbidden', `complete_trail: spec creation only applies to outcomeKind 'spec', got '${input.outcomeKind}'`);
 		}
+		const mapSpecRow = (specRow: Record<string, unknown>): SpecRecord => ({
+			id: specRow.id as string,
+			projectId: specRow.project_id as string | null,
+			slug: specRow.slug as string,
+			featureName: specRow.feature_name as string,
+			currentStage: specRow.current_stage as string,
+			createdAt: toIso(specRow.created_at as string | Date),
+			updatedAt: toIso(specRow.updated_at as string | Date)
+		});
 		const completed = await this.withTx(async (client) => {
 			try {
 				let spec: SpecRecord | null = null;
 				if (input.spec !== undefined) {
-					const trailResult = await client.query<{ project_id: string; status: TrailStatus }>(
-						`select project_id, status from discovery.trails where id = $1`,
+					const trailResult = await client.query<{ project_id: string; status: TrailStatus; outcome_spec_id: string | null }>(
+						`select project_id, status, outcome_spec_id from discovery.trails where id = $1`,
 						[trailId]
 					);
 					const trailRow = trailResult.rows[0];
 					if (trailRow === undefined) {
 						throw new SpecRepositoryError('not_found', `trail not found: ${trailId}`);
 					}
-					const specResult = await client.query<{ id: string } & Record<string, unknown>>(
-						`insert into spec_pipeline.specs (project_id, slug, feature_name) values ($1, $2, $3) returning *`,
-						[trailRow.project_id, input.spec.slug, input.spec.featureName]
-					);
-					const specRow = specResult.rows[0];
-					if (specRow === undefined) {
-						throw new Error('completeTrail: spec insert did not return a row');
+					// Re-completing a trail that was reopened after a prior spec handoff must not try to
+					// re-create that same spec (its slug is already taken) — reuse it instead of inserting.
+					if (trailRow.outcome_spec_id !== null) {
+						const existingSpecResult = await client.query<Record<string, unknown>>(
+							`select * from spec_pipeline.specs where id = $1`,
+							[trailRow.outcome_spec_id]
+						);
+						const existingSpecRow = existingSpecResult.rows[0];
+						if (existingSpecRow !== undefined && existingSpecRow.slug === input.spec.slug) {
+							spec = mapSpecRow(existingSpecRow);
+						}
 					}
-					await insertAuditLogRow(client, audit, 'insert', 'specs', specRow.id);
-					spec = {
-						id: specRow.id as string,
-						projectId: specRow.project_id as string | null,
-						slug: specRow.slug as string,
-						featureName: specRow.feature_name as string,
-						currentStage: specRow.current_stage as string,
-						createdAt: toIso(specRow.created_at as string | Date),
-						updatedAt: toIso(specRow.updated_at as string | Date)
-					};
+					if (spec === null) {
+						const specResult = await client.query<{ id: string } & Record<string, unknown>>(
+							`insert into spec_pipeline.specs (project_id, slug, feature_name) values ($1, $2, $3) returning *`,
+							[trailRow.project_id, input.spec.slug, input.spec.featureName]
+						);
+						const specRow = specResult.rows[0];
+						if (specRow === undefined) {
+							throw new Error('completeTrail: spec insert did not return a row');
+						}
+						await insertAuditLogRow(client, audit, 'insert', 'specs', specRow.id);
+						spec = mapSpecRow(specRow);
+					}
 				}
 				const result = await client.query<TrailRow>(
 					`update discovery.trails

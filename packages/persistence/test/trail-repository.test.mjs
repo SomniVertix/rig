@@ -526,6 +526,30 @@ describe('completeTrail re-run after reopenTrail', () => {
 		assert.equal(oldSpecRows.rowCount, 1, 'the superseded spec row itself is untouched, just unlinked');
 	});
 
+	test('spec -> reopen -> the same spec slug re-links to the existing spec instead of duplicating it', async () => {
+		const trail = await createTestTrail();
+		const slug = `same-spec-${randomUUID().slice(0, 8)}`;
+		const { spec: firstSpec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+
+		await repository.reopenTrail(trail.id, TEST_AUDIT);
+
+		const { trail: recompleted, spec: secondSpec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+		assert.equal(recompleted.status, 'complete');
+		assert.equal(recompleted.outcomeSpecId, firstSpec.id, 're-completing with the already-linked slug reuses the same spec row');
+		assert.equal(secondSpec.id, firstSpec.id);
+
+		const specRows = await pool.query(`select id from spec_pipeline.specs where slug = $1`, [slug]);
+		assert.equal(specRows.rowCount, 1, 'no duplicate spec row was created for the matching slug');
+	});
+
 	test('spec -> reopen -> decision clears outcome_spec_id back to null', async () => {
 		const trail = await createTestTrail();
 		const specSlug = `to-be-cleared-${randomUUID().slice(0, 8)}`;
@@ -614,8 +638,10 @@ describe('reopenTrail', () => {
 		assert.equal(specStatus.currentStage, 'requirements', 'a freshly created spec starts on the requirements stage');
 		assert.deepEqual(
 			specStatus.stages.map((stage) => stage.stageName),
-			['design', 'requirements', 'tasks'],
-			'the three auto-seeded stage rows, alphabetically'
+			['requirements', 'design', 'tasks'],
+			// `stage_name` is a Postgres ENUM (spec_pipeline.spec_stage_name); `order by
+			// stage_name asc` sorts by the enum's declared label order, not lexically.
+			'the three auto-seeded stage rows, in the enum\'s declared pipeline order'
 		);
 		for (const stage of specStatus.stages) {
 			assert.equal(stage.status, 'not_started', 'reopening never mutates the spec pipeline');
