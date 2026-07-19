@@ -335,6 +335,15 @@ describe('syncKnownActorsFromActorsDirectory (T6.4, Story 11.5)', () => {
 		const actors = await syncKnownActorsFromActorsDirectory(pool, join(actorsDirectory, 'does-not-exist'));
 		assert.deepEqual(actors, []);
 	});
+
+	test('follows a symlinked actor entry (Dirent.isDirectory() alone would miss it, since it never follows symlinks)', async () => {
+		const actors = await syncKnownActorsFromActorsDirectory(pool, actorsDirectory);
+		assert.ok(actors.includes('symlinked-actor'), 'expected the symlinked-actor/SKILL.md entry to be scanned');
+
+		const result = await pool.query(`select actor, source from spec_pipeline.known_actors where actor = 'symlinked-actor'`);
+		assert.equal(result.rowCount, 1);
+		assert.equal(result.rows[0].source, 'claude-skills');
+	});
 });
 
 describe('assertParentCheckboxRule (T6.5, Story 6.6)', () => {

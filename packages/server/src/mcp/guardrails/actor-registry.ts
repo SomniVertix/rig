@@ -66,7 +66,14 @@ export async function syncKnownActorsFromActorsDirectory(
 ): Promise<string[]> {
 	let dirEntries;
 	try {
-		dirEntries = (await readdir(actorsDirectory, { withFileTypes: true })).filter((entry) => entry.isDirectory());
+		// Dirent.isDirectory() never follows symlinks, but every actor entry here
+		// is documented above to typically BE a symlink -- so isDirectory()-only
+		// filtering silently drops all of them. The stat() below (which does
+		// follow symlinks) is what actually validates each entry resolves to a
+		// real directory with a SKILL.md.
+		dirEntries = (await readdir(actorsDirectory, { withFileTypes: true })).filter(
+			(entry) => entry.isDirectory() || entry.isSymbolicLink()
+		);
 	} catch {
 		return [];
 	}
