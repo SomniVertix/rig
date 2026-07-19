@@ -195,6 +195,25 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 		)
 	);
 
+	server.registerTool(
+		'reopen_trail',
+		{
+			description:
+				"Reverses a mistaken complete_trail or abandon_trail: restores the trail to 'active' and clears outcomeSummary, but deliberately leaves outcomeKind/outcomeSpecId in place as a persisting record of the prior completion — no severing of a real spec link. Legal only on a 'complete' or 'abandoned' trail. complete_trail can be called again afterward to overwrite the outcome with a new completion. Doesn't block on downstream state that already moved — if outcomeSpecId is set, reports the linked spec's current stage and per-stage status as specStatus, without touching the spec pipeline. No time limit.",
+			inputSchema: {
+				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
+				trailId: z.string().min(1),
+				reason: z.string().min(1).describe('Why this completion/abandonment was a mistake. Required as deliberate friction, matching bypassReason; not persisted, since audit_log carries no free-text column.')
+			}
+		},
+		withToolErrorHandling(
+			withGuardrails(context.pool, { notBlank: ['reason'] }, async (args) => {
+				const result = await repository.reopenTrail(args.trailId, auditFrom(context, args.actor));
+				return jsonResult(result);
+			})
+		)
+	);
+
 	// ---------------------------------------------------------------------------
 	// Waypoints
 	// ---------------------------------------------------------------------------
@@ -356,6 +375,25 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 			withGuardrails(context.pool, { notBlank: ['bypassReason'] }, async (args) => {
 				const waypoint = await repository.bypassWaypoint(args.waypointId, args.bypassReason, auditFrom(context, args.actor));
 				return jsonResult({ waypoint });
+			})
+		)
+	);
+
+	server.registerTool(
+		'unbypass_waypoint',
+		{
+			description:
+				"Reverses a mistaken bypass: restores the waypoint to its exact pre-bypass status (marked or sighted) and clears bypassReason. Legal only on a currently-bypassed waypoint whose pre-bypass status was recorded (waypoints bypassed before this existed need manual recovery via update_waypoint). Doesn't block on downstream state that already moved — reports progressedDependents (direct dependents already reached, bypassed, or claimed since the bypass) without undoing them. No time limit.",
+			inputSchema: {
+				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
+				waypointId: z.string().min(1),
+				reason: z.string().min(1).describe('Why this bypass was a mistake. Required as deliberate friction, matching bypassReason; not persisted on the waypoint since the restore clears bypassReason.')
+			}
+		},
+		withToolErrorHandling(
+			withGuardrails(context.pool, { notBlank: ['reason'] }, async (args) => {
+				const { waypoint, progressedDependents } = await repository.unbypassWaypoint(args.waypointId, auditFrom(context, args.actor));
+				return jsonResult({ waypoint, progressedDependents });
 			})
 		)
 	);

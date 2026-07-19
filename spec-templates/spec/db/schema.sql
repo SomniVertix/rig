@@ -932,13 +932,24 @@ CREATE TABLE IF NOT EXISTS discovery.trails (
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (project_id, slug),
     CONSTRAINT trails_slug_is_kebab_case CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
-    CONSTRAINT trails_outcome_only_when_complete
-        CHECK (outcome_kind IS NULL OR status = 'complete'),
+    -- No trails_outcome_only_when_complete constraint: reopen_trail
+    -- deliberately restores status to 'active' while leaving outcome_kind /
+    -- outcome_spec_id in place as a persisting record of the trail's most
+    -- recent completion, so outcome_* no longer implies status = 'complete'.
+    -- outcome_kind is still only ever *set* by complete_trail (which always
+    -- sets status = 'complete' in the same statement), so this is purely a
+    -- read-side loosening, not an open door for outcome_kind to appear from
+    -- anywhere else.
     CONSTRAINT trails_spec_outcome_has_spec_kind
         CHECK (outcome_spec_id IS NULL OR outcome_kind = 'spec')
 );
 COMMENT ON TABLE discovery.trails IS
     'One effort to turn a loose idea into a destination. Both the grilling and wayfinder skills operate on this same entity; the difference is behavioral (resolve-live vs. mark-and-claim-later), never structural.';
+
+-- Existing databases (this constraint predates reopen_trail): drop it so a
+-- reopened trail can keep outcome_kind/outcome_spec_id from a prior
+-- completion while status is 'active' again.
+ALTER TABLE discovery.trails DROP CONSTRAINT IF EXISTS trails_outcome_only_when_complete;
 
 -- The handoff pointer: at most one trail behind any given spec, mirroring the
 -- old one-decisions.md-per-spec rule. requirements-compiler resolves a spec's
@@ -984,6 +995,13 @@ CREATE TABLE IF NOT EXISTS discovery.waypoints (
                                       -- the plain resolution (optional)
     bypass_reason   TEXT,             -- why this sits past the destination
                                       -- (bypassed only)
+    previous_status discovery.waypoint_status, -- status immediately before
+                                      -- bypass_waypoint terminated it ('marked'
+                                      -- or 'sighted'); set by bypass_waypoint,
+                                      -- cleared by unbypass_waypoint, which
+                                      -- restores status to this value. Not a
+                                      -- general history mechanism -- exists
+                                      -- solely to make unbypass exact.
     reached_in      TEXT,             -- provenance stamp: identifier of the
                                       -- conversation that resolved it
     reached_at      TIMESTAMPTZ,
@@ -997,8 +1015,20 @@ CREATE TABLE IF NOT EXISTS discovery.waypoints (
                OR (resolution IS NOT NULL AND resolution_gist IS NOT NULL
                    AND reached_at IS NOT NULL)),
     CONSTRAINT waypoints_bypassed_has_reason
-        CHECK (status <> 'bypassed' OR bypass_reason IS NOT NULL)
+        CHECK (status <> 'bypassed' OR bypass_reason IS NOT NULL),
+    CONSTRAINT waypoints_previous_status_only_when_bypassed
+        CHECK (previous_status IS NULL OR status = 'bypassed')
 );
+
+-- Existing databases (this table predates previous_status, added for
+-- unbypass_waypoint): apply the same shape without dropping data.
+ALTER TABLE discovery.waypoints
+    ADD COLUMN IF NOT EXISTS previous_status discovery.waypoint_status;
+ALTER TABLE discovery.waypoints
+    DROP CONSTRAINT IF EXISTS waypoints_previous_status_only_when_bypassed;
+ALTER TABLE discovery.waypoints
+    ADD CONSTRAINT waypoints_previous_status_only_when_bypassed
+        CHECK (previous_status IS NULL OR status = 'bypassed');
 COMMENT ON TABLE discovery.waypoints IS
     'The unified question lifecycle: sighted (fog) -> marked (frontier-eligible) -> claimed -> reached (a decision) | bypassed (out of scope). A grilling conversation reaches straight from marked — add_waypoint accepts an inline resolution and inserts directly at reached; a wayfinder campaign leaves marked waypoints for later conversations to claim. Only marked waypoints are claimable (enforced by the canonical claim UPDATE, not schema).';
 

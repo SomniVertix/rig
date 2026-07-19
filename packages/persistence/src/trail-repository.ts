@@ -102,6 +102,7 @@ export interface WaypointRecord {
 	resolutionGist: string | null;
 	rationale: string | null;
 	bypassReason: string | null;
+	previousStatus: WaypointStatus | null;
 	reachedIn: string | null;
 	reachedAt: string | null;
 	createdAt: string;
@@ -122,6 +123,7 @@ interface WaypointRow extends Record<string, unknown> {
 	resolution_gist: string | null;
 	rationale: string | null;
 	bypass_reason: string | null;
+	previous_status: WaypointStatus | null;
 	reached_in: string | null;
 	reached_at: string | Date | null;
 	created_at: string | Date;
@@ -143,6 +145,7 @@ function rowToWaypoint(row: WaypointRow): WaypointRecord {
 		resolutionGist: row.resolution_gist,
 		rationale: row.rationale,
 		bypassReason: row.bypass_reason,
+		previousStatus: row.previous_status,
 		reachedIn: row.reached_in,
 		reachedAt: row.reached_at === null ? null : toIso(row.reached_at),
 		createdAt: toIso(row.created_at),
@@ -238,6 +241,14 @@ function rowToTrailTerm(row: TrailTermRow): TrailTermRecord {
 		createdAt: toIso(row.created_at),
 		updatedAt: toIso(row.updated_at)
 	};
+}
+
+/** The linked spec's downstream state, surfaced (never mutated) by `reopenTrail`
+ * so the caller can see what's built on top of a completion before undoing it. */
+export interface TrailSpecStatus {
+	specId: string;
+	currentStage: string;
+	stages: { stageName: string; status: string; updatedAt: string }[];
 }
 
 /**
@@ -482,6 +493,75 @@ export class TrailRepository {
 		return trail;
 	}
 
+	/**
+	 * Reverses a mistaken completion or abandonment: restores the trail to
+	 * 'active' and clears `outcome_summary` (stale prose about a completion
+	 * that's no longer final), but deliberately does NOT null `outcome_kind` /
+	 * `outcome_spec_id` — those persist as the record of the prior completion,
+	 * per this trail's locked design. That's what required W1's schema change:
+	 * dropping `trails_outcome_only_when_complete`, the constraint that used to
+	 * forbid an active trail from carrying an outcome_kind. `completeTrail` is
+	 * re-runnable afterward and will overwrite these fields with the new
+	 * completion (still bound by `trails_one_per_spec`'s partial-unique index).
+	 *
+	 * Only legal on a 'complete' or 'abandoned' trail. Doesn't block on
+	 * downstream state that already moved while the trail sat completed: if
+	 * `outcome_spec_id` is set, the linked spec's current stage and per-stage
+	 * status are looked up (read-only, outside the transaction) and returned as
+	 * `specStatus` so the caller can see what's downstream without the reopen
+	 * itself being blocked by it — the spec pipeline is untouched either way.
+	 */
+	async reopenTrail(trailId: string, audit: AuditInfo): Promise<{ trail: TrailRecord; specStatus: TrailSpecStatus | null }> {
+		const trail = await this.withTx(async (client) => {
+			const result = await client.query<TrailRow>(
+				`update discovery.trails
+				 set status = 'active', outcome_summary = null
+				 where id = $1 and status in ('complete', 'abandoned') returning *`,
+				[trailId]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
+				const existing = await client.query<{ status: TrailStatus }>(`select status from discovery.trails where id = $1`, [trailId]);
+				if (existing.rows[0] === undefined) {
+					throw new SpecRepositoryError('not_found', `trail not found: ${trailId}`);
+				}
+				throw new SpecRepositoryError(
+					'not_reopenable',
+					`reopen_trail: trail is '${existing.rows[0].status}', only a complete or abandoned trail can be reopened`
+				);
+			}
+			await insertAuditLogRow(client, audit, 'update', 'discovery.trails', row.id);
+			return rowToTrail(row);
+		});
+
+		let specStatus: TrailSpecStatus | null = null;
+		if (trail.outcomeSpecId !== null) {
+			const specResult = await this.pool.query<{ current_stage: string }>(
+				`select current_stage from spec_pipeline.specs where id = $1`,
+				[trail.outcomeSpecId]
+			);
+			const specRow = specResult.rows[0];
+			if (specRow !== undefined) {
+				const stagesResult = await this.pool.query<{ stage_name: string; status: string; updated_at: string | Date }>(
+					`select stage_name, status, updated_at from spec_pipeline.spec_stages where spec_id = $1 order by stage_name asc`,
+					[trail.outcomeSpecId]
+				);
+				specStatus = {
+					specId: trail.outcomeSpecId,
+					currentStage: specRow.current_stage,
+					stages: stagesResult.rows.map((stageRow) => ({
+						stageName: stageRow.stage_name,
+						status: stageRow.status,
+						updatedAt: toIso(stageRow.updated_at)
+					}))
+				};
+			}
+		}
+
+		this.emitChange({ type: 'trail_changed', trailId: trail.id });
+		return { trail, specStatus };
+	}
+
 	/** One read for the whole computed map — every section the old map file stored
 	 * by hand, derived live from waypoint status. */
 	async getTrailMap(trailId: string): Promise<TrailMap | null> {
@@ -717,7 +797,7 @@ export class TrailRepository {
 		const waypoint = await this.withTx(async (client) => {
 			const result = await client.query<WaypointRow>(
 				`update discovery.waypoints
-				 set status = 'bypassed', bypass_reason = $2
+				 set status = 'bypassed', bypass_reason = $2, previous_status = status
 				 where id = $1 and status in ('sighted', 'marked', 'claimed') returning *`,
 				[waypointId, bypassReason]
 			);
@@ -731,6 +811,59 @@ export class TrailRepository {
 		});
 		this.emitChange({ type: 'waypoint_changed', trailId: waypoint.trailId, waypointId: waypoint.id });
 		return waypoint;
+	}
+
+	/**
+	 * Reverses a mistaken bypass: restores the waypoint to its exact pre-bypass
+	 * status (`previous_status`, captured by `bypassWaypoint`) and clears both
+	 * `bypass_reason` and `previous_status`. Only legal on a currently-bypassed
+	 * waypoint that has a recorded `previous_status` — a waypoint bypassed before
+	 * this column existed has no pre-bypass status to restore and must be recovered
+	 * manually with `updateWaypoint`. `reason` is required at the tool layer (the
+	 * same deliberate-friction convention as `bypassWaypoint`'s `bypassReason`) but,
+	 * per this trail's locked scope (targeted undo, no general-purpose history
+	 * table), has nowhere durable to live — `audit_log` carries no free-text column
+	 * — so it is validated by the caller and not threaded down here.
+	 *
+	 * Unbypassing doesn't block on downstream state that already moved while the
+	 * waypoint sat bypassed, so the caller can see the blast radius without the
+	 * undo itself being blocked by it: `progressedDependents` lists the direct
+	 * dependents (edges from this waypoint) that are already reached, bypassed, or
+	 * claimed.
+	 */
+	async unbypassWaypoint(waypointId: string, audit: AuditInfo): Promise<{ waypoint: WaypointRecord; progressedDependents: WaypointRecord[] }> {
+		const waypoint = await this.withTx(async (client) => {
+			const result = await client.query<WaypointRow>(
+				`update discovery.waypoints
+				 set status = previous_status, bypass_reason = null, previous_status = null
+				 where id = $1 and status = 'bypassed' and previous_status is not null
+				 returning *`,
+				[waypointId]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
+				const current = await this.requireWaypoint(client, waypointId);
+				if (current.status !== 'bypassed') {
+					throw new SpecRepositoryError('not_bypassed', `unbypass_waypoint: waypoint is '${current.status}', only a bypassed waypoint can be unbypassed`);
+				}
+				throw new SpecRepositoryError(
+					'no_previous_status',
+					'unbypass_waypoint: this waypoint was bypassed before previous_status tracking existed, so its pre-bypass status cannot be recovered automatically — restore it manually with update_waypoint'
+				);
+			}
+			await insertAuditLogRow(client, audit, 'update', 'discovery.waypoints', row.id);
+			return rowToWaypoint(row);
+		});
+		const dependents = await this.pool.query<WaypointRow>(
+			`select w.*
+			 from discovery.waypoint_dependency_edges e
+			 join discovery.waypoints w on w.id = e.to_waypoint_id
+			 where e.from_waypoint_id = $1 and w.status in ('reached', 'bypassed', 'claimed')
+			 order by w.waypoint_number`,
+			[waypointId]
+		);
+		this.emitChange({ type: 'waypoint_changed', trailId: waypoint.trailId, waypointId: waypoint.id });
+		return { waypoint, progressedDependents: dependents.rows.map(rowToWaypoint) };
 	}
 
 	/**

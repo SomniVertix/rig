@@ -285,6 +285,84 @@ describe('reach / bypass transitions', () => {
 		assert.equal(bypassed.status, 'bypassed');
 		assert.equal(bypassed.bypassReason, 'Beyond the destination.');
 	});
+
+	test('bypassWaypoint records previous_status so a later unbypass has history to restore from', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Marked', question: 'Marked?' }, TEST_AUDIT);
+		const bypassed = await repository.bypassWaypoint(waypoint.id, 'Out of scope.', TEST_AUDIT);
+		assert.equal(bypassed.previousStatus, 'marked');
+	});
+});
+
+describe('unbypassWaypoint', () => {
+	test('restores a waypoint bypassed from marked back to marked, clearing bypassReason and previousStatus', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Marked', question: 'Marked?' }, TEST_AUDIT);
+		await repository.bypassWaypoint(waypoint.id, 'Mistaken bypass.', TEST_AUDIT);
+
+		const { waypoint: restored, progressedDependents } = await repository.unbypassWaypoint(waypoint.id, TEST_AUDIT);
+		assert.equal(restored.status, 'marked');
+		assert.equal(restored.bypassReason, null);
+		assert.equal(restored.previousStatus, null);
+		assert.deepEqual(progressedDependents, []);
+	});
+
+	test('restores a waypoint bypassed from sighted back to sighted — fog can be unbypassed too', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Foggy', question: 'Something out there?', sighted: true }, TEST_AUDIT);
+		await repository.bypassWaypoint(waypoint.id, 'Mistaken bypass.', TEST_AUDIT);
+
+		const { waypoint: restored } = await repository.unbypassWaypoint(waypoint.id, TEST_AUDIT);
+		assert.equal(restored.status, 'sighted');
+		assert.equal(restored.bypassReason, null);
+	});
+
+	test('reports progressedDependents — a dependent that moved on while the blocker sat bypassed — without undoing it', async () => {
+		const trail = await createTestTrail();
+		const blocker = await repository.addWaypoint(trail.id, { title: 'Blocker', question: 'First?' }, TEST_AUDIT);
+		const dependent = await repository.addWaypoint(trail.id, { title: 'Dependent', question: 'Second?' }, TEST_AUDIT);
+		await repository.addWaypointDependency(blocker.id, dependent.id, TEST_AUDIT);
+		await repository.bypassWaypoint(blocker.id, 'Mistaken bypass.', TEST_AUDIT);
+
+		// reachWaypoint only checks the waypoint's own status (marked/claimed), not
+		// frontier membership, so the dependent can progress independently of its
+		// bypassed blocker — exactly the scenario unbypass_waypoint needs to surface.
+		const reachedDependent = await repository.reachWaypoint(
+			dependent.id,
+			{ resolution: 'Decided anyway.', resolutionGist: 'Decided' },
+			TEST_AUDIT
+		);
+
+		const { waypoint: restored, progressedDependents } = await repository.unbypassWaypoint(blocker.id, TEST_AUDIT);
+		assert.equal(restored.status, 'marked');
+		assert.deepEqual(progressedDependents.map((w) => w.id), [reachedDependent.id]);
+		assert.equal(progressedDependents[0].status, 'reached', 'the undo reports the blast radius but never reverts it');
+	});
+
+	test('rejects unbypassing a waypoint that is not currently bypassed (not_bypassed)', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Never bypassed', question: 'Live?' }, TEST_AUDIT);
+
+		await assert.rejects(
+			() => repository.unbypassWaypoint(waypoint.id, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_bypassed'
+		);
+	});
+
+	test('rejects unbypassing a legacy bypass with no recorded previous_status (no_previous_status)', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Legacy bypass', question: 'Pre-dates the column?' }, TEST_AUDIT);
+		await repository.bypassWaypoint(waypoint.id, 'Out of scope.', TEST_AUDIT);
+
+		// Simulates a waypoint bypassed before previous_status tracking existed
+		// (two real examples of exactly this were found in production data).
+		await pool.query(`update discovery.waypoints set previous_status = null where id = $1`, [waypoint.id]);
+
+		await assert.rejects(
+			() => repository.unbypassWaypoint(waypoint.id, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'no_previous_status'
+		);
+	});
 });
 
 describe('getFrontier', () => {
@@ -390,6 +468,161 @@ describe('completeTrail', () => {
 		assert.equal(completed.outcomeKind, 'decision');
 		assert.equal(completed.outcomeSpecId, null);
 		assert.equal(spec, null);
+	});
+});
+
+describe('completeTrail re-run after reopenTrail', () => {
+	test('decision -> reopen -> decision overwrites outcome_kind/outcome_summary in place', async () => {
+		const trail = await createTestTrail();
+		await repository.completeTrail(trail.id, { outcomeKind: 'decision', outcomeSummary: 'First pass.' }, TEST_AUDIT);
+
+		const { trail: reopened } = await repository.reopenTrail(trail.id, TEST_AUDIT);
+		assert.equal(reopened.status, 'active');
+		assert.equal(reopened.outcomeKind, 'decision', 'reopen leaves the prior outcome_kind in place');
+		assert.equal(reopened.outcomeSummary, null, 'reopen clears the stale outcome_summary');
+
+		const { trail: recompleted, spec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'decision', outcomeSummary: 'Corrected decision.' },
+			TEST_AUDIT
+		);
+		assert.equal(recompleted.status, 'complete');
+		assert.equal(recompleted.outcomeKind, 'decision');
+		assert.equal(recompleted.outcomeSummary, 'Corrected decision.');
+		assert.equal(recompleted.outcomeSpecId, null);
+		assert.equal(spec, null);
+	});
+
+	test('spec -> reopen -> a different spec supersedes the old outcome_spec_id without tripping trails_one_per_spec', async () => {
+		const trail = await createTestTrail();
+		const firstSlug = `first-spec-${randomUUID().slice(0, 8)}`;
+		const { spec: firstSpec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug: firstSlug, featureName: 'First Feature' } },
+			TEST_AUDIT
+		);
+
+		const { trail: reopened } = await repository.reopenTrail(trail.id, TEST_AUDIT);
+		assert.equal(reopened.outcomeSpecId, firstSpec.id, 'reopen leaves the prior spec link in place');
+
+		const secondSlug = `second-spec-${randomUUID().slice(0, 8)}`;
+		const { trail: recompleted, spec: secondSpec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug: secondSlug, featureName: 'Second Feature' } },
+			TEST_AUDIT
+		);
+		assert.equal(recompleted.status, 'complete');
+		assert.equal(recompleted.outcomeSpecId, secondSpec.id);
+		assert.notEqual(secondSpec.id, firstSpec.id);
+
+		const bySpec = await repository.getTrailBySpec(secondSpec.id);
+		assert.ok(bySpec !== null);
+		assert.equal(bySpec.id, trail.id);
+
+		const byOldSpec = await repository.getTrailBySpec(firstSpec.id);
+		assert.equal(byOldSpec, null, 'the superseded spec is no longer linked from any trail');
+
+		const oldSpecRows = await pool.query(`select id from spec_pipeline.specs where id = $1`, [firstSpec.id]);
+		assert.equal(oldSpecRows.rowCount, 1, 'the superseded spec row itself is untouched, just unlinked');
+	});
+
+	test('spec -> reopen -> decision clears outcome_spec_id back to null', async () => {
+		const trail = await createTestTrail();
+		const specSlug = `to-be-cleared-${randomUUID().slice(0, 8)}`;
+		const { spec: firstSpec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug: specSlug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+
+		await repository.reopenTrail(trail.id, TEST_AUDIT);
+
+		const { trail: recompleted, spec } = await repository.completeTrail(trail.id, { outcomeKind: 'decision' }, TEST_AUDIT);
+		assert.equal(recompleted.outcomeKind, 'decision');
+		assert.equal(recompleted.outcomeSpecId, null);
+		assert.equal(spec, null);
+
+		const byOldSpec = await repository.getTrailBySpec(firstSpec.id);
+		assert.equal(byOldSpec, null, 'the old spec link is cleared, not left dangling on the trail');
+	});
+
+	test('decision -> reopen -> spec assigns a fresh outcome_spec_id where none existed before', async () => {
+		const trail = await createTestTrail();
+		await repository.completeTrail(trail.id, { outcomeKind: 'decision', outcomeSummary: 'Nothing to build yet.' }, TEST_AUDIT);
+		await repository.reopenTrail(trail.id, TEST_AUDIT);
+
+		const specSlug = `later-spec-${randomUUID().slice(0, 8)}`;
+		const { trail: recompleted, spec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug: specSlug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+		assert.equal(recompleted.outcomeKind, 'spec');
+		assert.ok(spec !== null);
+		assert.equal(recompleted.outcomeSpecId, spec.id);
+	});
+});
+
+describe('reopenTrail', () => {
+	test('restores a complete trail to active, clears outcomeSummary, and leaves outcomeKind in place', async () => {
+		const trail = await createTestTrail();
+		await repository.completeTrail(trail.id, { outcomeKind: 'decision', outcomeSummary: 'Decided.' }, TEST_AUDIT);
+
+		const { trail: reopened, specStatus } = await repository.reopenTrail(trail.id, TEST_AUDIT);
+		assert.equal(reopened.status, 'active');
+		assert.equal(reopened.outcomeKind, 'decision');
+		assert.equal(reopened.outcomeSummary, null);
+		assert.equal(specStatus, null, 'no spec was linked, so there is nothing to report');
+	});
+
+	test('restores an abandoned trail to active (abandon_trail is covered by the same undo path)', async () => {
+		const trail = await createTestTrail();
+		await repository.abandonTrail(trail.id, 'Dropped for now.', TEST_AUDIT);
+
+		const { trail: reopened } = await repository.reopenTrail(trail.id, TEST_AUDIT);
+		assert.equal(reopened.status, 'active');
+		assert.equal(reopened.outcomeSummary, null);
+	});
+
+	test('rejects reopening a trail that is already active (not_reopenable)', async () => {
+		const trail = await createTestTrail();
+		await assert.rejects(
+			() => repository.reopenTrail(trail.id, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_reopenable'
+		);
+	});
+
+	test('rejects reopening a trail that does not exist (not_found)', async () => {
+		await assert.rejects(
+			() => repository.reopenTrail(randomUUID(), TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_found'
+		);
+	});
+
+	test('reports the linked spec\'s current stage and per-stage status as specStatus, without touching the spec pipeline', async () => {
+		const trail = await createTestTrail();
+		const specSlug = `reopen-spec-status-${randomUUID().slice(0, 8)}`;
+		const { spec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug: specSlug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+
+		const { specStatus } = await repository.reopenTrail(trail.id, TEST_AUDIT);
+		assert.ok(specStatus !== null);
+		assert.equal(specStatus.specId, spec.id);
+		assert.equal(specStatus.currentStage, 'requirements', 'a freshly created spec starts on the requirements stage');
+		assert.deepEqual(
+			specStatus.stages.map((stage) => stage.stageName),
+			['design', 'requirements', 'tasks'],
+			'the three auto-seeded stage rows, alphabetically'
+		);
+		for (const stage of specStatus.stages) {
+			assert.equal(stage.status, 'not_started', 'reopening never mutates the spec pipeline');
+		}
+
+		const specRows = await pool.query(`select current_stage from spec_pipeline.specs where id = $1`, [spec.id]);
+		assert.equal(specRows.rows[0].current_stage, 'requirements', 'the spec itself is untouched by the reopen');
 	});
 });
 
