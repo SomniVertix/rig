@@ -517,6 +517,73 @@ describe('spec-stage-tracking-fixes W1: currentStage + tasks-stage status derive
 	});
 });
 
+describe('getImplementationStatus: distinguishes drafting approval from actual build completion', () => {
+	test('is "not_started" for a spec with no task items or Definition of Done items yet', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['status-alpha']);
+
+		const implementation = await repository.getImplementationStatus(spec.id);
+		assert.equal(implementation.status, 'not_started');
+		assert.equal(implementation.taskItemsTotal, 0);
+		assert.equal(implementation.taskItemsChecked, 0);
+		assert.equal(implementation.definitionOfDoneTotal, 0);
+		assert.equal(implementation.definitionOfDoneChecked, 0);
+		assert.deepEqual(implementation.componentsIncomplete, []);
+	});
+
+	test('is "not_started" when task items exist but none are checked yet, even if tasks_docs status is "approved"', async () => {
+		const { spec, tasksDocsBySlug } = await buildApprovedSpecWithComponents(['status-bravo']);
+		await addCompleteTaskItem(spec.id, 'status-bravo', 'Do the thing');
+		await setTasksDocStatus(tasksDocsBySlug.get('status-bravo').id, 'approved');
+
+		const implementation = await repository.getImplementationStatus(spec.id);
+		assert.equal(implementation.status, 'not_started');
+		assert.equal(implementation.taskItemsTotal, 1);
+		assert.equal(implementation.taskItemsChecked, 0);
+		assert.deepEqual(implementation.componentsIncomplete, ['status-bravo']);
+	});
+
+	test('is "in_progress" once some but not all task items are checked', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['status-charlie']);
+		const done = await addCompleteTaskItem(spec.id, 'status-charlie', 'Done item');
+		await addCompleteTaskItem(spec.id, 'status-charlie', 'Not done item');
+		await repository.updateTaskItem(done.id, { isChecked: true }, TEST_AUDIT);
+
+		const implementation = await repository.getImplementationStatus(spec.id);
+		assert.equal(implementation.status, 'in_progress');
+		assert.equal(implementation.taskItemsTotal, 2);
+		assert.equal(implementation.taskItemsChecked, 1);
+		assert.deepEqual(implementation.componentsIncomplete, ['status-charlie']);
+	});
+
+	test('lists only the still-incomplete component when one of several is fully checked', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['status-delta', 'status-echo']);
+		const deltaItem = await addCompleteTaskItem(spec.id, 'status-delta', 'Delta item');
+		await addCompleteTaskItem(spec.id, 'status-echo', 'Echo item');
+		await repository.updateTaskItem(deltaItem.id, { isChecked: true }, TEST_AUDIT);
+
+		const implementation = await repository.getImplementationStatus(spec.id);
+		assert.equal(implementation.status, 'in_progress');
+		assert.deepEqual(implementation.componentsIncomplete, ['status-echo']);
+	});
+
+	test('is "complete" only once every task item AND every Definition of Done item is checked', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['status-foxtrot']);
+		const item = await addCompleteTaskItem(spec.id, 'status-foxtrot', 'Only item');
+		const dod = await repository.addDefinitionOfDoneItem(spec.id, 'Ship it', TEST_AUDIT);
+
+		await repository.updateTaskItem(item.id, { isChecked: true }, TEST_AUDIT);
+		let implementation = await repository.getImplementationStatus(spec.id);
+		assert.equal(implementation.status, 'in_progress', 'task item checked but Definition of Done item is not yet');
+
+		await repository.updateDefinitionOfDoneItem(dod.id, { isChecked: true }, TEST_AUDIT);
+		implementation = await repository.getImplementationStatus(spec.id);
+		assert.equal(implementation.status, 'complete');
+		assert.equal(implementation.taskItemsChecked, implementation.taskItemsTotal);
+		assert.equal(implementation.definitionOfDoneChecked, implementation.definitionOfDoneTotal);
+		assert.deepEqual(implementation.componentsIncomplete, []);
+	});
+});
+
 async function buildRequirementsApprovedOnlySpec() {
 	const slug = `spec-${randomUUID().slice(0, 8)}`;
 	const spec = await repository.createSpec({ projectId, slug, featureName: 'Requirements Only Feature' }, TEST_AUDIT);

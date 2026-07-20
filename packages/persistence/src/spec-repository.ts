@@ -833,6 +833,60 @@ export async function deriveCurrentStage(client: Queryable, specId: string): Pro
 	return 'tasks';
 }
 
+export interface ImplementationStatusResult {
+	status: 'not_started' | 'in_progress' | 'complete';
+	taskItemsChecked: number;
+	taskItemsTotal: number;
+	definitionOfDoneChecked: number;
+	definitionOfDoneTotal: number;
+	componentsIncomplete: string[];
+}
+
+/** `tasks_docs.status = 'approved'` (and the tasks stage's derived `status` above) is a
+ * *drafting* gate -- it means the task/DoD items were written and approved, not that the
+ * work they describe was ever built. Cold readers of `get_spec` (fresh agents, humans)
+ * have no other way to tell "drafted" from "actually implemented" apart from paging
+ * through every component's `list_task_items`/`list_definition_of_done_items` and
+ * checking `isChecked` by hand -- this is exactly the confusion that motivated adding
+ * this function. `componentsIncomplete` lists component slugs with at least one
+ * unchecked task item, mirroring `deriveTasksAggregateStatus`'s `laggingComponents`
+ * shape. `status` is 'not_started' when there are no items yet (or none are checked),
+ * 'complete' only when every task item AND every Definition of Done item is checked. */
+export async function deriveImplementationStatus(client: Queryable, specId: string): Promise<ImplementationStatusResult> {
+	const taskItemsResult = await client.query<{ component_slug: string; checked: string; total: string }>(
+		`select td.component_slug as component_slug,
+		        coalesce(sum(case when ti.is_checked then 1 else 0 end), 0)::int as checked,
+		        count(ti.id)::int as total
+		 from spec_pipeline.tasks_docs td
+		 left join spec_pipeline.task_items ti on ti.tasks_doc_id = td.id
+		 where td.spec_id = $1
+		 group by td.component_slug
+		 order by td.component_slug asc`,
+		[specId]
+	);
+	const taskItemsChecked = taskItemsResult.rows.reduce((sum, row) => sum + Number(row.checked), 0);
+	const taskItemsTotal = taskItemsResult.rows.reduce((sum, row) => sum + Number(row.total), 0);
+	const componentsIncomplete = taskItemsResult.rows
+		.filter((row) => Number(row.checked) < Number(row.total))
+		.map((row) => row.component_slug);
+
+	const dodResult = await client.query<{ checked: string; total: string }>(
+		`select coalesce(sum(case when is_checked then 1 else 0 end), 0)::int as checked, count(*)::int as total
+		 from spec_pipeline.definition_of_done_items
+		 where spec_id = $1`,
+		[specId]
+	);
+	const definitionOfDoneChecked = Number(dodResult.rows[0]?.checked ?? 0);
+	const definitionOfDoneTotal = Number(dodResult.rows[0]?.total ?? 0);
+
+	const totalItems = taskItemsTotal + definitionOfDoneTotal;
+	const checkedItems = taskItemsChecked + definitionOfDoneChecked;
+	const status: 'not_started' | 'in_progress' | 'complete' =
+		totalItems === 0 || checkedItems === 0 ? 'not_started' : checkedItems === totalItems ? 'complete' : 'in_progress';
+
+	return { status, taskItemsChecked, taskItemsTotal, definitionOfDoneChecked, definitionOfDoneTotal, componentsIncomplete };
+}
+
 // =============================================================================
 // SpecRepository
 // =============================================================================
@@ -1100,6 +1154,13 @@ export class SpecRepository {
 			updatedAt: tasksAggregate.lastUpdatedAt ?? new Date().toISOString()
 		};
 		return [...result.rows.map(rowToSpecStage), tasksStage];
+	}
+
+	/** See `deriveImplementationStatus` for why this exists separately from
+	 * `getSpecStages`/`tasksDocs.status`: stage/doc status tracks drafting approval,
+	 * this tracks whether the approved work was actually built. */
+	async getImplementationStatus(specId: string): Promise<ImplementationStatusResult> {
+		return await deriveImplementationStatus(this.pool, specId);
 	}
 
 	// ---------------------------------------------------------------------------

@@ -249,6 +249,8 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     assert.equal(getSpecFreshData.spec.currentStage, 'requirements');
     const freshStageByName = Object.fromEntries(getSpecFreshData.stages.map((stage) => [stage.stageName, stage.status]));
     assert.deepEqual(freshStageByName, { requirements: 'not_started', design: 'not_started', tasks: 'not_started' });
+    assert.equal(getSpecFreshData.implementation.status, 'not_started', 'a fresh spec has no task items yet');
+    assert.equal(getSpecFreshData.implementation.taskItemsTotal, 0);
 
     // Test project isolation: same slug in project 2
     const client2 = await createAndConnectMcpClient(mcpHost, mcpPort, mcpBearerToken, 'project-2');
@@ -548,6 +550,36 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     assert.equal(getSpecApprovedData.spec.currentStage, 'tasks');
     const approvedStageByName = Object.fromEntries(getSpecApprovedData.stages.map((stage) => [stage.stageName, stage.status]));
     assert.deepEqual(approvedStageByName, { requirements: 'approved', design: 'approved', tasks: 'approved' });
+    // The tasks-stage status being "approved" is a drafting-approval gate, not proof the
+    // described work was built -- neither task item has been checked off yet, so
+    // implementation.status must still read not_started even though every stage is approved.
+    assert.equal(
+      getSpecApprovedData.implementation.status,
+      'not_started',
+      'tasks_docs.status=approved reflects drafting approval only; no task item is checked yet'
+    );
+    assert.equal(getSpecApprovedData.implementation.taskItemsTotal, 2);
+    assert.equal(getSpecApprovedData.implementation.taskItemsChecked, 0);
+    assert.deepEqual(getSpecApprovedData.implementation.componentsIncomplete.sort(), ['auth-gateway', 'token-service']);
+
+    // Checking off both task items should flip implementation.status to complete, proving
+    // get_spec's implementation field tracks real build completion independently of the
+    // (already-approved) stage status.
+    parseToolResponse(await client1.callTool({
+      name: 'update_task_item',
+      arguments: { actor: 'code-implementer', id: taskItem1Id, isChecked: true }
+    }));
+    parseToolResponse(await client1.callTool({
+      name: 'update_task_item',
+      arguments: { actor: 'code-implementer', id: taskItem2Id, isChecked: true }
+    }));
+    const getSpecImplementedData = parseToolResponse(await client1.callTool({
+      name: 'get_spec',
+      arguments: { specId: spec1Id }
+    }));
+    assert.equal(getSpecImplementedData.implementation.status, 'complete');
+    assert.equal(getSpecImplementedData.implementation.taskItemsChecked, 2);
+    assert.deepEqual(getSpecImplementedData.implementation.componentsIncomplete, []);
 
     // Test T5.7: get_next_stage after all finalization
     const nextStage2Result = await client1.callTool({

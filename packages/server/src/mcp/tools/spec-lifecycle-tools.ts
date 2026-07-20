@@ -43,7 +43,11 @@ export function registerSpecLifecycleTools(server: McpServer, context: McpToolCo
 	server.registerTool(
 		'get_spec',
 		{
-			description: 'Fetches a single spec (by id) and its per-stage status, scoped to this session\'s bound project.',
+			description:
+				'Fetches a single spec (by id), its per-stage status, and its implementation status, scoped to this session\'s bound project. ' +
+				'`stages`/`tasksDocs[].status` track drafting approval only -- check the returned `implementation` field ' +
+				'(status: not_started/in_progress/complete, derived from task-item and Definition-of-Done isChecked state) ' +
+				'to tell whether the approved work was actually built, rather than inferring it from stage status.',
 			inputSchema: {
 				specId: z.string().min(1)
 			}
@@ -55,7 +59,8 @@ export function registerSpecLifecycleTools(server: McpServer, context: McpToolCo
 			}
 			const stages = await repository.getSpecStages(args.specId);
 			const tasksDocs = await repository.listTasksDocs(args.specId);
-			return jsonResult({ spec, stages, tasksDocs });
+			const implementation = await repository.getImplementationStatus(args.specId);
+			return jsonResult({ spec, stages, tasksDocs, implementation });
 		})
 	);
 
