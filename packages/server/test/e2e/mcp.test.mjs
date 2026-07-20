@@ -155,13 +155,14 @@ async function humanApprove(connectionString, specId, stage) {
 
 // Helper to create an MCP client and perform proper initialization handshake
 async function createAndConnectMcpClient(host, port, bearerToken, projectSlug) {
-  const transportUrl = new URL(`http://${host}:${port}/mcp/${projectSlug}`);
+  const transportUrl = new URL(`http://${host}:${port}/mcp`);
 
-  // Create transport with Bearer token authorization
+  // Create transport with Bearer token authorization and project ID header
   const transport = new StreamableHTTPClientTransport(transportUrl, {
     requestInit: {
       headers: {
-        'Authorization': `Bearer ${bearerToken}`
+        'Authorization': `Bearer ${bearerToken}`,
+        'x-rig-project-id': projectSlug
       }
     }
   });
@@ -598,6 +599,206 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
 
     await client1.close();
     await client2.close();
+
+  } finally {
+    await composition.close().catch(() => {});
+    await postgres.stop().catch(() => {});
+  }
+});
+
+test('MCP error handling: missing x-rig-project-id header returns 400 missing_project_id', async () => {
+  const postgres = await startPostgresContainer();
+  const workspaceRoot = repoRoot;
+  const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-mirror-'));
+  const mcpBearerToken = 'test-bearer-token';
+  const mcpPort = await getFreePort();
+  const mcpHost = '127.0.0.1';
+
+  const executor = new FakeAgentExecutor('pi');
+
+  const config = {
+    workspaceRoot,
+    actorsDir: join(repoRoot, 'packages', 'server', 'test', 'fixtures', 'actors'),
+    databaseUrl: postgres.connectionString,
+    concurrencyCap: 1,
+    defaultTimeoutMs: 60_000,
+    librarySearchPaths: [],
+    logLevel: 'info',
+    defaultExecutor: 'pi',
+    defaultModel: undefined,
+    maxNodeExecutions: 100,
+    mirrorRoot,
+    configPath: join(workspaceRoot, 'rig.config.ts'),
+    mcpBearerToken,
+    mcpHost,
+    mcpPort
+  };
+
+  const composition = await buildComposition(config, { executor });
+
+  try {
+    const transportUrl = new URL(`http://${mcpHost}:${mcpPort}/mcp`);
+
+    // Create transport without x-rig-project-id header (only Authorization)
+    const transport = new StreamableHTTPClientTransport(transportUrl, {
+      requestInit: {
+        headers: {
+          'Authorization': `Bearer ${mcpBearerToken}`
+        }
+      }
+    });
+
+    const client = new Client({
+      name: 'rig-test-client',
+      version: '0.1.0'
+    });
+
+    let connectionFailed = false;
+    let errorMessage = '';
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      connectionFailed = true;
+      errorMessage = error.message;
+    }
+
+    assert(connectionFailed, 'Should reject connection without x-rig-project-id header');
+    assert(errorMessage.includes('missing_project_id') || errorMessage.includes('400'),
+      `Error should reference missing_project_id or 400 status, got: ${errorMessage}`);
+
+  } finally {
+    await composition.close().catch(() => {});
+    await postgres.stop().catch(() => {});
+  }
+});
+
+test('MCP error handling: invalid x-rig-project-id header returns 400 invalid_project_id', async () => {
+  const postgres = await startPostgresContainer();
+  const workspaceRoot = repoRoot;
+  const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-mirror-'));
+  const mcpBearerToken = 'test-bearer-token';
+  const mcpPort = await getFreePort();
+  const mcpHost = '127.0.0.1';
+
+  const executor = new FakeAgentExecutor('pi');
+
+  const config = {
+    workspaceRoot,
+    actorsDir: join(repoRoot, 'packages', 'server', 'test', 'fixtures', 'actors'),
+    databaseUrl: postgres.connectionString,
+    concurrencyCap: 1,
+    defaultTimeoutMs: 60_000,
+    librarySearchPaths: [],
+    logLevel: 'info',
+    defaultExecutor: 'pi',
+    defaultModel: undefined,
+    maxNodeExecutions: 100,
+    mirrorRoot,
+    configPath: join(workspaceRoot, 'rig.config.ts'),
+    mcpBearerToken,
+    mcpHost,
+    mcpPort
+  };
+
+  const composition = await buildComposition(config, { executor });
+
+  try {
+    const transportUrl = new URL(`http://${mcpHost}:${mcpPort}/mcp`);
+
+    // Create transport with invalid project ID (not kebab-case)
+    const transport = new StreamableHTTPClientTransport(transportUrl, {
+      requestInit: {
+        headers: {
+          'Authorization': `Bearer ${mcpBearerToken}`,
+          'x-rig-project-id': 'Not_Valid!'
+        }
+      }
+    });
+
+    const client = new Client({
+      name: 'rig-test-client',
+      version: '0.1.0'
+    });
+
+    let connectionFailed = false;
+    let errorMessage = '';
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      connectionFailed = true;
+      errorMessage = error.message;
+    }
+
+    assert(connectionFailed, 'Should reject connection with invalid x-rig-project-id header');
+    assert(errorMessage.includes('invalid_project_id') || errorMessage.includes('400'),
+      `Error should reference invalid_project_id or 400 status, got: ${errorMessage}`);
+
+  } finally {
+    await composition.close().catch(() => {});
+    await postgres.stop().catch(() => {});
+  }
+});
+
+test('MCP error handling: old /mcp/<slug> path format returns 404', async () => {
+  const postgres = await startPostgresContainer();
+  const workspaceRoot = repoRoot;
+  const mirrorRoot = await mkdtemp(join(tmpdir(), 'rig-mirror-'));
+  const mcpBearerToken = 'test-bearer-token';
+  const mcpPort = await getFreePort();
+  const mcpHost = '127.0.0.1';
+
+  const executor = new FakeAgentExecutor('pi');
+
+  const config = {
+    workspaceRoot,
+    actorsDir: join(repoRoot, 'packages', 'server', 'test', 'fixtures', 'actors'),
+    databaseUrl: postgres.connectionString,
+    concurrencyCap: 1,
+    defaultTimeoutMs: 60_000,
+    librarySearchPaths: [],
+    logLevel: 'info',
+    defaultExecutor: 'pi',
+    defaultModel: undefined,
+    maxNodeExecutions: 100,
+    mirrorRoot,
+    configPath: join(workspaceRoot, 'rig.config.ts'),
+    mcpBearerToken,
+    mcpHost,
+    mcpPort
+  };
+
+  const composition = await buildComposition(config, { executor });
+
+  try {
+    // Try to connect with old URL format that includes the slug in the path
+    const transportUrl = new URL(`http://${mcpHost}:${mcpPort}/mcp/development`);
+
+    const transport = new StreamableHTTPClientTransport(transportUrl, {
+      requestInit: {
+        headers: {
+          'Authorization': `Bearer ${mcpBearerToken}`,
+          'x-rig-project-id': 'development'
+        }
+      }
+    });
+
+    const client = new Client({
+      name: 'rig-test-client',
+      version: '0.1.0'
+    });
+
+    let connectionFailed = false;
+    let errorMessage = '';
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      connectionFailed = true;
+      errorMessage = error.message;
+    }
+
+    assert(connectionFailed, 'Should reject connection with old /mcp/<slug> path format');
+    assert(errorMessage.includes('404') || errorMessage.includes('not_found') || errorMessage.includes('not found'),
+      `Error should reference 404 or not_found, got: ${errorMessage}`);
 
   } finally {
     await composition.close().catch(() => {});

@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "rig": {
+    "projectId": "my-valid-project"
+  },
+  "settings": {
+    "editor.formatOnSave": true
+  }
+}

@@ -7,13 +7,23 @@ import { isAuthorizedRequest } from './auth.js';
 import { createMcpSessionManager } from './session.js';
 import type { McpSessionManager } from './session.js';
 
-// `/mcp/:projectSlug` is the single endpoint shape this transport exposes.
-// Design's illustrative `/(sse|mcp)/:projectSlug` shape is narrowed to this one
-// path because the pinned `StreamableHTTPServerTransport` (T4.1) handles both
+// `/mcp` is the single, fixed endpoint shape this transport exposes. Design's
+// illustrative `/(sse|mcp)/:projectSlug` shape is narrowed to this one path
+// because the pinned `StreamableHTTPServerTransport` (T4.1) handles both
 // message directions -- POST client->server messages and GET server->client
 // SSE streaming -- on a single path per the MCP Streamable HTTP spec, so no
-// separate `/sse/...` route is needed.
-const MCP_ROUTE_PATTERN = /^\/mcp\/([^/]+)\/?$/;
+// separate `/sse/...` route is needed. Project binding no longer comes from
+// the URL (`/mcp/:projectSlug`); it comes from the `X-Rig-Project-Id` header
+// instead (Design Data Model "X-Rig-Project-Id binding header + /mcp route").
+const MCP_ROUTE_PATTERN = /^\/mcp\/?$/;
+
+// Same slug shape the old URL-slug path accepted, now validated against the
+// header value instead of a URL path segment.
+const PROJECT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+	return Array.isArray(value) ? value[0] : value;
+}
 
 export interface McpTransportOptions {
 	pool: PersistenceBundle['pool'];
@@ -38,22 +48,30 @@ function sendJson(res: ServerResponse, statusCode: number, body: unknown): void 
 
 async function dispatch(req: IncomingMessage, res: ServerResponse, sessions: McpSessionManager, bearerToken: string, host: string): Promise<void> {
 	const requestUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? host}`);
-	const match = MCP_ROUTE_PATTERN.exec(requestUrl.pathname);
-	const rawProjectSlug = match?.[1];
-	if (rawProjectSlug === undefined) {
+	if (!MCP_ROUTE_PATTERN.test(requestUrl.pathname)) {
 		sendJson(res, 404, { error: 'not_found' });
 		return;
 	}
 
 	// Bearer-token pre-handler (Story 5.3): runs before any tool call is
-	// dispatched, and before the project slug is even resolved.
+	// dispatched, and before the project id is even resolved.
 	if (!isAuthorizedRequest(req, bearerToken)) {
 		sendJson(res, 401, { error: 'unauthorized' });
 		return;
 	}
 
-	const projectSlug = decodeURIComponent(rawProjectSlug);
-	await sessions.handleRequest(req, res, projectSlug);
+	const rawProjectId = headerValue(req.headers['x-rig-project-id']);
+	if (rawProjectId === undefined || rawProjectId.length === 0) {
+		sendJson(res, 400, { error: 'missing_project_id' });
+		return;
+	}
+
+	if (!PROJECT_ID_PATTERN.test(rawProjectId)) {
+		sendJson(res, 400, { error: 'invalid_project_id' });
+		return;
+	}
+
+	await sessions.handleRequest(req, res, rawProjectId);
 }
 
 /**

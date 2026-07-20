@@ -1,10 +1,11 @@
 {
   "mcpServers": {
     "rig": {
-      "type": "http",
-      "url": "http://localhost:8787/mcp/development",
-      "headers": {
-        "Authorization": "Bearer dev-local-token"
+      "command": "node",
+      "args": ["/Users/somniactic/Development/rig/packages/resolver/dist/cli.js"],
+      "env": {
+        "RIG_MCP_URL": "http://localhost:8787/mcp",
+        "RIG_MCP_BEARER_TOKEN": "dev-local-token"
       }
     }
   }

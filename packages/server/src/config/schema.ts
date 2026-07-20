@@ -26,6 +26,14 @@ export const serverConfigSchema = z.object({
 	// local/non-Docker dev Just Works; Docker overrides via RIG_ACTORS_DIR
 	// to point at the bind-mounted actors directory (see docker-compose.yml).
 	actorsDir: z.string().min(1).optional(),
+	// workspace-discovery scanner (RIG_WORKSPACES_DIR): the directory the
+	// scanner watches for workspace roots. Unset means the scanner stays
+	// unarmed -- no default is baked in here, per build-composition.ts.
+	workspacesDir: z.string().min(1).optional(),
+	// how often the workspace-discovery scanner re-scans workspacesDir.
+	// Unset falls back to the 60_000ms default applied at the
+	// build-composition.ts call site, not here.
+	workspacesScanIntervalMs: z.number().int().positive().optional(),
 	configPath: z.string().min(1).optional(),
 	// mcp-transport (Story 5): the MCP HTTP/SSE listener is only started when a
 	// bearer token is configured -- an unset token means the MCP endpoint stays

@@ -120,13 +120,13 @@ async function startPostgresContainer() {
  * Returns a client that can make tool calls.
  */
 async function createMcpClientSession(host, port, projectSlug, bearerToken) {
-	const urlString = `http://${host}:${port}/mcp/${encodeURIComponent(projectSlug)}`;
-	const url = new URL(urlString);
+	const url = new URL(`http://${host}:${port}/mcp`);
 
 	const transport = new StreamableHTTPClientTransport(url, {
 		requestInit: {
 			headers: {
-				'Authorization': `Bearer ${bearerToken}`
+				'Authorization': `Bearer ${bearerToken}`,
+				'x-rig-project-id': projectSlug
 			}
 		}
 	});

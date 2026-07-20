@@ -34,7 +34,8 @@
       "@rig/executors": ["packages/executors/src"],
       "@rig/library": ["packages/library/src"],
       "@rig/server": ["packages/server/src"],
-      "@rig/test-support": ["packages/test-support/src"]
+      "@rig/test-support": ["packages/test-support/src"],
+      "@rig/resolver": ["packages/resolver/src"]
     }
   },
   "include": [],
@@ -46,6 +47,7 @@
     { "path": "packages/executors" },
     { "path": "packages/library" },
     { "path": "packages/server" },
-    { "path": "packages/test-support" }
+    { "path": "packages/test-support" },
+    { "path": "packages/resolver" }
   ]
 }

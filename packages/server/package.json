@@ -24,11 +24,12 @@
     "@rig/test-support": "workspace:*",
     "fastify": "^5.10.0",
     "fastify-type-provider-zod": "^5.1.0",
+    "jsonc-parser": "^3.3.1",
     "zod": "^3.25.0"
   },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm -r build && node --test ./test/e2e/api.test.mjs ./test/e2e/mcp.test.mjs ./test/e2e/web-api.test.mjs ./test/e2e/sse.test.mjs ./test/unit/guardrails.test.mjs ./test/unit/load-config.test.mjs ./test/unit/trail-tools.test.mjs"
+    "test": "pnpm -r build && node --test ./test/e2e/api.test.mjs ./test/e2e/mcp.test.mjs ./test/e2e/web-api.test.mjs ./test/e2e/sse.test.mjs ./test/e2e/workspace-binding.test.mjs ./test/unit/guardrails.test.mjs ./test/unit/load-config.test.mjs ./test/unit/trail-tools.test.mjs ./test/unit/workspace-scanner.test.mjs"
   }
 }

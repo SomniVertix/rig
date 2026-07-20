@@ -64,11 +64,19 @@ services:
       # rather than mount somewhere wrong. Set it in a local .env, e.g.
       # RIG_CLAUDE_HOST_DIR=/Users/you/.claude
       RIG_ACTORS_DIR: /claude/rig-actors
+      # Workspace scanning: RIG_WORKSPACES_DIR points at the in-container
+      # mount of the host directory tree containing VS Code .code-workspace
+      # files. Mounted read-WRITE (unlike RIG_CLAUDE_HOST_DIR above) because
+      # the scanner writes a `rig.projectId` field back into each
+      # .code-workspace file it discovers. Set RIG_WORKSPACES_HOST_DIR in a
+      # local .env, e.g. RIG_WORKSPACES_HOST_DIR=/Users/you/workspaces
+      RIG_WORKSPACES_DIR: /workspaces
     ports:
       - "8787:8787"
       - "127.0.0.1:${RIG_WEB_PORT:-8788}:${RIG_WEB_PORT:-8788}"
     volumes:
       - ${RIG_CLAUDE_HOST_DIR}:/claude:ro
+      - ${RIG_WORKSPACES_HOST_DIR}:/workspaces
 
 volumes:
   postgres-data:

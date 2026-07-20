@@ -11,6 +11,7 @@ import type { ServerConfig } from '../config/index.js';
 import { startMcpTransport, type McpTransportHandle } from '../mcp/index.js';
 import { syncKnownActorsFromActorsDirectory } from '../mcp/guardrails/index.js';
 import { startWebTransport, type WebTransportHandle } from '../web/transport.js';
+import { startWorkspaceScanner } from '../workspace/index.js';
 
 export interface CompositionOverrides {
 	runStore?: RunStore;
@@ -101,6 +102,22 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 	// RIG_ACTORS_DIR to point at the bind-mounted curated actors
 	// directory (see docker-compose.yml).
 	await syncKnownActorsFromActorsDirectory(bundle.pool, config.actorsDir ?? join(config.workspaceRoot, '.claude', 'rig-actors'));
+
+	// workspace-discovery scanner (RIG_WORKSPACES_DIR, Story 1 AC1): only
+	// started when config.workspacesDir is configured -- without one the
+	// scanner is simply not started for this composition (e.g. existing
+	// tests/local dev that build a composition without configuring workspace
+	// discovery at all), mirroring the mcp-transport/web-transport config-gated
+	// pattern below. Runs one immediate scanWorkspaces pass on boot, then
+	// re-arms on config.workspacesScanIntervalMs (default 60s).
+	const scanner =
+		config.workspacesDir === undefined
+			? undefined
+			: startWorkspaceScanner({
+					pool: bundle.pool,
+					workspacesDir: config.workspacesDir,
+					intervalMs: config.workspacesScanIntervalMs ?? 60_000
+				});
 
 	// library-store (Story 1.2, 2.1, 3.1): prompts and workflows resolve from
 	// Postgres via `@rig/persistence`'s library-store, replacing the
@@ -206,6 +223,7 @@ export async function buildComposition(config: ServerConfig, overrides: Composit
 			if (webTransport !== undefined) {
 				await webTransport.close();
 			}
+			scanner?.stop();
 			await bundle.pool.end();
 		}
 	};

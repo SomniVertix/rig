@@ -139,6 +139,16 @@ function normalizeConfig(raw: Record<string, unknown>, source: ServerConfigSourc
 				: typeof raw.actorsDir === 'string'
 					? raw.actorsDir
 					: undefined,
+		workspacesDir:
+			typeof (source.env?.RIG_WORKSPACES_DIR ?? process.env.RIG_WORKSPACES_DIR) === 'string'
+				? (source.env?.RIG_WORKSPACES_DIR ?? process.env.RIG_WORKSPACES_DIR)
+				: typeof raw.workspacesDir === 'string'
+					? raw.workspacesDir
+					: undefined,
+		workspacesScanIntervalMs:
+			parseInteger(source.env?.RIG_WORKSPACES_SCAN_INTERVAL_MS ?? process.env.RIG_WORKSPACES_SCAN_INTERVAL_MS, 'workspacesScanIntervalMs') ??
+			(typeof raw.workspacesScanIntervalMs === 'number' ? raw.workspacesScanIntervalMs : undefined) ??
+			undefined,
 		configPath: source.configPath ?? (typeof raw.configPath === 'string' ? raw.configPath : undefined),
 		mcpBearerToken:
 			typeof (source.env?.RIG_MCP_BEARER_TOKEN ?? process.env.RIG_MCP_BEARER_TOKEN) === 'string'
