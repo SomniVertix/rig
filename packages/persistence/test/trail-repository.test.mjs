@@ -16,7 +16,7 @@ import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 
-import { Pool, ensureProject, TrailRepository, SpecRepositoryError } from '../dist/index.js';
+import { Pool, ensureProject, listProjects, TrailRepository, SpecRepositoryError } from '../dist/index.js';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -732,5 +732,24 @@ describe('audit log', () => {
 		);
 		assert.equal(waypointAudit.rowCount, 1);
 		assert.equal(waypointAudit.rows[0].actor, TEST_AUDIT.actor);
+	});
+});
+
+describe('listProjects', () => {
+	test('lists every project, not just the one this test suite scoped its trails to', async () => {
+		const otherSlug = `trail-repository-test-other-${randomUUID().slice(0, 8)}`;
+		const otherProjectId = await ensureProject(pool, otherSlug);
+
+		const projects = await listProjects(pool);
+		const slugs = projects.map((project) => project.slug);
+		assert.ok(slugs.includes(otherSlug), 'newly ensured project must be listed');
+
+		const ownProject = projects.find((project) => project.id === projectId);
+		assert.ok(ownProject !== undefined, 'this suite\'s own project must be listed too');
+		assert.equal(ownProject.displayName, null);
+		assert.ok(typeof ownProject.createdAt === 'string' && ownProject.createdAt.length > 0);
+
+		const otherProject = projects.find((project) => project.id === otherProjectId);
+		assert.ok(otherProject !== undefined);
 	});
 });

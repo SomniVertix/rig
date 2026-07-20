@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpToolContext } from '../tool-registry.js';
 import { registerSpecLifecycleTools } from './spec-lifecycle-tools.js';
 import { registerTrailTools } from './trail-tools.js';
+import { registerProjectTools } from './project-tools.js';
 import { registerRequirementsTools } from './requirements-tools.js';
 import { registerDesignTools } from './design-tools.js';
 import { registerTasksTools } from './tasks-tools.js';
@@ -25,6 +26,7 @@ export { registerTrailTools } from './trail-tools.js';
 export function registerSpecDocTools(server: McpServer, context: McpToolContext): void {
 	registerSpecLifecycleTools(server, context);
 	registerTrailTools(server, context);
+	registerProjectTools(server, context);
 	registerRequirementsTools(server, context);
 	registerDesignTools(server, context);
 	registerTasksTools(server, context);

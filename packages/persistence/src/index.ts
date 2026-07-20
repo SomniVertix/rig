@@ -332,6 +332,30 @@ export async function ensureProject(pool: Pool, slug: string): Promise<string> {
 	return existingRow.id;
 }
 
+export interface ProjectRecord {
+	id: string;
+	slug: string;
+	displayName: string | null;
+	createdAt: string;
+}
+
+/**
+ * Lists every project known to the server, newest-created last. Plain and
+ * unscoped by design -- for troubleshooting/orientation across projects, not
+ * for a session's own bound project (that's `ensureProject`).
+ */
+export async function listProjects(pool: Pool): Promise<ProjectRecord[]> {
+	const result = await pool.query<{ id: string; slug: string; display_name: string | null; created_at: Date }>(
+		`select id, slug, display_name, created_at from spec_pipeline.projects order by created_at asc`
+	);
+	return result.rows.map((row) => ({
+		id: row.id,
+		slug: row.slug,
+		displayName: row.display_name,
+		createdAt: row.created_at.toISOString()
+	}));
+}
+
 export class PostgresRunStore implements RunStore {
 	private readonly pool: Pool;
 	private readonly mirrorRoot?: string;
