@@ -566,22 +566,30 @@ export class TrailRepository {
 		if (trail.outcomeSpecId !== null) {
 			const specExistsResult = await this.pool.query<{ id: string }>(`select id from spec_pipeline.specs where id = $1`, [trail.outcomeSpecId]);
 			if (specExistsResult.rows[0] !== undefined) {
+				// spec_pipeline.spec_stages only has rows for 'requirements'/'design'
+				// (spec-stage-tracking-fixes W2 dropped the seeded 'tasks' row) -- the tasks
+				// entry is always synthesized from deriveTasksAggregateStatus, same as
+				// SpecRepository.getSpecStages.
 				const stagesResult = await this.pool.query<{ stage_name: string; status: string; updated_at: string | Date }>(
 					`select stage_name, status, updated_at from spec_pipeline.spec_stages where spec_id = $1 order by stage_name asc`,
 					[trail.outcomeSpecId]
 				);
-				// stage_name='tasks' is derived live, same as everywhere else in this file
-				// (spec-stage-tracking-fixes W1) -- its spec_stages row never advances past
-				// its seed-time 'not_started' default.
 				const tasksAggregate = await deriveTasksAggregateStatus(this.pool, trail.outcomeSpecId);
 				specStatus = {
 					specId: trail.outcomeSpecId,
 					currentStage: await deriveCurrentStage(this.pool, trail.outcomeSpecId),
-					stages: stagesResult.rows.map((stageRow) => ({
-						stageName: stageRow.stage_name,
-						status: stageRow.stage_name === 'tasks' ? tasksAggregate.status : stageRow.status,
-						updatedAt: toIso(stageRow.updated_at)
-					}))
+					stages: [
+						...stagesResult.rows.map((stageRow) => ({
+							stageName: stageRow.stage_name,
+							status: stageRow.status,
+							updatedAt: toIso(stageRow.updated_at)
+						})),
+						{
+							stageName: 'tasks',
+							status: tasksAggregate.status,
+							updatedAt: tasksAggregate.lastUpdatedAt ?? new Date().toISOString()
+						}
+					]
 				};
 			}
 		}

@@ -22,7 +22,7 @@ export function registerSpecLifecycleTools(server: McpServer, context: McpToolCo
 		'create_spec',
 		{
 			description:
-				"Creates a new spec (a .rig/specs/<feature-slug>/ equivalent), scoped to this session's bound project. Auto-seeds the three spec_stages rows (requirements/design/tasks, all not_started).",
+				"Creates a new spec (a .rig/specs/<feature-slug>/ equivalent), scoped to this session's bound project. Auto-seeds the requirements/design spec_stages rows (both not_started); the tasks stage has no stored row and is always derived from its components' progress.",
 			inputSchema: {
 				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
 				slug: z.string().min(1).describe('Kebab-case feature slug, unique within this project.'),

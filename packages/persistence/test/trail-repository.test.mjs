@@ -673,8 +673,20 @@ describe('reopenTrail', () => {
 			assert.equal(stage.status, 'not_started', 'reopening never mutates the spec pipeline');
 		}
 
-		const specRows = await pool.query(`select current_stage from spec_pipeline.specs where id = $1`, [spec.id]);
-		assert.equal(specRows.rows[0].current_stage, 'requirements', 'the spec itself is untouched by the reopen');
+		// specs.current_stage no longer exists (spec-stage-tracking-fixes W2) -- prove the
+		// spec pipeline is untouched via the stored spec_stages rows instead: exactly the two
+		// seeded rows (requirements/design), both still not_started.
+		const stageRows = await pool.query(`select stage_name, status from spec_pipeline.spec_stages where spec_id = $1 order by stage_name asc`, [
+			spec.id
+		]);
+		assert.deepEqual(
+			stageRows.rows.map((row) => [row.stage_name, row.status]),
+			[
+				['requirements', 'not_started'],
+				['design', 'not_started']
+			],
+			'the spec itself is untouched by the reopen'
+		);
 	});
 
 	test('specStatus reflects the spec\'s real derived progress, including the tasks stage\'s dead spec_stages row (spec-stage-tracking-fixes W1)', async () => {

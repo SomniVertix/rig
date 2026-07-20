@@ -182,10 +182,10 @@ test('SSE endpoint streams spec changes from both SpecRepository writes and even
       // Create a spec for testing
       const specRecord = await specRepository.withTx(async (client) => {
         const result = await client.query(
-          `insert into spec_pipeline.specs (project_id, slug, feature_name, current_stage, created_at, updated_at)
-           values ($1, $2, $3, $4, $5, $6)
+          `insert into spec_pipeline.specs (project_id, slug, feature_name, created_at, updated_at)
+           values ($1, $2, $3, $4, $5)
            returning id`,
-          [null, 'test-spec', 'Test Feature', 'requirements', new Date(), new Date()]
+          [null, 'test-spec', 'Test Feature', new Date(), new Date()]
         );
         const row = result.rows[0];
         if (!row) throw new Error('Failed to create spec');

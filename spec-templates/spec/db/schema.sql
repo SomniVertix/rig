@@ -48,7 +48,9 @@
 --     spec_pipeline.ears_pattern               the six EARS criterion patterns
 --   Functions
 --     spec_pipeline.set_updated_at()           updated_at maintenance trigger
---     spec_pipeline.seed_spec_stages()         auto-seed 3 stage rows per spec
+--     spec_pipeline.seed_spec_stages()         auto-seed requirements/design stage
+--                                              rows per spec (tasks is derived, not
+--                                              stored -- spec-stage-tracking-fixes W2)
 --     spec_pipeline.seed_component_tasks_docs() one tasks_doc per component at
 --                                              design in_review
 --     spec_pipeline.reject_same_component_task_dependency_edge()
@@ -326,7 +328,6 @@ CREATE TABLE IF NOT EXISTS spec_pipeline.specs (
     project_id    UUID REFERENCES spec_pipeline.projects (id),
     slug          TEXT NOT NULL,
     feature_name  TEXT NOT NULL,
-    current_stage spec_pipeline.spec_stage_name NOT NULL DEFAULT 'requirements',
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT specs_slug_is_kebab_case CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$')
@@ -342,7 +343,11 @@ CREATE TRIGGER specs_set_updated_at
     BEFORE UPDATE ON spec_pipeline.specs
     FOR EACH ROW EXECUTE FUNCTION spec_pipeline.set_updated_at();
 
--- Per-stage approve/deny state: exactly one row per (spec, stage).
+-- Per-stage approve/deny state: exactly one row per (spec, stage). Only 'requirements'
+-- and 'design' are seeded/stored here -- the tasks stage has no aggregate row at all
+-- (spec-stage-tracking-fixes W1/W2): its status is derived at read time from
+-- spec_pipeline.tasks_docs (SpecRepository.deriveTasksAggregateStatus), since finalize_stage
+-- never set a stage_name='tasks' row here past its seed-time default anyway.
 CREATE TABLE IF NOT EXISTS spec_pipeline.spec_stages (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     spec_id    UUID NOT NULL REFERENCES spec_pipeline.specs (id) ON DELETE CASCADE,
@@ -352,20 +357,21 @@ CREATE TABLE IF NOT EXISTS spec_pipeline.spec_stages (
     UNIQUE (spec_id, stage_name)
 );
 COMMENT ON TABLE spec_pipeline.spec_stages IS
-    'Per-stage approve/deny state. Exactly one row per (spec, stage). For stage_name=''tasks'' this is a spec-wide aggregate/cache: finalize_stage never sets it directly.';
+    'Per-stage approve/deny state for requirements/design only. Exactly one row per (spec, stage) for those two stages. The tasks stage has no row here -- its status is derived live from tasks_docs (see SpecRepository.deriveTasksAggregateStatus).';
 
 DROP TRIGGER IF EXISTS spec_stages_set_updated_at ON spec_pipeline.spec_stages;
 CREATE TRIGGER spec_stages_set_updated_at
     BEFORE UPDATE ON spec_pipeline.spec_stages
     FOR EACH ROW EXECUTE FUNCTION spec_pipeline.set_updated_at();
 
--- Auto-seed the three stage rows (all not_started) whenever a spec is created.
+-- Auto-seed the requirements/design stage rows (both not_started) whenever a spec is
+-- created. No 'tasks' row is seeded (spec-stage-tracking-fixes W2) -- that stage's
+-- status is always derived, never stored.
 CREATE OR REPLACE FUNCTION spec_pipeline.seed_spec_stages() RETURNS trigger AS $$
 BEGIN
     INSERT INTO spec_pipeline.spec_stages (spec_id, stage_name)
     VALUES (NEW.id, 'requirements'),
-           (NEW.id, 'design'),
-           (NEW.id, 'tasks');
+           (NEW.id, 'design');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

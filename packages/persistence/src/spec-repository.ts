@@ -784,18 +784,25 @@ export async function getStageApprovals(client: Queryable, specId: string): Prom
 	return { requirementsApproved: statusOf('requirements') === 'approved', designApproved: statusOf('design') === 'approved' };
 }
 
-/** The one place the tasks stage's real aggregate status is computed (the generic
- * `spec_stages` row for stage_name='tasks' is dead: finalizeStage/approveStage/
- * denyStage only ever write the per-component `tasks_docs` rows for 'tasks', never
- * this row past its seed-time 'not_started' default). Reused by `getSpecStages`
- * (stages[tasks].status) and `getNextStage` (actionableStage/laggingComponents) so
- * there is exactly one "are all this spec's tasks_docs approved" rule in the file. */
+/** The one place the tasks stage's real aggregate status is computed. There is no
+ * stored `spec_stages` row for stage_name='tasks' at all (spec-stage-tracking-fixes
+ * W2 dropped it, since finalizeStage/approveStage/denyStage only ever wrote the
+ * per-component `tasks_docs` rows for 'tasks', never a generic aggregate row) --
+ * everything about the tasks stage's status, including its "last changed" timestamp,
+ * is derived live from `tasks_docs` here. Reused by `getSpecStages` (synthesizing the
+ * tasks entry) and `getNextStage` (actionableStage/laggingComponents) so there is
+ * exactly one "are all this spec's tasks_docs approved" rule in the file. */
 export async function deriveTasksAggregateStatus(
 	client: Queryable,
 	specId: string
-): Promise<{ status: 'not_started' | 'in_review' | 'approved'; tasksApproved: boolean; laggingComponents: string[] }> {
-	const docsResult = await client.query<{ component_slug: string; status: string }>(
-		`select component_slug, status from spec_pipeline.tasks_docs where spec_id = $1 order by component_slug asc`,
+): Promise<{
+	status: 'not_started' | 'in_review' | 'approved';
+	tasksApproved: boolean;
+	laggingComponents: string[];
+	lastUpdatedAt: string | null;
+}> {
+	const docsResult = await client.query<{ component_slug: string; status: string; updated_at: string | Date }>(
+		`select component_slug, status, updated_at from spec_pipeline.tasks_docs where spec_id = $1 order by component_slug asc`,
 		[specId]
 	);
 	const docs = docsResult.rows;
@@ -803,7 +810,11 @@ export async function deriveTasksAggregateStatus(
 	const laggingComponents = docs.filter((doc) => doc.status !== 'in_review' && doc.status !== 'approved').map((doc) => doc.component_slug);
 	const status: 'not_started' | 'in_review' | 'approved' =
 		docs.length === 0 || docs.every((doc) => doc.status === 'not_started') ? 'not_started' : tasksApproved ? 'approved' : 'in_review';
-	return { status, tasksApproved, laggingComponents };
+	const lastUpdatedAt = docs.reduce<string | null>((latest, doc) => {
+		const iso = toIso(doc.updated_at);
+		return latest === null || iso > latest ? iso : latest;
+	}, null);
+	return { status, tasksApproved, laggingComponents, lastUpdatedAt };
 }
 
 /** `spec.currentStage` derived live from the same predecessor-approval checks
@@ -1003,9 +1014,12 @@ export class SpecRepository {
 		return await getStageApprovals(this.pool, specId);
 	}
 
-	private async deriveTasksAggregateStatus(
-		specId: string
-	): Promise<{ status: 'not_started' | 'in_review' | 'approved'; tasksApproved: boolean; laggingComponents: string[] }> {
+	private async deriveTasksAggregateStatus(specId: string): Promise<{
+		status: 'not_started' | 'in_review' | 'approved';
+		tasksApproved: boolean;
+		laggingComponents: string[];
+		lastUpdatedAt: string | null;
+	}> {
 		return await deriveTasksAggregateStatus(this.pool, specId);
 	}
 
@@ -1067,18 +1081,25 @@ export class SpecRepository {
 		return await Promise.all(result.rows.map(async (row) => rowToSpec(row, await this.deriveCurrentStage(row.id))));
 	}
 
+	/** `spec_stages` only ever has rows for 'requirements'/'design' (spec-stage-tracking-fixes
+	 * W2 dropped the seeded 'tasks' row entirely) -- the 'tasks' entry returned here is
+	 * always synthesized from `deriveTasksAggregateStatus`, never read off a stored row.
+	 * Its `id` isn't a real spec_stages.id (nothing consumes it as one); its `updatedAt`
+	 * is the latest of the spec's tasks_docs rows, or "now" if none exist yet. */
 	async getSpecStages(specId: string): Promise<SpecStageRecord[]> {
 		const result = await this.pool.query<SpecStageRow>(
 			`select * from spec_pipeline.spec_stages where spec_id = $1 order by stage_name asc`,
 			[specId]
 		);
 		const tasksAggregate = await this.deriveTasksAggregateStatus(specId);
-		return result.rows.map((row) => {
-			const stage = rowToSpecStage(row);
-			// The stored 'tasks' spec_stages row is vestigial (see deriveTasksAggregateStatus) --
-			// its status is always overridden with the live-derived aggregate.
-			return stage.stageName === 'tasks' ? { ...stage, status: tasksAggregate.status } : stage;
-		});
+		const tasksStage: SpecStageRecord = {
+			id: `${specId}:tasks`,
+			specId,
+			stageName: 'tasks',
+			status: tasksAggregate.status,
+			updatedAt: tasksAggregate.lastUpdatedAt ?? new Date().toISOString()
+		};
+		return [...result.rows.map(rowToSpecStage), tasksStage];
 	}
 
 	// ---------------------------------------------------------------------------

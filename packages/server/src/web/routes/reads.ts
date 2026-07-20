@@ -66,9 +66,11 @@ const documentResponseSchema = z.object({
 	markdown: z.string()
 });
 
-/** `spec_stages` always has exactly one row per (spec, stage_name) -- seeded by the
- * `specs_seed_stages` trigger at spec-creation time (schema.sql) -- so the `?? 'not_started'`
- * fallback below is only a defensive default, never expected to be exercised. */
+/** `SpecRepository.getSpecStages` always returns exactly one entry per stage name --
+ * 'requirements'/'design' are real seeded `spec_stages` rows, 'tasks' is always
+ * synthesized live (spec-stage-tracking-fixes W2 dropped its stored row entirely) --
+ * so the `?? 'not_started'` fallback below is only a defensive default, never expected
+ * to be exercised. */
 function stagesToObject(stages: SpecStageRecord[]): z.infer<typeof specStagesSchema> {
 	const byName = new Map(stages.map((stage) => [stage.stageName, stage.status]));
 	return {
