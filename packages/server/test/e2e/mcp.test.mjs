@@ -236,6 +236,19 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     const spec1Data = parseToolResponse(createSpecResult1);
     const spec1Id = spec1Data.spec.id;
     assert(spec1Data.spec.projectId, 'Spec should have projectId bound');
+    assert.equal(spec1Data.spec.currentStage, 'requirements', 'A fresh spec should derive currentStage as requirements');
+
+    // spec-stage-tracking-fixes W4: get_spec's derived fields, checked at the MCP tool
+    // layer (not just the persistence layer) for a freshly-created spec -- nothing
+    // approved yet, so every stage (including the synthesized tasks entry) is not_started.
+    const getSpecFreshResult = await client1.callTool({
+      name: 'get_spec',
+      arguments: { specId: spec1Id }
+    });
+    const getSpecFreshData = parseToolResponse(getSpecFreshResult);
+    assert.equal(getSpecFreshData.spec.currentStage, 'requirements');
+    const freshStageByName = Object.fromEntries(getSpecFreshData.stages.map((stage) => [stage.stageName, stage.status]));
+    assert.deepEqual(freshStageByName, { requirements: 'not_started', design: 'not_started', tasks: 'not_started' });
 
     // Test project isolation: same slug in project 2
     const client2 = await createAndConnectMcpClient(mcpHost, mcpPort, mcpBearerToken, 'project-2');
@@ -417,6 +430,20 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
     // Tasks finalization gates on design being approved (predecessor_not_approved)
     await humanApprove(postgres.connectionString, spec1Id, 'design');
 
+    // spec-stage-tracking-fixes W4: get_spec's derived fields for a partially-approved
+    // spec -- requirements/design both approved (so currentStage advances to tasks
+    // immediately, per the locked "capped at tasks" rule) but neither component's
+    // tasks_docs row has been finalized/approved yet, so the derived tasks status is
+    // still not_started.
+    const getSpecPartialResult = await client1.callTool({
+      name: 'get_spec',
+      arguments: { specId: spec1Id }
+    });
+    const getSpecPartialData = parseToolResponse(getSpecPartialResult);
+    assert.equal(getSpecPartialData.spec.currentStage, 'tasks', 'currentStage advances to tasks once design is approved');
+    const partialStageByName = Object.fromEntries(getSpecPartialData.stages.map((stage) => [stage.stageName, stage.status]));
+    assert.deepEqual(partialStageByName, { requirements: 'approved', design: 'approved', tasks: 'not_started' });
+
     // Test T5.5: Add tasks for components (after finalization creates task documents)
     const taskItem1Result = await client1.callTool({
       name: 'add_task_item',
@@ -510,6 +537,17 @@ test('MCP end-to-end: bearer auth, project isolation, spec pipeline, CRUD, and f
 
     // get_next_stage only reports null once every stage/component is approved
     await humanApprove(postgres.connectionString, spec1Id, 'tasks');
+
+    // spec-stage-tracking-fixes W4: get_spec's derived fields for a fully-approved
+    // spec -- matches what get_next_stage independently confirms below (actionableStage: null).
+    const getSpecApprovedResult = await client1.callTool({
+      name: 'get_spec',
+      arguments: { specId: spec1Id }
+    });
+    const getSpecApprovedData = parseToolResponse(getSpecApprovedResult);
+    assert.equal(getSpecApprovedData.spec.currentStage, 'tasks');
+    const approvedStageByName = Object.fromEntries(getSpecApprovedData.stages.map((stage) => [stage.stageName, stage.status]));
+    assert.deepEqual(approvedStageByName, { requirements: 'approved', design: 'approved', tasks: 'approved' });
 
     // Test T5.7: get_next_stage after all finalization
     const nextStage2Result = await client1.callTool({

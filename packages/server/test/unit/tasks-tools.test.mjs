@@ -146,6 +146,8 @@ function parseResult(result) {
 	return JSON.parse(result.content[0].text);
 }
 
+const KNOWN_ACTOR = 'test-known-actor';
+
 let postgres;
 let pool;
 let repository;
@@ -158,6 +160,7 @@ before(async () => {
 	pool = new Pool({ connectionString: postgres.connectionString });
 	const schemaSql = await readFile(schemaPath, 'utf8');
 	await pool.query(schemaSql);
+	await pool.query(`insert into spec_pipeline.known_actors (actor, source) values ($1, 'test')`, [KNOWN_ACTOR]);
 
 	repository = new SpecRepository(pool);
 	projectId = await ensureProject(pool, `tasks-tools-test-${randomUUID().slice(0, 8)}`);
@@ -262,6 +265,27 @@ describe('list_task_items', () => {
 		assert.equal(result.isError, true);
 		assert.equal(parseResult(result).error, 'not_found');
 	});
+
+	test('the real id returned round-trips into update_task_item (the original ISSUE-PLANS.md gap: update_task_item(id: "1") used to fail with invalid uuid syntax)', async () => {
+		const spec = await buildApprovedSpecWithComponents(projectId, ['auth-gateway']);
+		await repository.addTaskItem(
+			spec.id,
+			'auth-gateway',
+			{ title: 'Implement OAuth2', description: 'Build it.', traceability: 'Story 1', acceptanceCheck: 'Works.' },
+			TEST_AUDIT
+		);
+
+		const listResult = await handlers.get('list_task_items')({ specId: spec.id, componentSlug: 'auth-gateway' });
+		const { taskItems } = parseResult(listResult);
+		const { id: realId, itemId: displayItemId } = taskItems[0];
+		assert.notEqual(realId, displayItemId, 'the real id must differ from the display item_id ("1") that used to be mistaken for it');
+
+		const updateResult = await handlers.get('update_task_item')({ actor: KNOWN_ACTOR, id: realId, isChecked: true });
+		assert.equal(updateResult.isError, undefined, 'update_task_item must accept the real id returned by list_task_items');
+		const { taskItem } = parseResult(updateResult);
+		assert.equal(taskItem.id, realId);
+		assert.equal(taskItem.isChecked, true);
+	});
 });
 
 describe('list_definition_of_done_items', () => {
@@ -290,5 +314,20 @@ describe('list_definition_of_done_items', () => {
 		const result = await handlers.get('list_definition_of_done_items')({ specId: spec.id });
 		assert.equal(result.isError, true);
 		assert.equal(parseResult(result).error, 'not_found');
+	});
+
+	test('the real id returned round-trips into update_definition_of_done_item', async () => {
+		const spec = await buildApprovedSpecWithComponents(projectId, ['auth-gateway']);
+		await repository.addDefinitionOfDoneItem(spec.id, 'All tests pass.', TEST_AUDIT);
+
+		const listResult = await handlers.get('list_definition_of_done_items')({ specId: spec.id });
+		const { definitionOfDoneItems } = parseResult(listResult);
+		const realId = definitionOfDoneItems[0].id;
+
+		const updateResult = await handlers.get('update_definition_of_done_item')({ actor: KNOWN_ACTOR, id: realId, isChecked: true });
+		assert.equal(updateResult.isError, undefined, 'update_definition_of_done_item must accept the real id returned by list_definition_of_done_items');
+		const { definitionOfDoneItem } = parseResult(updateResult);
+		assert.equal(definitionOfDoneItem.id, realId);
+		assert.equal(definitionOfDoneItem.isChecked, true);
 	});
 });
