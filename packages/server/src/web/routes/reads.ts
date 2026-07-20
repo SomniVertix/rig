@@ -78,10 +78,10 @@ function stagesToObject(stages: SpecStageRecord[]): z.infer<typeof specStagesSch
 	};
 }
 
-/** `SpecRecord.currentStage` is persisted as the `spec_pipeline.spec_stage_name` enum
- * but typed as plain `string` on `SpecRecord` -- narrowed here against the same schema
- * used for the response so a DB-level value outside the enum surfaces as a 500 (caught
- * by the response serializer) rather than a silently-widened `string` in the response. */
+/** `SpecRecord.currentStage` is derived live by `SpecRepository` (spec-stage-tracking-fixes
+ * W1), not read off the dead `specs.current_stage` column -- this is just a defensive
+ * narrowing against the same schema used for the response, kept as cheap insurance rather
+ * than because the value is untrusted. */
 function toStageName(value: string): z.infer<typeof stageNameSchema> {
 	return stageNameSchema.parse(value);
 }

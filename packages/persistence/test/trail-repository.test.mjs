@@ -550,6 +550,32 @@ describe('completeTrail re-run after reopenTrail', () => {
 		assert.equal(specRows.rowCount, 1, 'no duplicate spec row was created for the matching slug');
 	});
 
+	test('spec -> reopen -> re-completing with the same slug reports the reused spec\'s real derived progress (spec-stage-tracking-fixes W1)', async () => {
+		const trail = await createTestTrail();
+		const slug = `same-spec-progress-${randomUUID().slice(0, 8)}`;
+		const { spec: firstSpec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+		assert.equal(firstSpec.currentStage, 'requirements');
+
+		// The spec progresses past requirements while the trail sits completed -- this is
+		// exactly the scenario the dead `specs.current_stage` column got wrong (it would
+		// still report 'requirements' here).
+		await pool.query(`update spec_pipeline.spec_stages set status = 'approved' where spec_id = $1 and stage_name = 'requirements'`, [firstSpec.id]);
+
+		await repository.reopenTrail(trail.id, TEST_AUDIT);
+
+		const { spec: secondSpec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+		assert.equal(secondSpec.id, firstSpec.id);
+		assert.equal(secondSpec.currentStage, 'design', 'reused spec reports its live-derived stage, not a stale stored column');
+	});
+
 	test('spec -> reopen -> decision clears outcome_spec_id back to null', async () => {
 		const trail = await createTestTrail();
 		const specSlug = `to-be-cleared-${randomUUID().slice(0, 8)}`;
@@ -649,6 +675,29 @@ describe('reopenTrail', () => {
 
 		const specRows = await pool.query(`select current_stage from spec_pipeline.specs where id = $1`, [spec.id]);
 		assert.equal(specRows.rows[0].current_stage, 'requirements', 'the spec itself is untouched by the reopen');
+	});
+
+	test('specStatus reflects the spec\'s real derived progress, including the tasks stage\'s dead spec_stages row (spec-stage-tracking-fixes W1)', async () => {
+		const trail = await createTestTrail();
+		const specSlug = `reopen-progress-${randomUUID().slice(0, 8)}`;
+		const { spec } = await repository.completeTrail(
+			trail.id,
+			{ outcomeKind: 'spec', spec: { slug: specSlug, featureName: 'Feature' } },
+			TEST_AUDIT
+		);
+
+		// Advance requirements to approved directly (bypassing the full finalize/approve
+		// flow, which isn't this test's concern) -- proving specStatus derives 'design' as
+		// currentStage rather than trusting the stored (never-updated) current_stage
+		// column, which would still say 'requirements' here.
+		await pool.query(`update spec_pipeline.spec_stages set status = 'approved' where spec_id = $1 and stage_name = 'requirements'`, [spec.id]);
+
+		const { specStatus } = await repository.reopenTrail(trail.id, TEST_AUDIT);
+		assert.ok(specStatus !== null);
+		assert.equal(specStatus.currentStage, 'design');
+
+		const tasksStage = specStatus.stages.find((stage) => stage.stageName === 'tasks');
+		assert.equal(tasksStage.status, 'not_started', 'no design components exist yet, so the tasks stage has nothing to derive from');
 	});
 });
 

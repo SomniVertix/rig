@@ -3,7 +3,15 @@
 import type { Pool, PoolClient } from 'pg';
 
 import { withTransaction } from './index.js';
-import { SpecRepositoryError, insertAuditLogRow, toIso, wrapConstraintViolation, type AuditInfo } from './spec-repository.js';
+import {
+	SpecRepositoryError,
+	deriveCurrentStage,
+	deriveTasksAggregateStatus,
+	insertAuditLogRow,
+	toIso,
+	wrapConstraintViolation,
+	type AuditInfo
+} from './spec-repository.js';
 import type { SpecRecord } from './spec-repository.js';
 import type { SpecChangeEmitter, SpecChangeEvent } from './spec-change-emitter.js';
 
@@ -415,12 +423,17 @@ export class TrailRepository {
 		if (input.outcomeKind !== 'spec' && input.spec !== undefined) {
 			throw new SpecRepositoryError('spec_input_forbidden', `complete_trail: spec creation only applies to outcomeKind 'spec', got '${input.outcomeKind}'`);
 		}
-		const mapSpecRow = (specRow: Record<string, unknown>): SpecRecord => ({
+		// `currentStage` is derived live (spec-stage-tracking-fixes W1), never read off
+		// the row's `current_stage` column -- that column is written once at spec
+		// creation and never updated again, and this mapper runs both for a spec freshly
+		// inserted here AND for one being reused on re-completion (which may be well past
+		// 'requirements' by now).
+		const mapSpecRow = async (client: PoolClient, specRow: Record<string, unknown>): Promise<SpecRecord> => ({
 			id: specRow.id as string,
 			projectId: specRow.project_id as string | null,
 			slug: specRow.slug as string,
 			featureName: specRow.feature_name as string,
-			currentStage: specRow.current_stage as string,
+			currentStage: await deriveCurrentStage(client, specRow.id as string),
 			createdAt: toIso(specRow.created_at as string | Date),
 			updatedAt: toIso(specRow.updated_at as string | Date)
 		});
@@ -445,7 +458,7 @@ export class TrailRepository {
 						);
 						const existingSpecRow = existingSpecResult.rows[0];
 						if (existingSpecRow !== undefined && existingSpecRow.slug === input.spec.slug) {
-							spec = mapSpecRow(existingSpecRow);
+							spec = await mapSpecRow(client, existingSpecRow);
 						}
 					}
 					if (spec === null) {
@@ -458,7 +471,7 @@ export class TrailRepository {
 							throw new Error('completeTrail: spec insert did not return a row');
 						}
 						await insertAuditLogRow(client, audit, 'insert', 'specs', specRow.id);
-						spec = mapSpecRow(specRow);
+						spec = await mapSpecRow(client, specRow);
 					}
 				}
 				const result = await client.query<TrailRow>(
@@ -551,22 +564,22 @@ export class TrailRepository {
 
 		let specStatus: TrailSpecStatus | null = null;
 		if (trail.outcomeSpecId !== null) {
-			const specResult = await this.pool.query<{ current_stage: string }>(
-				`select current_stage from spec_pipeline.specs where id = $1`,
-				[trail.outcomeSpecId]
-			);
-			const specRow = specResult.rows[0];
-			if (specRow !== undefined) {
+			const specExistsResult = await this.pool.query<{ id: string }>(`select id from spec_pipeline.specs where id = $1`, [trail.outcomeSpecId]);
+			if (specExistsResult.rows[0] !== undefined) {
 				const stagesResult = await this.pool.query<{ stage_name: string; status: string; updated_at: string | Date }>(
 					`select stage_name, status, updated_at from spec_pipeline.spec_stages where spec_id = $1 order by stage_name asc`,
 					[trail.outcomeSpecId]
 				);
+				// stage_name='tasks' is derived live, same as everywhere else in this file
+				// (spec-stage-tracking-fixes W1) -- its spec_stages row never advances past
+				// its seed-time 'not_started' default.
+				const tasksAggregate = await deriveTasksAggregateStatus(this.pool, trail.outcomeSpecId);
 				specStatus = {
 					specId: trail.outcomeSpecId,
-					currentStage: specRow.current_stage,
+					currentStage: await deriveCurrentStage(this.pool, trail.outcomeSpecId),
 					stages: stagesResult.rows.map((stageRow) => ({
 						stageName: stageRow.stage_name,
-						status: stageRow.status,
+						status: stageRow.stage_name === 'tasks' ? tasksAggregate.status : stageRow.status,
 						updatedAt: toIso(stageRow.updated_at)
 					}))
 				};

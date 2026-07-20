@@ -447,6 +447,76 @@ describe('get_next_stage', () => {
 	});
 });
 
+describe('spec-stage-tracking-fixes W1: currentStage + tasks-stage status derived at read time', () => {
+	test('getSpec: a fresh spec has currentStage "requirements"', async () => {
+		const slug = `spec-${randomUUID().slice(0, 8)}`;
+		const created = await repository.createSpec({ projectId, slug, featureName: 'Fresh Feature' }, TEST_AUDIT);
+		assert.equal(created.currentStage, 'requirements');
+
+		const fetched = await repository.getSpec(created.id);
+		assert.equal(fetched.currentStage, 'requirements');
+	});
+
+	test('getSpec: currentStage advances to "design" once requirements is approved', async () => {
+		const { spec } = await buildRequirementsApprovedOnlySpec();
+		const fetched = await repository.getSpec(spec.id);
+		assert.equal(fetched.currentStage, 'design');
+	});
+
+	test('getSpec: currentStage advances to "tasks" as soon as design is approved, before any component has progressed', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['romeo']);
+		const fetched = await repository.getSpec(spec.id);
+		assert.equal(fetched.currentStage, 'tasks');
+	});
+
+	test('getSpec: currentStage stays "tasks" once every component is approved (there is no stage beyond it)', async () => {
+		const { spec, tasksDocsBySlug } = await buildApprovedSpecWithComponents(['sierra']);
+		await setTasksDocStatus(tasksDocsBySlug.get('sierra').id, 'approved');
+		const fetched = await repository.getSpec(spec.id);
+		assert.equal(fetched.currentStage, 'tasks');
+	});
+
+	test('getSpecBySlug and listSpecs derive currentStage identically to getSpec', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['tango']);
+
+		const bySlug = await repository.getSpecBySlug(projectId, spec.slug);
+		assert.equal(bySlug.currentStage, 'tasks');
+
+		const listed = await repository.listSpecs(projectId);
+		const found = listed.find((entry) => entry.id === spec.id);
+		assert.ok(found, 'expected listSpecs to include the created spec');
+		assert.equal(found.currentStage, 'tasks');
+	});
+
+	test('getSpecStages: tasks-stage status is "not_started" when no component has progressed', async () => {
+		const { spec } = await buildApprovedSpecWithComponents(['uniform', 'victor']);
+		const stages = await repository.getSpecStages(spec.id);
+		const tasksStage = stages.find((stage) => stage.stageName === 'tasks');
+		assert.equal(tasksStage.status, 'not_started');
+	});
+
+	test('getSpecStages: tasks-stage status is "in_review" while components are mixed/partial', async () => {
+		const { spec, tasksDocsBySlug } = await buildApprovedSpecWithComponents(['whiskey', 'xray']);
+		await setTasksDocStatus(tasksDocsBySlug.get('whiskey').id, 'approved');
+		// xray is deliberately left not_started.
+
+		const stages = await repository.getSpecStages(spec.id);
+		const tasksStage = stages.find((stage) => stage.stageName === 'tasks');
+		assert.equal(tasksStage.status, 'in_review');
+	});
+
+	test('getSpecStages: tasks-stage status is "approved" once every component is approved', async () => {
+		const { spec, tasksDocsBySlug } = await buildApprovedSpecWithComponents(['yankee', 'zulu']);
+		for (const doc of tasksDocsBySlug.values()) {
+			await setTasksDocStatus(doc.id, 'approved');
+		}
+
+		const stages = await repository.getSpecStages(spec.id);
+		const tasksStage = stages.find((stage) => stage.stageName === 'tasks');
+		assert.equal(tasksStage.status, 'approved');
+	});
+});
+
 async function buildRequirementsApprovedOnlySpec() {
 	const slug = `spec-${randomUUID().slice(0, 8)}`;
 	const spec = await repository.createSpec({ projectId, slug, featureName: 'Requirements Only Feature' }, TEST_AUDIT);

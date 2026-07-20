@@ -122,7 +122,7 @@ export interface SpecRecord {
 	projectId: string | null;
 	slug: string;
 	featureName: string;
-	currentStage: string;
+	currentStage: SpecStageName;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -132,18 +132,21 @@ interface SpecRow extends Record<string, unknown> {
 	project_id: string | null;
 	slug: string;
 	feature_name: string;
-	current_stage: string;
 	created_at: string | Date;
 	updated_at: string | Date;
 }
 
-function rowToSpec(row: SpecRow): SpecRecord {
+/** `currentStage` is passed in rather than read off the row: `specs.current_stage` is
+ * written once at createSpec and never updated again, so it's derived live instead
+ * (see `SpecRepository.deriveCurrentStage`) -- this mapper no longer touches that
+ * column at all. */
+function rowToSpec(row: SpecRow, currentStage: SpecStageName): SpecRecord {
 	return {
 		id: row.id,
 		projectId: row.project_id,
 		slug: row.slug,
 		featureName: row.feature_name,
-		currentStage: row.current_stage,
+		currentStage,
 		createdAt: toIso(row.created_at),
 		updatedAt: toIso(row.updated_at)
 	};
@@ -753,6 +756,73 @@ export interface GetNextStageResult {
 }
 
 // =============================================================================
+// Stage-status derivation (spec-stage-tracking-fixes W1)
+// =============================================================================
+// Standalone functions (not `SpecRepository` methods) so both `SpecRepository` (via
+// `this.pool`) and `TrailRepository.completeTrail` (via its own withTx `PoolClient`,
+// when reusing a spec on re-completion) call the exact same derivation instead of
+// each keeping a copy -- the root cause this waypoint fixes is `specs.current_stage`
+// being written once at createSpec and never updated again, plus the tasks-stage
+// `spec_stages` row being written only at seed time; every reader must derive both
+// live from `spec_stages`(requirements/design) + `tasks_docs` instead of trusting
+// either stored value.
+
+interface Queryable {
+	query<T extends Record<string, unknown> = Record<string, unknown>>(text: string, values?: unknown[]): Promise<{ rows: T[] }>;
+}
+
+/** Reads the `requirements`/`design` rows' real, correctly-written `spec_stages`
+ * statuses (approveStage/denyStage/finalizeStage keep these current) -- shared by
+ * `deriveCurrentStage` and `getNextStage` so the "is this predecessor stage approved"
+ * check lives in exactly one place. */
+export async function getStageApprovals(client: Queryable, specId: string): Promise<{ requirementsApproved: boolean; designApproved: boolean }> {
+	const stagesResult = await client.query<{ stage_name: string; status: string }>(
+		`select stage_name, status from spec_pipeline.spec_stages where spec_id = $1 and stage_name in ('requirements', 'design')`,
+		[specId]
+	);
+	const statusOf = (name: string): string | undefined => stagesResult.rows.find((row) => row.stage_name === name)?.status;
+	return { requirementsApproved: statusOf('requirements') === 'approved', designApproved: statusOf('design') === 'approved' };
+}
+
+/** The one place the tasks stage's real aggregate status is computed (the generic
+ * `spec_stages` row for stage_name='tasks' is dead: finalizeStage/approveStage/
+ * denyStage only ever write the per-component `tasks_docs` rows for 'tasks', never
+ * this row past its seed-time 'not_started' default). Reused by `getSpecStages`
+ * (stages[tasks].status) and `getNextStage` (actionableStage/laggingComponents) so
+ * there is exactly one "are all this spec's tasks_docs approved" rule in the file. */
+export async function deriveTasksAggregateStatus(
+	client: Queryable,
+	specId: string
+): Promise<{ status: 'not_started' | 'in_review' | 'approved'; tasksApproved: boolean; laggingComponents: string[] }> {
+	const docsResult = await client.query<{ component_slug: string; status: string }>(
+		`select component_slug, status from spec_pipeline.tasks_docs where spec_id = $1 order by component_slug asc`,
+		[specId]
+	);
+	const docs = docsResult.rows;
+	const tasksApproved = docs.length > 0 && docs.every((doc) => doc.status === 'approved');
+	const laggingComponents = docs.filter((doc) => doc.status !== 'in_review' && doc.status !== 'approved').map((doc) => doc.component_slug);
+	const status: 'not_started' | 'in_review' | 'approved' =
+		docs.length === 0 || docs.every((doc) => doc.status === 'not_started') ? 'not_started' : tasksApproved ? 'approved' : 'in_review';
+	return { status, tasksApproved, laggingComponents };
+}
+
+/** `spec.currentStage` derived live from the same predecessor-approval checks
+ * `getNextStage` uses, capped at 'tasks' (there is no stage after it, whether or not
+ * every component's tasks_docs row is itself approved yet) -- replaces reading the
+ * dead `specs.current_stage` column, which is written once at createSpec and never
+ * updated again. */
+export async function deriveCurrentStage(client: Queryable, specId: string): Promise<SpecStageName> {
+	const { requirementsApproved, designApproved } = await getStageApprovals(client, specId);
+	if (!requirementsApproved) {
+		return 'requirements';
+	}
+	if (!designApproved) {
+		return 'design';
+	}
+	return 'tasks';
+}
+
+// =============================================================================
 // SpecRepository
 // =============================================================================
 
@@ -921,6 +991,29 @@ export class SpecRepository {
 	}
 
 	// ---------------------------------------------------------------------------
+	// Stage-status derivation (spec-stage-tracking-fixes W1)
+	// ---------------------------------------------------------------------------
+	// Thin instance-method wrappers (this.pool) around the standalone functions below --
+	// TrailRepository's completeTrail needs the exact same derivation (for a spec it
+	// reuses on re-completion, per the "no second source of truth" destination) but runs
+	// inside its own withTx's PoolClient, not this class's Pool, hence the standalone
+	// exports rather than private methods only reachable from this class.
+
+	private async getStageApprovals(specId: string): Promise<{ requirementsApproved: boolean; designApproved: boolean }> {
+		return await getStageApprovals(this.pool, specId);
+	}
+
+	private async deriveTasksAggregateStatus(
+		specId: string
+	): Promise<{ status: 'not_started' | 'in_review' | 'approved'; tasksApproved: boolean; laggingComponents: string[] }> {
+		return await deriveTasksAggregateStatus(this.pool, specId);
+	}
+
+	private async deriveCurrentStage(specId: string): Promise<SpecStageName> {
+		return await deriveCurrentStage(this.pool, specId);
+	}
+
+	// ---------------------------------------------------------------------------
 	// Spec lifecycle (T5.2)
 	// ---------------------------------------------------------------------------
 
@@ -936,7 +1029,9 @@ export class SpecRepository {
 					throw new Error('createSpec: insert did not return a row');
 				}
 				await insertAuditLogRow(client, audit, 'insert', 'specs', row.id);
-				return rowToSpec(row);
+				// A freshly-created spec has no approved stages yet -- no query needed to know
+				// its currentStage is 'requirements'.
+				return rowToSpec(row, 'requirements');
 			} catch (error) {
 				wrapConstraintViolation(error, 'create_spec');
 			}
@@ -946,7 +1041,10 @@ export class SpecRepository {
 	async getSpec(specId: string): Promise<SpecRecord | null> {
 		const result = await this.pool.query<SpecRow>(`select * from spec_pipeline.specs where id = $1`, [specId]);
 		const row = result.rows[0];
-		return row === undefined ? null : rowToSpec(row);
+		if (row === undefined) {
+			return null;
+		}
+		return rowToSpec(row, await this.deriveCurrentStage(row.id));
 	}
 
 	async getSpecBySlug(projectId: string, slug: string): Promise<SpecRecord | null> {
@@ -955,7 +1053,10 @@ export class SpecRepository {
 			[projectId, slug]
 		);
 		const row = result.rows[0];
-		return row === undefined ? null : rowToSpec(row);
+		if (row === undefined) {
+			return null;
+		}
+		return rowToSpec(row, await this.deriveCurrentStage(row.id));
 	}
 
 	async listSpecs(projectId: string): Promise<SpecRecord[]> {
@@ -963,7 +1064,7 @@ export class SpecRepository {
 			`select * from spec_pipeline.specs where project_id = $1 order by created_at asc`,
 			[projectId]
 		);
-		return result.rows.map(rowToSpec);
+		return await Promise.all(result.rows.map(async (row) => rowToSpec(row, await this.deriveCurrentStage(row.id))));
 	}
 
 	async getSpecStages(specId: string): Promise<SpecStageRecord[]> {
@@ -971,7 +1072,13 @@ export class SpecRepository {
 			`select * from spec_pipeline.spec_stages where spec_id = $1 order by stage_name asc`,
 			[specId]
 		);
-		return result.rows.map(rowToSpecStage);
+		const tasksAggregate = await this.deriveTasksAggregateStatus(specId);
+		return result.rows.map((row) => {
+			const stage = rowToSpecStage(row);
+			// The stored 'tasks' spec_stages row is vestigial (see deriveTasksAggregateStatus) --
+			// its status is always overridden with the live-derived aggregate.
+			return stage.stageName === 'tasks' ? { ...stage, status: tasksAggregate.status } : stage;
+		});
 	}
 
 	// ---------------------------------------------------------------------------
@@ -2608,28 +2715,17 @@ export class SpecRepository {
 	// ---------------------------------------------------------------------------
 
 	async getNextStage(specId: string): Promise<GetNextStageResult> {
-		const stagesResult = await this.pool.query<{ stage_name: string; status: string }>(
-			`select stage_name, status from spec_pipeline.spec_stages where spec_id = $1`,
-			[specId]
-		);
-		const statusOf = (name: string): string | undefined => stagesResult.rows.find((row) => row.stage_name === name)?.status;
+		const { requirementsApproved, designApproved } = await this.getStageApprovals(specId);
 
-		const docsResult = await this.pool.query<{ component_slug: string; status: string }>(
-			`select component_slug, status from spec_pipeline.tasks_docs where spec_id = $1 order by component_slug asc`,
-			[specId]
-		);
-		const docs = docsResult.rows;
-		const tasksApproved = docs.length > 0 && docs.every((doc) => doc.status === 'approved');
-
-		if (statusOf('requirements') !== 'approved') {
+		if (!requirementsApproved) {
 			return { actionableStage: 'requirements' };
 		}
-		if (statusOf('design') !== 'approved') {
+		if (!designApproved) {
 			return { actionableStage: 'design' };
 		}
-		if (!tasksApproved) {
-			const laggingComponents = docs.filter((doc) => doc.status !== 'in_review' && doc.status !== 'approved').map((doc) => doc.component_slug);
-			return { actionableStage: 'tasks', laggingComponents };
+		const tasksAggregate = await this.deriveTasksAggregateStatus(specId);
+		if (!tasksAggregate.tasksApproved) {
+			return { actionableStage: 'tasks', laggingComponents: tasksAggregate.laggingComponents };
 		}
 		return { actionableStage: null };
 	}
