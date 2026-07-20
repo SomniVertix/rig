@@ -379,8 +379,10 @@ describe('scanWorkspaces (T8, Story 1 AC1-AC5)', () => {
 			'expected summary counts to account for all scanned files'
 		);
 
-		// We have 6 files in fixtures (no-rig, valid-slug, invalid-slug, malformed, collision, collision/subdir)
-		assert.equal(summary.scanned, 6, 'expected 6 files to be scanned');
+		// We have 7 files in fixtures (no-rig, valid-slug, invalid-slug, malformed, collision,
+		// collision/subdir, multi-repo/multi-repo -- the last added by the e2e-verification
+		// component's fixture, which shares this same fixtures/workspaces/ directory)
+		assert.equal(summary.scanned, 7, 'expected 7 files to be scanned');
 	});
 });
 
