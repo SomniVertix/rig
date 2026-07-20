@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SpecRepository } from '@rig/persistence';
+import { SpecRepository, SpecRepositoryError } from '@rig/persistence';
 
 import type { McpToolContext } from '../tool-registry.js';
 import { assertParentCheckboxRule, withGuardrails } from '../guardrails/index.js';
@@ -29,6 +29,35 @@ const COMPONENT_SLUG_DESCRIPTION = "The component's slug (one tasks_docs row per
 export function registerTasksTools(server: McpServer, context: McpToolContext): void {
 	const repository = new SpecRepository(context.pool, context.events);
 	const taskItemContentFields = ['description', 'traceability', 'acceptanceCheck'];
+
+	/** Every read tool below is scoped to this session's bound project, matching get_spec's check. */
+	async function requireOwnedSpec(specId: string): Promise<void> {
+		const spec = await repository.getSpec(specId);
+		if (spec === null || spec.projectId !== context.projectId) {
+			throw new SpecRepositoryError('not_found', `spec not found: ${specId}`);
+		}
+	}
+
+	server.registerTool(
+		'list_task_items',
+		{
+			description:
+				"Lists a component's task items with their real ids (the update_task_item/add_task_file_touched argument) alongside each item's display item_id (e.g. \"1\", \"1.1\"), title, description, isChecked, and parentItemId -- the structured read path for a cold caller that would otherwise have to fall back to raw SQL to learn an item's UUID.",
+			inputSchema: {
+				specId: z.string().min(1),
+				componentSlug: z.string().min(1).describe(COMPONENT_SLUG_DESCRIPTION)
+			}
+		},
+		withToolErrorHandling(async (args) => {
+			await requireOwnedSpec(args.specId);
+			const tasksDoc = await repository.getTasksDocByComponent(args.specId, args.componentSlug);
+			if (tasksDoc === null) {
+				throw new SpecRepositoryError('unknown_component', `component not found for this spec: ${args.componentSlug}`);
+			}
+			const taskItems = await repository.listTaskItems(tasksDoc.id);
+			return jsonResult({ taskItems });
+		})
+	);
 
 	server.registerTool(
 		'add_task_item',
@@ -311,6 +340,22 @@ export function registerTasksTools(server: McpServer, context: McpToolContext): 
 	// definition_of_done_item is spec-scoped (shared across every component, Story
 	// 16.9) and carries a live is_checked toggle alongside its description, so it
 	// gets bespoke tools rather than the shared ordinal+description helper.
+	server.registerTool(
+		'list_definition_of_done_items',
+		{
+			description:
+				"Lists a spec's Definition of Done items with their real ids (the update_definition_of_done_item argument) alongside each item's ordinal, description, and isChecked -- the structured read path for a cold caller that would otherwise have to fall back to raw SQL to learn an item's UUID.",
+			inputSchema: {
+				specId: z.string().min(1)
+			}
+		},
+		withToolErrorHandling(async (args) => {
+			await requireOwnedSpec(args.specId);
+			const definitionOfDoneItems = await repository.listDefinitionOfDoneItems(args.specId);
+			return jsonResult({ definitionOfDoneItems });
+		})
+	);
+
 	server.registerTool(
 		'add_definition_of_done_item',
 		{
