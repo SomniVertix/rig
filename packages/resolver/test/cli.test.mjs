@@ -8,7 +8,7 @@ import { describe, test } from 'node:test';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { mkdtemp, mkdir, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import process from 'node:process';
@@ -113,6 +113,128 @@ describe('cli.ts', () => {
 			assert.ok(
 				stderr.includes('RIG_MCP_BEARER_TOKEN'),
 				`stderr should name the missing RIG_MCP_BEARER_TOKEN variable, got: ${stderr}`
+			);
+		});
+	});
+
+	describe('RIG_WORKSPACES_DIR fallback', () => {
+		test('finds a workspace claimed via RIG_WORKSPACES_DIR when no ancestor workspace exists', async () => {
+			// No .code-workspace anywhere above `repo` -- the only way this can
+			// resolve is via the RIG_WORKSPACES_DIR fallback finding `workspaces/
+			// repo.code-workspace`, whose folders entry lists `repo`'s absolute path.
+			const base = await mkdtemp(join(await realpath(tmpdir()), 'rig-resolver-cli-fallback-'));
+			const repoDir = join(base, 'repo');
+			const workspacesDir = join(base, 'workspaces');
+			await mkdir(repoDir, { recursive: true });
+			await mkdir(workspacesDir, { recursive: true });
+			await writeFile(
+				join(workspacesDir, 'repo.code-workspace'),
+				JSON.stringify({ folders: [{ path: repoDir }], rig: { projectId: 'fallback-project' } })
+			);
+
+			let exitCode = null;
+			let stderr = '';
+
+			try {
+				await execFileAsync(process.execPath, [cliPath], {
+					cwd: repoDir,
+					env: {
+						RIG_WORKSPACES_DIR: workspacesDir,
+						RIG_MCP_URL: 'http://localhost:8000',
+						// Deliberately omit RIG_MCP_BEARER_TOKEN: the CLI should get past
+						// workspace resolution via the fallback and fail on this later,
+						// unrelated check instead -- proving the fallback located the file.
+					},
+				});
+			} catch (error) {
+				if (error.status !== null && error.status !== undefined) {
+					exitCode = error.status;
+				}
+				stderr = error.stderr || '';
+			}
+
+			assert.ok(exitCode !== 0, 'should still exit non-zero (missing bearer token)');
+			assert.ok(
+				!stderr.includes('no .code-workspace file found'),
+				`should not report a missing workspace file once the fallback matches, got: ${stderr}`
+			);
+			assert.ok(
+				stderr.includes('RIG_MCP_BEARER_TOKEN'),
+				`stderr should name the missing RIG_MCP_BEARER_TOKEN variable, got: ${stderr}`
+			);
+		});
+
+		test('refuses to guess when more than one workspace under RIG_WORKSPACES_DIR claims the cwd', async () => {
+			const base = await mkdtemp(join(await realpath(tmpdir()), 'rig-resolver-cli-ambiguous-'));
+			const repoDir = join(base, 'repo');
+			const workspacesDir = join(base, 'workspaces');
+			await mkdir(repoDir, { recursive: true });
+			await mkdir(workspacesDir, { recursive: true });
+			await writeFile(
+				join(workspacesDir, 'a.code-workspace'),
+				JSON.stringify({ folders: [{ path: repoDir }], rig: { projectId: 'a-project' } })
+			);
+			await writeFile(
+				join(workspacesDir, 'b.code-workspace'),
+				JSON.stringify({ folders: [{ path: repoDir }], rig: { projectId: 'b-project' } })
+			);
+
+			let exitCode = null;
+			let stderr = '';
+
+			try {
+				await execFileAsync(process.execPath, [cliPath], {
+					cwd: repoDir,
+					env: {
+						RIG_WORKSPACES_DIR: workspacesDir,
+						RIG_MCP_URL: 'http://localhost:8000',
+						RIG_MCP_BEARER_TOKEN: 'dummy-token',
+					},
+				});
+			} catch (error) {
+				if (error.status !== null && error.status !== undefined) {
+					exitCode = error.status;
+				}
+				stderr = error.stderr || '';
+			}
+
+			assert.ok(exitCode !== 0, 'should exit non-zero on ambiguous claim');
+			assert.ok(
+				stderr.includes('claimed by 2 .code-workspace files'),
+				`stderr should report the ambiguous claim count, got: ${stderr}`
+			);
+		});
+
+		test('reports both failed lookups when RIG_WORKSPACES_DIR is set but nothing claims cwd', async () => {
+			const base = await mkdtemp(join(await realpath(tmpdir()), 'rig-resolver-cli-no-claim-'));
+			const repoDir = join(base, 'repo');
+			const workspacesDir = join(base, 'workspaces');
+			await mkdir(repoDir, { recursive: true });
+			await mkdir(workspacesDir, { recursive: true });
+
+			let exitCode = null;
+			let stderr = '';
+
+			try {
+				await execFileAsync(process.execPath, [cliPath], {
+					cwd: repoDir,
+					env: {
+						RIG_WORKSPACES_DIR: workspacesDir,
+						RIG_MCP_URL: 'http://localhost:8000',
+						RIG_MCP_BEARER_TOKEN: 'dummy-token',
+					},
+				});
+			} catch (error) {
+				if (error.status !== null && error.status !== undefined) {
+					exitCode = error.status;
+				}
+				stderr = error.stderr || '';
+			}
+
+			assert.ok(exitCode !== 0, 'should exit non-zero when nothing claims cwd');
+			assert.ok(
+				stderr.includes('no .code-workspace file found above') && stderr.includes('RIG_WORKSPACES_DIR'),
+				`stderr should mention both the failed ancestor walk and the checked RIG_WORKSPACES_DIR, got: ${stderr}`
 			);
 		});
 	});

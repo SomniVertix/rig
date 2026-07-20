@@ -1,1 +1,1 @@
-export { findNearestWorkspace, resolveProjectId, type Resolved } from './discover.js';
+export { findNearestWorkspace, findWorkspacesClaiming, resolveProjectId, type Resolved } from './discover.js';

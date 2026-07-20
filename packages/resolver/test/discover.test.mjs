@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mkdtemp, mkdir, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { findNearestWorkspace, resolveProjectId } from '../dist/index.js';
+import { findNearestWorkspace, findWorkspacesClaiming, resolveProjectId } from '../dist/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -85,6 +85,47 @@ describe('discover.ts', () => {
 				() => resolveProjectId(workspaceFile),
 				/No rig\.projectId found/,
 				'should throw with descriptive message when no projectId found'
+			);
+		});
+	});
+
+	describe('findWorkspacesClaiming', () => {
+		test('finds a workspace file whose folders entry lists targetDir', () => {
+			const sharedDir = join(fixturesDir, 'workspaces-claiming', 'shared');
+			const targetDir = join(fixturesDir, 'workspaces-claiming', 'target');
+
+			const matches = findWorkspacesClaiming(sharedDir, targetDir);
+
+			assert.deepEqual(matches, [join(sharedDir, 'claims-target.code-workspace')]);
+		});
+
+		test('matches when targetDir is a descendant of a claimed folder', () => {
+			const sharedDir = join(fixturesDir, 'workspaces-claiming', 'shared');
+			const nestedDir = join(fixturesDir, 'workspaces-claiming', 'target', 'nested', 'dir');
+
+			const matches = findWorkspacesClaiming(sharedDir, nestedDir);
+
+			assert.deepEqual(matches, [join(sharedDir, 'claims-target.code-workspace')]);
+		});
+
+		test('returns an empty array when no workspace file claims targetDir', () => {
+			const sharedDir = join(fixturesDir, 'workspaces-claiming', 'shared');
+			const unrelatedDir = join(fixturesDir, 'workspaces-claiming', 'not-claimed');
+
+			const matches = findWorkspacesClaiming(sharedDir, unrelatedDir);
+
+			assert.deepEqual(matches, []);
+		});
+
+		test('returns every match when more than one workspace file claims targetDir', () => {
+			const sharedDir = join(fixturesDir, 'workspaces-claiming-ambiguous', 'shared');
+			const targetDir = join(fixturesDir, 'workspaces-claiming-ambiguous', 'target');
+
+			const matches = findWorkspacesClaiming(sharedDir, targetDir);
+
+			assert.deepEqual(
+				matches.sort(),
+				[join(sharedDir, 'a.code-workspace'), join(sharedDir, 'b.code-workspace')].sort()
 			);
 		});
 	});

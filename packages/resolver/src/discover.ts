@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import { parse } from 'jsonc-parser';
 import type { ParseError } from 'jsonc-parser';
@@ -52,6 +52,97 @@ function findWorkspaceFileNameIn(dir: string): string | null {
 		return null;
 	}
 	return entries.find((name) => name.endsWith(WORKSPACE_FILE_SUFFIX)) ?? null;
+}
+
+// Directory names never descended into while scanning a workspaces directory
+// for claiming files -- mirrors
+// packages/server/src/workspace/workspace-scanner.ts's SKIPPED_DIR_NAMES
+// (minus `.local`, which is about `.code-workspace.local` *files*, not a
+// directory this walk would ever encounter).
+const SKIPPED_DIR_NAMES = new Set(['node_modules', '.git']);
+
+/**
+ * Fallback for when `findNearestWorkspace`'s upward walk from `targetDir`
+ * finds nothing: recursively scans `workspacesDir` (typically
+ * `RIG_WORKSPACES_DIR`, the same curated directory
+ * `packages/server/src/workspace/workspace-scanner.ts` scans server-side) for
+ * every `*.code-workspace` file whose `folders` array lists a path that is
+ * `targetDir` itself or an ancestor of it.
+ *
+ * This covers the case a pure ancestor walk cannot: a workspace file
+ * colocated in a shared directory as a *sibling* of the repo it describes,
+ * rather than living inside the repo itself.
+ *
+ * Returns every match rather than picking one -- a caller with more than one
+ * match must treat it as an ambiguous configuration error, not silently pick
+ * a winner, since which project a session binds to is security-relevant (see
+ * docs/workspace-binding-migration.md's trust-boundary section).
+ */
+export function findWorkspacesClaiming(workspacesDir: string, targetDir: string): string[] {
+	const matches: string[] = [];
+	for (const file of walkWorkspaceFiles(workspacesDir)) {
+		if (workspaceClaims(file, targetDir)) {
+			matches.push(file);
+		}
+	}
+	return matches;
+}
+
+function* walkWorkspaceFiles(dir: string): Generator<string> {
+	let entries;
+	try {
+		entries = readdirSync(dir, { withFileTypes: true });
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		if (entry.isDirectory()) {
+			if (SKIPPED_DIR_NAMES.has(entry.name)) {
+				continue;
+			}
+			yield* walkWorkspaceFiles(join(dir, entry.name));
+		} else if (entry.isFile() && entry.name.endsWith(WORKSPACE_FILE_SUFFIX)) {
+			yield join(dir, entry.name);
+		}
+	}
+}
+
+function workspaceClaims(workspaceFile: string, targetDir: string): boolean {
+	let text: string;
+	try {
+		text = readFileSync(workspaceFile, 'utf8');
+	} catch {
+		return false;
+	}
+
+	const parseErrors: ParseError[] = [];
+	const parsed: unknown = parse(text, parseErrors, { allowTrailingComma: true, disallowComments: false });
+	if (parseErrors.length > 0 || typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		return false;
+	}
+
+	const folders = (parsed as Record<string, unknown>).folders;
+	if (!Array.isArray(folders)) {
+		return false;
+	}
+
+	const workspaceDir = dirname(workspaceFile);
+	for (const folder of folders) {
+		if (typeof folder !== 'object' || folder === null) {
+			continue;
+		}
+		const rawPath = (folder as Record<string, unknown>).path;
+		if (typeof rawPath !== 'string') {
+			continue;
+		}
+		// VS Code workspace folder paths may be relative to the .code-workspace
+		// file's own directory or absolute; `resolve` handles both uniformly.
+		const resolvedFolder = resolve(workspaceDir, rawPath);
+		if (targetDir === resolvedFolder || targetDir.startsWith(resolvedFolder + sep)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**

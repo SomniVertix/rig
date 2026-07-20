@@ -36,10 +36,10 @@ that row owns (its trails, specs, waypoint history) hangs off that slug.
 Under the new model, the server exposes a single fixed `/mcp` route (see
 `packages/server/src/mcp/server.ts`) — there is no per-project path segment
 anymore. Project binding instead comes from an `X-Rig-Project-Id` header,
-which the `rig-resolver` binary (`packages/resolver/`) attaches by walking up
-from the current working directory to find a `*.code-workspace` file and
-reading its `rig.projectId` field (`packages/resolver/src/discover.ts`).
-`.mcp.json` now points at the resolver instead of the server directly, e.g.:
+which the `rig-resolver` binary (`packages/resolver/`) attaches after locating
+the `*.code-workspace` file for the current session and reading its
+`rig.projectId` field (`packages/resolver/src/discover.ts`). `.mcp.json` now
+points at the resolver instead of the server directly, e.g.:
 
 ```json
 {
@@ -48,12 +48,39 @@ reading its `rig.projectId` field (`packages/resolver/src/discover.ts`).
       "command": "rig-resolver",
       "env": {
         "RIG_MCP_URL": "http://localhost:8787/mcp",
-        "RIG_MCP_BEARER_TOKEN": "dev-local-token"
+        "RIG_MCP_BEARER_TOKEN": "dev-local-token",
+        "RIG_WORKSPACES_DIR": "/Users/you/workspaces"
       }
     }
   }
 }
 ```
+
+The resolver tries two lookups, in order:
+
+1. **Ancestor walk** (`findNearestWorkspace`): walks up from the current
+   working directory looking for a `*.code-workspace` file, the same way git
+   finds `.git`. This covers a workspace file living *inside* the repo it
+   describes (e.g. this repo's own `rig.code-workspace` at its root).
+2. **`RIG_WORKSPACES_DIR` fallback** (`findWorkspacesClaiming`), tried only if
+   the ancestor walk finds nothing and the env var is set: recursively scans
+   `RIG_WORKSPACES_DIR` for every `*.code-workspace` file whose `folders`
+   array lists the current working directory (or an ancestor of it) as a
+   folder. This covers a workspace file *colocated in a shared directory* as
+   a sibling of the repo, rather than living inside it — the common case if
+   you keep all your `.code-workspace` files together instead of one per
+   repo. If more than one file under `RIG_WORKSPACES_DIR` claims the same
+   directory, the resolver refuses to guess and exits with an error naming
+   every match, rather than silently picking one.
+
+`RIG_WORKSPACES_DIR` here is a **host-side path read directly by the
+resolver process**, which runs unsandboxed on the host machine — it is a
+separate setting from the server's own `RIG_WORKSPACES_DIR` (the
+in-*container* mount point the workspace scanner walks, set via
+`RIG_WORKSPACES_HOST_DIR` in `docker-compose.yml`; see
+`packages/server/src/workspace/workspace-scanner.ts`). In a typical single-user
+dev setup both ultimately point at the same directory on disk, just via two
+different env vars read by two different processes.
 
 ### Preserving an existing project's slug and history
 
