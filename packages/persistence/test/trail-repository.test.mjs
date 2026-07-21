@@ -365,6 +365,181 @@ describe('unbypassWaypoint', () => {
 	});
 });
 
+describe('startSession', () => {
+	test('stamps a session row with the actor and an optional label', async () => {
+		const session = await repository.startSession('W2 test run', TEST_AUDIT);
+		assert.equal(session.actor, TEST_AUDIT.actor);
+		assert.equal(session.label, 'W2 test run');
+		assert.ok(session.id.length > 0);
+		assert.ok(typeof session.createdAt === 'string' && session.createdAt.length > 0);
+	});
+
+	test('label is optional', async () => {
+		const session = await repository.startSession(undefined, TEST_AUDIT);
+		assert.equal(session.label, null);
+	});
+
+	test('createTrail threads sessionId through to trails.session_id', async () => {
+		const session = await repository.startSession('charter', TEST_AUDIT);
+		const trail = await createTestTrail({ sessionId: session.id });
+		assert.equal(trail.sessionId, session.id);
+	});
+
+	test('createTrail without a sessionId leaves it null, matching pre-existing trails (no backfill)', async () => {
+		const trail = await createTestTrail();
+		assert.equal(trail.sessionId, null);
+	});
+});
+
+describe('spurWaypoint', () => {
+	test('atomically reaches the origin waypoint and creates the child trail plus a trail_lineage edge', async () => {
+		const trail = await createTestTrail();
+		const origin = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Should this be its own trail?' }, TEST_AUDIT);
+		const childSlug = `spun-off-${randomUUID().slice(0, 8)}`;
+
+		const { waypoint, trail: childTrail } = await repository.spurWaypoint(
+			origin.id,
+			{ slug: childSlug, title: 'Spun-Off Trail', destination: 'A settled design.', notes: 'Consult X.', rationale: 'Too big for this trail.', reachedIn: 'session-x' },
+			TEST_AUDIT
+		);
+
+		assert.equal(waypoint.status, 'reached');
+		assert.equal(waypoint.spurredToTrailId, childTrail.id);
+		assert.ok(waypoint.resolution.includes(childSlug));
+		assert.ok(waypoint.resolutionGist.includes('Spun-Off Trail'));
+		assert.equal(waypoint.rationale, 'Too big for this trail.');
+		assert.equal(waypoint.reachedIn, 'session-x');
+		assert.ok(waypoint.reachedAt !== null);
+
+		assert.equal(childTrail.slug, childSlug);
+		assert.equal(childTrail.title, 'Spun-Off Trail');
+		assert.equal(childTrail.destination, 'A settled design.');
+		assert.equal(childTrail.projectId, trail.projectId, 'child trail inherits the origin trail\'s project');
+		assert.ok(childTrail.trailheadPrompt.includes('Too big'), 'trailheadPrompt is auto-derived from the origin waypoint');
+		assert.ok(childTrail.trailheadPrompt.includes('Should this be its own trail?'));
+
+		const lineageRows = await pool.query(
+			`select * from discovery.trail_lineage where child_trail_id = $1`,
+			[childTrail.id]
+		);
+		assert.equal(lineageRows.rowCount, 1);
+		assert.equal(lineageRows.rows[0].parent_kind, 'waypoint');
+		assert.equal(lineageRows.rows[0].parent_waypoint_id, origin.id);
+		assert.equal(lineageRows.rows[0].parent_session_id, null);
+	});
+
+	test('is legal from claimed (the wayfinder rhythm), not just marked', async () => {
+		const trail = await createTestTrail();
+		const origin = await repository.addWaypoint(trail.id, { title: 'Claimed first', question: 'Claimed then spurred?' }, TEST_AUDIT);
+		await repository.claimWaypoint(origin.id, 'claimant', TEST_AUDIT);
+
+		const { waypoint } = await repository.spurWaypoint(
+			origin.id,
+			{ slug: `from-claimed-${randomUUID().slice(0, 8)}`, title: 'From Claimed' },
+			TEST_AUDIT
+		);
+		assert.equal(waypoint.status, 'reached');
+	});
+
+	test('rolls back the whole transaction (no orphan trail) when the origin waypoint is not spurrable', async () => {
+		const trail = await createTestTrail();
+		const origin = await repository.addWaypoint(
+			trail.id,
+			{ title: 'Already reached', question: 'Done?', resolution: { resolution: 'Done.', resolutionGist: 'Done' } },
+			TEST_AUDIT
+		);
+		const slug = `should-not-exist-${randomUUID().slice(0, 8)}`;
+
+		await assert.rejects(
+			() => repository.spurWaypoint(origin.id, { slug, title: 'Should Not Exist' }, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_spurrable'
+		);
+
+		const orphan = await repository.getTrailBySlug(trail.projectId, slug);
+		assert.equal(orphan, null, 'no child trail was left behind when the reach step failed');
+	});
+
+	test('bypassed waypoint is not spurrable either', async () => {
+		const trail = await createTestTrail();
+		const origin = await repository.addWaypoint(trail.id, { title: 'Out of scope', question: 'Spur this?' }, TEST_AUDIT);
+		await repository.bypassWaypoint(origin.id, 'Out of scope.', TEST_AUDIT);
+
+		await assert.rejects(
+			() => repository.spurWaypoint(origin.id, { slug: `nope-${randomUUID().slice(0, 8)}`, title: 'Nope' }, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_spurrable'
+		);
+	});
+});
+
+describe('unspurWaypoint', () => {
+	test('restores the origin waypoint to marked, clears the spur fields, and removes the trail_lineage edge', async () => {
+		const trail = await createTestTrail();
+		const origin = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		const { trail: childTrail } = await repository.spurWaypoint(
+			origin.id,
+			{ slug: `to-unspur-${randomUUID().slice(0, 8)}`, title: 'To Unspur', rationale: 'Mistaken spin-off.' },
+			TEST_AUDIT
+		);
+
+		const { waypoint: restored, childTrail: reportedChild } = await repository.unspurWaypoint(origin.id, TEST_AUDIT);
+		assert.equal(restored.status, 'marked');
+		assert.equal(restored.resolution, null);
+		assert.equal(restored.resolutionGist, null);
+		assert.equal(restored.rationale, null);
+		assert.equal(restored.reachedIn, null);
+		assert.equal(restored.reachedAt, null);
+		assert.equal(restored.spurredToTrailId, null);
+
+		assert.ok(reportedChild !== null);
+		assert.equal(reportedChild.id, childTrail.id);
+		assert.equal(reportedChild.status, 'active', 'the now-parentless child trail is reported but left completely untouched');
+
+		const lineageRows = await pool.query(`select * from discovery.trail_lineage where child_trail_id = $1`, [childTrail.id]);
+		assert.equal(lineageRows.rowCount, 0, 'the trail_lineage edge is removed');
+
+		const stillExists = await repository.getTrail(childTrail.id);
+		assert.ok(stillExists !== null, 'the child trail itself is not deleted');
+	});
+
+	test('rejects unspurring a waypoint that was never spurred (not_spurred)', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Never spurred', question: 'Live?' }, TEST_AUDIT);
+
+		await assert.rejects(
+			() => repository.unspurWaypoint(waypoint.id, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_spurred'
+		);
+	});
+
+	test('rejects unspurring a waypoint reached normally (never spurred) even though it is reached', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Reached normally', question: 'Reached how?' }, TEST_AUDIT);
+		await repository.reachWaypoint(waypoint.id, { resolution: 'Decided.', resolutionGist: 'Decided' }, TEST_AUDIT);
+
+		await assert.rejects(
+			() => repository.unspurWaypoint(waypoint.id, TEST_AUDIT),
+			(error) => error instanceof SpecRepositoryError && error.rule === 'not_spurred'
+		);
+	});
+
+	test('re-spurring the same waypoint after unspur creates a fresh trail and lineage edge', async () => {
+		const trail = await createTestTrail();
+		const origin = await repository.addWaypoint(trail.id, { title: 'Spin twice', question: 'Spin again?' }, TEST_AUDIT);
+		const firstSlug = `first-${randomUUID().slice(0, 8)}`;
+		const { trail: firstChild } = await repository.spurWaypoint(origin.id, { slug: firstSlug, title: 'First Child' }, TEST_AUDIT);
+		await repository.unspurWaypoint(origin.id, TEST_AUDIT);
+
+		const secondSlug = `second-${randomUUID().slice(0, 8)}`;
+		const { waypoint, trail: secondChild } = await repository.spurWaypoint(origin.id, { slug: secondSlug, title: 'Second Child' }, TEST_AUDIT);
+		assert.equal(waypoint.spurredToTrailId, secondChild.id);
+		assert.notEqual(secondChild.id, firstChild.id);
+
+		const lineageRows = await pool.query(`select * from discovery.trail_lineage where parent_waypoint_id = $1`, [origin.id]);
+		assert.equal(lineageRows.rowCount, 1, 'only the fresh lineage edge remains, not a stale one from the first spur');
+		assert.equal(lineageRows.rows[0].child_trail_id, secondChild.id);
+	});
+});
+
 describe('getFrontier', () => {
 	test('excludes a blocked waypoint until its blocker is reached', async () => {
 		const trail = await createTestTrail();

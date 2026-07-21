@@ -27,6 +27,28 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 	const approachSchema = z.enum(['grilling', 'research', 'prototype', 'task']);
 
 	// ---------------------------------------------------------------------------
+	// Sessions
+	// ---------------------------------------------------------------------------
+
+	server.registerTool(
+		'start_session',
+		{
+			description:
+				"Stamps one row for this wayfinder/grilling invocation (a conversation) -- no implicit/inferred session boundaries. Call once per invocation and thread the returned sessionId into every create_trail call this conversation makes, so trails.session_id records which conversation chartered them.",
+			inputSchema: {
+				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
+				label: z.string().min(1).optional().describe('Optional human-readable note for this invocation.')
+			}
+		},
+		withToolErrorHandling(
+			withGuardrails(context.pool, { notBlank: ['label'] }, async (args) => {
+				const session = await repository.startSession(args.label, auditFrom(context, args.actor));
+				return jsonResult({ session });
+			})
+		)
+	);
+
+	// ---------------------------------------------------------------------------
 	// Trails
 	// ---------------------------------------------------------------------------
 
@@ -41,7 +63,8 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 				title: z.string().min(1),
 				trailheadPrompt: z.string().min(1).describe("The user's initial ask, largely verbatim."),
 				destination: z.string().min(1).optional().describe('What reaching the end looks like; omit until named.'),
-				notes: z.string().min(1).optional().describe('Domain, skills to consult, standing preferences for this effort.')
+				notes: z.string().min(1).optional().describe('Domain, skills to consult, standing preferences for this effort.'),
+				sessionId: z.string().min(1).optional().describe('The start_session id for this invocation, so this trail records who chartered it.')
 			}
 		},
 		withToolErrorHandling(
@@ -53,7 +76,8 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 						title: args.title,
 						trailheadPrompt: args.trailheadPrompt,
 						destination: args.destination,
-						notes: args.notes
+						notes: args.notes,
+						sessionId: args.sessionId
 					},
 					auditFrom(context, args.actor)
 				);
@@ -394,6 +418,60 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 			withGuardrails(context.pool, { notBlank: ['reason'] }, async (args) => {
 				const { waypoint, progressedDependents } = await repository.unbypassWaypoint(args.waypointId, auditFrom(context, args.actor));
 				return jsonResult({ waypoint, progressedDependents });
+			})
+		)
+	);
+
+	server.registerTool(
+		'spur_waypoint',
+		{
+			description:
+				"Spins a waypoint off into its own trail: atomically reaches the origin waypoint (auto-generated resolution referencing the new trail) AND creates the child trail plus a trail_lineage edge, in one transaction -- no bare pointer to a trail that may not exist yet (the exact incident that motivated this tool). Use when a waypoint turns out too big for its trail, a standalone effort deserving its own trail while the original trail keeps moving. Distinct from bypass_waypoint (out of scope) and from a plain reach_waypoint handoff (work still resolved within this trail, e.g. moving to a spec) -- a spur is mid-trail and spawns a whole new trail. Legal from the same 'marked'/'claimed' states as reach_waypoint; the child trail's trailheadPrompt is auto-derived from the origin waypoint's own question.",
+			inputSchema: {
+				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
+				waypointId: z.string().min(1),
+				slug: z.string().min(1).describe('Kebab-case slug for the new child trail, unique within this project.'),
+				title: z.string().min(1).describe('Title for the new child trail.'),
+				destination: z.string().min(1).optional().describe('What reaching the end of the child trail looks like; omit until named.'),
+				notes: z.string().min(1).optional().describe('Domain, skills to consult, standing preferences for the child trail.'),
+				rationale: z.string().min(1).optional().describe('Why this waypoint is being spun off; stored on the origin waypoint.'),
+				reachedIn: z.string().min(1).optional().describe('Provenance stamp: identifier of the conversation that spun this off.')
+			}
+		},
+		withToolErrorHandling(
+			withGuardrails(context.pool, { notBlank: ['slug', 'title', 'destination', 'notes', 'rationale'] }, async (args) => {
+				const result = await repository.spurWaypoint(
+					args.waypointId,
+					{
+						slug: args.slug,
+						title: args.title,
+						destination: args.destination,
+						notes: args.notes,
+						rationale: args.rationale,
+						reachedIn: args.reachedIn
+					},
+					auditFrom(context, args.actor)
+				);
+				return jsonResult(result);
+			})
+		)
+	);
+
+	server.registerTool(
+		'unspur_waypoint',
+		{
+			description:
+				"Reverses a mistaken spur_waypoint: restores the origin waypoint to 'marked' (clearing the auto-generated resolution and spurredToTrailId) and removes the trail_lineage edge. The now-parentless child trail is left completely untouched -- not deleted, not re-parented -- and reported back as childTrail so the caller can see it before deciding what to do about it. Legal only on a waypoint with a recorded spurredToTrailId.",
+			inputSchema: {
+				actor: z.string().min(1).describe(ACTOR_DESCRIPTION),
+				waypointId: z.string().min(1),
+				reason: z.string().min(1).describe('Why this spur was a mistake. Required as deliberate friction, matching bypassReason/unbypass_waypoint\'s reason; not persisted, since audit_log carries no free-text column.')
+			}
+		},
+		withToolErrorHandling(
+			withGuardrails(context.pool, { notBlank: ['reason'] }, async (args) => {
+				const { waypoint, childTrail } = await repository.unspurWaypoint(args.waypointId, auditFrom(context, args.actor));
+				return jsonResult({ waypoint, childTrail });
 			})
 		)
 	);

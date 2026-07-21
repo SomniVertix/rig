@@ -58,6 +58,7 @@ export interface TrailRecord {
 	outcomeKind: TrailOutcomeKind | null;
 	outcomeSpecId: string | null;
 	outcomeSummary: string | null;
+	sessionId: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -74,6 +75,7 @@ interface TrailRow extends Record<string, unknown> {
 	outcome_kind: TrailOutcomeKind | null;
 	outcome_spec_id: string | null;
 	outcome_summary: string | null;
+	session_id: string | null;
 	created_at: string | Date;
 	updated_at: string | Date;
 }
@@ -91,8 +93,34 @@ function rowToTrail(row: TrailRow): TrailRecord {
 		outcomeKind: row.outcome_kind,
 		outcomeSpecId: row.outcome_spec_id,
 		outcomeSummary: row.outcome_summary,
+		sessionId: row.session_id,
 		createdAt: toIso(row.created_at),
 		updatedAt: toIso(row.updated_at)
+	};
+}
+
+/** One row per wayfinder/grilling invocation (wayfinder-trail-lineage), stamped
+ * explicitly by `start_session` -- no implicit/inferred session boundaries. */
+export interface SessionRecord {
+	id: string;
+	actor: string;
+	label: string | null;
+	createdAt: string;
+}
+
+interface SessionRow extends Record<string, unknown> {
+	id: string;
+	actor: string;
+	label: string | null;
+	created_at: string | Date;
+}
+
+function rowToSession(row: SessionRow): SessionRecord {
+	return {
+		id: row.id,
+		actor: row.actor,
+		label: row.label,
+		createdAt: toIso(row.created_at)
 	};
 }
 
@@ -113,6 +141,7 @@ export interface WaypointRecord {
 	previousStatus: WaypointStatus | null;
 	reachedIn: string | null;
 	reachedAt: string | null;
+	spurredToTrailId: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -134,6 +163,7 @@ interface WaypointRow extends Record<string, unknown> {
 	previous_status: WaypointStatus | null;
 	reached_in: string | null;
 	reached_at: string | Date | null;
+	spurred_to_trail_id: string | null;
 	created_at: string | Date;
 	updated_at: string | Date;
 }
@@ -156,6 +186,7 @@ function rowToWaypoint(row: WaypointRow): WaypointRecord {
 		previousStatus: row.previous_status,
 		reachedIn: row.reached_in,
 		reachedAt: row.reached_at === null ? null : toIso(row.reached_at),
+		spurredToTrailId: row.spurred_to_trail_id,
 		createdAt: toIso(row.created_at),
 		updatedAt: toIso(row.updated_at)
 	};
@@ -320,19 +351,51 @@ export class TrailRepository {
 	}
 
 	// ---------------------------------------------------------------------------
+	// Sessions (one row per wayfinder/grilling invocation)
+	// ---------------------------------------------------------------------------
+
+	/** Stamps one row for this invocation, explicitly -- no implicit/inferred session
+	 * boundaries. The wayfinder skill calls this once per invocation and threads the
+	 * returned id into every `createTrail` call that conversation makes. */
+	async startSession(label: string | undefined, audit: AuditInfo): Promise<SessionRecord> {
+		return await this.withTx(async (client) => {
+			const result = await client.query<SessionRow>(
+				`insert into discovery.sessions (actor, label) values ($1, $2) returning *`,
+				[audit.actor, label ?? null]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
+				throw new Error('startSession: insert did not return a row');
+			}
+			await insertAuditLogRow(client, audit, 'insert', 'discovery.sessions', row.id);
+			return rowToSession(row);
+		});
+	}
+
+	// ---------------------------------------------------------------------------
 	// Trails
 	// ---------------------------------------------------------------------------
 
 	async createTrail(
-		input: { projectId: string; slug: string; title: string; trailheadPrompt: string; destination?: string; notes?: string },
+		input: {
+			projectId: string;
+			slug: string;
+			title: string;
+			trailheadPrompt: string;
+			destination?: string;
+			notes?: string;
+			/** Which wayfinder/grilling invocation (start_session) chartered this trail; NULL for
+			 * trails predating wayfinder-trail-lineage (no backfill). */
+			sessionId?: string;
+		},
 		audit: AuditInfo
 	): Promise<TrailRecord> {
 		const trail = await this.withTx(async (client) => {
 			try {
 				const result = await client.query<TrailRow>(
-					`insert into discovery.trails (project_id, slug, title, trailhead_prompt, destination, notes)
-					 values ($1, $2, $3, $4, $5, $6) returning *`,
-					[input.projectId, input.slug, input.title, input.trailheadPrompt, input.destination ?? null, input.notes ?? null]
+					`insert into discovery.trails (project_id, slug, title, trailhead_prompt, destination, notes, session_id)
+					 values ($1, $2, $3, $4, $5, $6, $7) returning *`,
+					[input.projectId, input.slug, input.title, input.trailheadPrompt, input.destination ?? null, input.notes ?? null, input.sessionId ?? null]
 				);
 				const row = result.rows[0];
 				if (row === undefined) {
@@ -900,6 +963,141 @@ export class TrailRepository {
 		);
 		this.emitChange({ type: 'waypoint_changed', trailId: waypoint.trailId, waypointId: waypoint.id });
 		return { waypoint, progressedDependents: dependents.rows.map(rowToWaypoint) };
+	}
+
+	/**
+	 * Spins a waypoint off into its own trail (wayfinder-trail-lineage): atomically
+	 * reaches the origin waypoint (legal from the same 'marked'/'claimed' states as
+	 * `reachWaypoint`) with an auto-generated resolution referencing the new trail,
+	 * AND creates the child trail plus its `trail_lineage` edge, all in one
+	 * transaction -- mirroring `completeTrail`'s spec-creation atomicity so there is
+	 * never a bare pointer to a trail that doesn't exist yet (the exact incident that
+	 * motivated this feature). `slug`/`title`/`destination`/`notes` seed the child
+	 * trail directly; its `trailheadPrompt` is auto-derived from the origin
+	 * waypoint's own question, since spinning off is inherently "this question, on
+	 * its own". If the origin waypoint isn't in a reachable state, the whole
+	 * transaction rolls back -- no orphan trail is left behind.
+	 */
+	async spurWaypoint(
+		waypointId: string,
+		input: { slug: string; title: string; destination?: string; notes?: string; rationale?: string; reachedIn?: string },
+		audit: AuditInfo
+	): Promise<{ waypoint: WaypointRecord; trail: TrailRecord }> {
+		return await this.withTx(async (client) => {
+			try {
+				const origin = await this.requireWaypoint(client, waypointId);
+				const originTrailResult = await client.query<{ project_id: string; title: string }>(
+					`select project_id, title from discovery.trails where id = $1`,
+					[origin.trail_id]
+				);
+				const originTrail = originTrailResult.rows[0];
+				if (originTrail === undefined) {
+					throw new SpecRepositoryError('not_found', `trail not found: ${origin.trail_id}`);
+				}
+
+				const trailheadPrompt = `Spun off from waypoint "${origin.title}" (W${origin.waypoint_number}) in trail "${originTrail.title}": ${origin.question}`;
+				const trailResult = await client.query<TrailRow>(
+					`insert into discovery.trails (project_id, slug, title, trailhead_prompt, destination, notes)
+					 values ($1, $2, $3, $4, $5, $6) returning *`,
+					[originTrail.project_id, input.slug, input.title, trailheadPrompt, input.destination ?? null, input.notes ?? null]
+				);
+				const trailRow = trailResult.rows[0];
+				if (trailRow === undefined) {
+					throw new Error('spurWaypoint: trail insert did not return a row');
+				}
+				await insertAuditLogRow(client, audit, 'insert', 'discovery.trails', trailRow.id);
+
+				const lineageResult = await client.query<{ id: string }>(
+					`insert into discovery.trail_lineage (child_trail_id, parent_kind, parent_waypoint_id)
+					 values ($1, 'waypoint', $2) returning id`,
+					[trailRow.id, waypointId]
+				);
+				const lineageRow = lineageResult.rows[0];
+				if (lineageRow === undefined) {
+					throw new Error('spurWaypoint: trail_lineage insert did not return a row');
+				}
+				await insertAuditLogRow(client, audit, 'insert', 'discovery.trail_lineage', lineageRow.id);
+
+				const resolution = `Spun off into a new trail: "${input.title}" (${input.slug}).`;
+				const resolutionGist = `Spun off to trail "${input.title}".`;
+				const waypointResult = await client.query<WaypointRow>(
+					`update discovery.waypoints
+					 set status = 'reached', resolution = $2, resolution_gist = $3, rationale = coalesce($4, rationale),
+					     reached_in = $5, reached_at = now(), spurred_to_trail_id = $6
+					 where id = $1 and status in ('marked', 'claimed') returning *`,
+					[waypointId, resolution, resolutionGist, input.rationale ?? null, input.reachedIn ?? null, trailRow.id]
+				);
+				const waypointRow = waypointResult.rows[0];
+				if (waypointRow === undefined) {
+					throw new SpecRepositoryError(
+						'not_spurrable',
+						`spur_waypoint: waypoint is '${origin.status}', only marked or claimed waypoints can be spurred`
+					);
+				}
+				await insertAuditLogRow(client, audit, 'update', 'discovery.waypoints', waypointRow.id);
+
+				const waypoint = rowToWaypoint(waypointRow);
+				const trail = rowToTrail(trailRow);
+				this.emitChange({ type: 'trail_changed', trailId: trail.id });
+				this.emitChange({ type: 'waypoint_changed', trailId: waypoint.trailId, waypointId: waypoint.id });
+				return { waypoint, trail };
+			} catch (error) {
+				wrapConstraintViolation(error, 'spur_waypoint');
+			}
+		});
+	}
+
+	/**
+	 * Reverses a mistaken `spurWaypoint`: restores the origin waypoint to 'marked'
+	 * (clearing everything the spur wrote -- resolution, resolutionGist, rationale,
+	 * reachedIn/reachedAt, spurredToTrailId) and removes the `trail_lineage` edge,
+	 * mirroring `unbypassWaypoint`/`reopenTrail`'s "warn, don't block" philosophy:
+	 * the now-parentless child trail is left completely untouched (not deleted, not
+	 * re-parented), just reported back as `childTrail` so the caller can see it
+	 * before deciding what to do about it. Legal only on a waypoint that actually has
+	 * `spurredToTrailId` set.
+	 *
+	 * Unlike `unbypassWaypoint`, this doesn't restore from a dedicated
+	 * `previous_status` column -- `previous_status`'s CHECK constraint
+	 * (`waypoints_previous_status_only_when_bypassed`) ties it exclusively to
+	 * `status = 'bypassed'`, so a 'reached' waypoint (which is what `spurWaypoint`
+	 * produces) can never carry a value there. Since only 'marked'/'claimed'
+	 * waypoints are spurrable in the first place, and a stale 'claimed' status
+	 * shouldn't silently reappear (claims are re-established fresh, same as
+	 * `releaseWaypoint`'s target), restoring unconditionally to 'marked' is the
+	 * correct and only sensible undo target here.
+	 */
+	async unspurWaypoint(waypointId: string, audit: AuditInfo): Promise<{ waypoint: WaypointRecord; childTrail: TrailRecord | null }> {
+		const { waypoint, childTrailId } = await this.withTx(async (client) => {
+			const current = await this.requireWaypoint(client, waypointId);
+			const result = await client.query<WaypointRow>(
+				`update discovery.waypoints
+				 set status = 'marked', resolution = null, resolution_gist = null, rationale = null,
+				     reached_in = null, reached_at = null, spurred_to_trail_id = null
+				 where id = $1 and status = 'reached' and spurred_to_trail_id is not null
+				 returning *`,
+				[waypointId]
+			);
+			const row = result.rows[0];
+			if (row === undefined) {
+				throw new SpecRepositoryError(
+					'not_spurred',
+					`unspur_waypoint: waypoint is '${current.status}' with no spurred_to_trail_id set -- nothing to unspur`
+				);
+			}
+			const lineageDelete = await client.query<{ id: string }>(
+				`delete from discovery.trail_lineage where parent_waypoint_id = $1 returning id`,
+				[waypointId]
+			);
+			if (lineageDelete.rows[0] !== undefined) {
+				await insertAuditLogRow(client, audit, 'delete', 'discovery.trail_lineage', lineageDelete.rows[0].id);
+			}
+			await insertAuditLogRow(client, audit, 'update', 'discovery.waypoints', row.id);
+			return { waypoint: rowToWaypoint(row), childTrailId: current.spurred_to_trail_id };
+		});
+		const childTrail = childTrailId !== null ? await this.getTrail(childTrailId) : null;
+		this.emitChange({ type: 'waypoint_changed', trailId: waypoint.trailId, waypointId: waypoint.id });
+		return { waypoint, childTrail };
 	}
 
 	/**

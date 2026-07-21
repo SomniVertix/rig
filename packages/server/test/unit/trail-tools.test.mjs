@@ -227,6 +227,107 @@ describe('unbypass_waypoint', () => {
 	});
 });
 
+describe('start_session', () => {
+	test('rejects an unregistered actor (unknown_actor)', async () => {
+		const result = await handlers.get('start_session')({ actor: `stranger-${randomUUID()}`, label: 'a run' });
+		assert.equal(result.isError, true);
+		assert.equal(parseResult(result).error, 'unknown_actor');
+	});
+
+	test('a known actor with no label starts a session', async () => {
+		const result = await handlers.get('start_session')({ actor: KNOWN_ACTOR });
+		assert.equal(result.isError, undefined);
+		const body = parseResult(result);
+		assert.equal(body.session.actor, KNOWN_ACTOR);
+		assert.equal(body.session.label, null);
+	});
+
+	test('a known actor with a label starts a session carrying it', async () => {
+		const result = await handlers.get('start_session')({ actor: KNOWN_ACTOR, label: 'wayfinder-w2-test' });
+		assert.equal(result.isError, undefined);
+		assert.equal(parseResult(result).session.label, 'wayfinder-w2-test');
+	});
+});
+
+describe('spur_waypoint', () => {
+	test('rejects an unregistered actor before touching the waypoint (unknown_actor)', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+
+		const result = await handlers.get('spur_waypoint')({
+			actor: `stranger-${randomUUID()}`,
+			waypointId: waypoint.id,
+			slug: `nope-${randomUUID().slice(0, 8)}`,
+			title: 'Nope'
+		});
+		assert.equal(result.isError, true);
+		assert.equal(parseResult(result).error, 'unknown_actor');
+
+		const stillMarked = await pool.query(`select status from discovery.waypoints where id = $1`, [waypoint.id]);
+		assert.equal(stillMarked.rows[0].status, 'marked', 'a rejected spur must not have touched the row');
+	});
+
+	test('a known actor spins the waypoint off into a new trail atomically', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		const slug = `spun-${randomUUID().slice(0, 8)}`;
+
+		const result = await handlers.get('spur_waypoint')({
+			actor: KNOWN_ACTOR,
+			waypointId: waypoint.id,
+			slug,
+			title: 'Spun-Off Trail',
+			rationale: 'Too big for this trail.'
+		});
+		assert.equal(result.isError, undefined);
+		const body = parseResult(result);
+		assert.equal(body.waypoint.status, 'reached');
+		assert.equal(body.waypoint.spurredToTrailId, body.trail.id);
+		assert.equal(body.trail.slug, slug);
+	});
+});
+
+describe('unspur_waypoint', () => {
+	test('rejects a blank reason before ever touching the waypoint (empty_field)', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		await repository.spurWaypoint(waypoint.id, { slug: `s-${randomUUID().slice(0, 8)}`, title: 'Child' }, TEST_AUDIT);
+
+		const result = await handlers.get('unspur_waypoint')({ actor: KNOWN_ACTOR, waypointId: waypoint.id, reason: '   ' });
+		assert.equal(result.isError, true);
+		assert.equal(parseResult(result).error, 'empty_field');
+
+		const stillReached = await pool.query(`select status from discovery.waypoints where id = $1`, [waypoint.id]);
+		assert.equal(stillReached.rows[0].status, 'reached', 'a rejected undo must not have touched the row');
+	});
+
+	test('rejects an unregistered actor before checking reason (unknown_actor)', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		await repository.spurWaypoint(waypoint.id, { slug: `s-${randomUUID().slice(0, 8)}`, title: 'Child' }, TEST_AUDIT);
+
+		const result = await handlers.get('unspur_waypoint')({
+			actor: `stranger-${randomUUID()}`,
+			waypointId: waypoint.id,
+			reason: 'Mistaken spur.'
+		});
+		assert.equal(result.isError, true);
+		assert.equal(parseResult(result).error, 'unknown_actor');
+	});
+
+	test('a known actor with a non-blank reason successfully restores the waypoint and reports the orphaned child trail', async () => {
+		const trail = await createTestTrail();
+		const waypoint = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		const { trail: childTrail } = await repository.spurWaypoint(waypoint.id, { slug: `s-${randomUUID().slice(0, 8)}`, title: 'Child' }, TEST_AUDIT);
+
+		const result = await handlers.get('unspur_waypoint')({ actor: KNOWN_ACTOR, waypointId: waypoint.id, reason: 'Mistaken spur.' });
+		assert.equal(result.isError, undefined);
+		const body = parseResult(result);
+		assert.equal(body.waypoint.status, 'marked');
+		assert.equal(body.childTrail.id, childTrail.id);
+	});
+});
+
 describe('reopen_trail', () => {
 	test('rejects a blank reason before ever touching the trail (empty_field)', async () => {
 		const trail = await createTestTrail();
