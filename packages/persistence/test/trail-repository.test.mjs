@@ -540,6 +540,83 @@ describe('unspurWaypoint', () => {
 	});
 });
 
+describe('getTrailMap origin & spurs (wayfinder-trail-lineage)', () => {
+	test('origin is null for a trail with neither a session nor a spurring waypoint', async () => {
+		const trail = await createTestTrail();
+		const map = await repository.getTrailMap(trail.id);
+		assert.equal(map.origin, null);
+		assert.deepEqual(map.spurs, []);
+	});
+
+	test('origin reports the chartering session when trails.session_id is set', async () => {
+		const session = await repository.startSession('charter run', TEST_AUDIT);
+		const trail = await createTestTrail({ sessionId: session.id });
+
+		const map = await repository.getTrailMap(trail.id);
+		assert.deepEqual(map.origin, { kind: 'session', session });
+	});
+
+	test('origin reports the spurring waypoint (and its parent trail) for a trail created by spur_waypoint', async () => {
+		const parentTrail = await createTestTrail({ title: 'Parent Trail' });
+		const origin = await repository.addWaypoint(parentTrail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		const childSlug = `origin-child-${randomUUID().slice(0, 8)}`;
+		const { trail: childTrail } = await repository.spurWaypoint(origin.id, { slug: childSlug, title: 'Child Trail' }, TEST_AUDIT);
+
+		const map = await repository.getTrailMap(childTrail.id);
+		assert.equal(map.origin.kind, 'waypoint');
+		assert.equal(map.origin.waypoint.id, origin.id);
+		assert.equal(map.origin.parentTrailId, parentTrail.id);
+		assert.equal(map.origin.parentTrailSlug, parentTrail.slug);
+		assert.equal(map.origin.parentTrailTitle, 'Parent Trail');
+	});
+
+	test('spurs lists the origin waypoint and names the child trail it spawned', async () => {
+		const trail = await createTestTrail();
+		const other = await repository.addWaypoint(trail.id, { title: 'Ordinary', question: 'Just a decision?' }, TEST_AUDIT);
+		await repository.reachWaypoint(other.id, { resolution: 'Decided.', resolutionGist: 'Decided' }, TEST_AUDIT);
+		const origin = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		const childSlug = `spurs-child-${randomUUID().slice(0, 8)}`;
+		const { trail: childTrail } = await repository.spurWaypoint(origin.id, { slug: childSlug, title: 'Spurred Child' }, TEST_AUDIT);
+
+		const map = await repository.getTrailMap(trail.id);
+		assert.equal(map.spurs.length, 1, 'only the spurred waypoint appears, not the ordinarily-reached one');
+		assert.equal(map.spurs[0].waypoint.id, origin.id);
+		assert.equal(map.spurs[0].childTrailId, childTrail.id);
+		assert.equal(map.spurs[0].childTrailSlug, childSlug);
+		assert.equal(map.spurs[0].childTrailTitle, 'Spurred Child');
+		assert.equal(map.spurs[0].childTrailStatus, 'active');
+	});
+
+	test('unspurring removes the waypoint from spurs and clears the child trail\'s origin', async () => {
+		const trail = await createTestTrail();
+		const origin = await repository.addWaypoint(trail.id, { title: 'Too big', question: 'Spin off?' }, TEST_AUDIT);
+		const childSlug = `unspur-child-${randomUUID().slice(0, 8)}`;
+		const { trail: childTrail } = await repository.spurWaypoint(origin.id, { slug: childSlug, title: 'Will Unspur' }, TEST_AUDIT);
+		await repository.unspurWaypoint(origin.id, TEST_AUDIT);
+
+		const parentMap = await repository.getTrailMap(trail.id);
+		assert.deepEqual(parentMap.spurs, []);
+
+		const childMap = await repository.getTrailMap(childTrail.id);
+		assert.equal(childMap.origin, null, 'the now-parentless child trail reports no origin');
+	});
+});
+
+describe('listTrailsWithOrigin', () => {
+	test('each row carries the same origin getTrailMap would report, without a per-trail get_trail call', async () => {
+		const session = await repository.startSession('list-origin run', TEST_AUDIT);
+		const withSession = await createTestTrail({ sessionId: session.id });
+		const withNothing = await createTestTrail();
+
+		const entries = await repository.listTrailsWithOrigin(withSession.projectId);
+		const sessionEntry = entries.find((entry) => entry.id === withSession.id);
+		const nothingEntry = entries.find((entry) => entry.id === withNothing.id);
+
+		assert.deepEqual(sessionEntry.origin, { kind: 'session', session });
+		assert.equal(nothingEntry.origin, null);
+	});
+});
+
 describe('getFrontier', () => {
 	test('excludes a blocked waypoint until its blocker is reached', async () => {
 		const trail = await createTestTrail();

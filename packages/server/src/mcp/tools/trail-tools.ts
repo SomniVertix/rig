@@ -90,7 +90,7 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 		'get_trail',
 		{
 			description:
-				'Fetches a trail with its full computed map: decisions so far (reached), the frontier (claimable next), fog of war (sighted), out of scope (bypassed), live claims, terminology, and dependency edges. Every section is derived live from waypoint status — nothing to drift.',
+				"Fetches a trail with its full computed map: this trail's own origin (the session that chartered it, or the waypoint that spurred it -- null for trails predating wayfinder-trail-lineage), decisions so far (reached), the frontier (claimable next), fog of war (sighted), out of scope (bypassed), spurs (waypoints in this trail that spawned child trails), live claims, terminology, and dependency edges. Every section is derived live from waypoint status — nothing to drift.",
 			inputSchema: { trailId: z.string().min(1) }
 		},
 		withToolErrorHandling(async (args) => {
@@ -126,11 +126,12 @@ export function registerTrailTools(server: McpServer, context: McpToolContext): 
 	server.registerTool(
 		'list_trails',
 		{
-			description: "Lists every trail that belongs to this session's bound project.",
+			description:
+				"Lists every trail that belongs to this session's bound project, each carrying its lineage origin (the session that chartered it, or the waypoint that spurred it -- null for trails predating wayfinder-trail-lineage) so the lineage tree is browsable without a get_trail per row.",
 			inputSchema: {}
 		},
 		withToolErrorHandling(async () => {
-			const trails = await repository.listTrails(context.projectId);
+			const trails = await repository.listTrailsWithOrigin(context.projectId);
 			return jsonResult({ trails });
 		})
 	);

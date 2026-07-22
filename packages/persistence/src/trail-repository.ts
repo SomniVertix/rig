@@ -253,6 +253,41 @@ function rowToWaypointAsset(row: WaypointAssetRow): WaypointAssetRecord {
 	};
 }
 
+/**
+ * A trail's own parent edge (wayfinder-trail-lineage), surfaced by `get_trail` /
+ * `list_trails` -- never stored as its own record; computed from
+ * `discovery.trail_lineage` (waypoint spurs) falling back to `trails.session_id`
+ * (direct session charter, the only path today that doesn't also write a
+ * `trail_lineage` row). `null` for the pre-existing trails that predate this
+ * feature (no backfill).
+ */
+export type TrailOrigin =
+	| { kind: 'session'; session: SessionRecord }
+	| {
+			kind: 'waypoint';
+			waypoint: WaypointRecord;
+			/** The trail the origin waypoint itself belongs to (this trail's parent trail). */
+			parentTrailId: string;
+			parentTrailSlug: string;
+			parentTrailTitle: string;
+	  };
+
+/** One entry in a trail's "spurs" section: a waypoint (within that trail) that
+ * spawned a child trail via `spur_waypoint`, plus enough of the child to name it. */
+export interface TrailSpur {
+	waypoint: WaypointRecord;
+	childTrailId: string;
+	childTrailSlug: string;
+	childTrailTitle: string;
+	childTrailStatus: TrailStatus;
+}
+
+/** A `list_trails` row, enriched with its lineage origin so the whole tree is
+ * visible without an N+1 `get_trail` per row. */
+export interface TrailListEntry extends TrailRecord {
+	origin: TrailOrigin | null;
+}
+
 export interface TrailTermRecord {
 	id: string;
 	trailId: string;
@@ -297,6 +332,9 @@ export interface TrailSpecStatus {
  */
 export interface TrailMap {
 	trail: TrailRecord;
+	/** This trail's own parent edge (the session that chartered it or the waypoint
+	 * that spurred it) -- null for trails predating wayfinder-trail-lineage. */
+	origin: TrailOrigin | null;
 	/** Decisions so far: reached waypoints in the order they were reached. */
 	decisions: WaypointRecord[];
 	/** The frontier: marked (or stale-claimed) waypoints with every blocker terminated. */
@@ -305,6 +343,8 @@ export interface TrailMap {
 	fog: WaypointRecord[];
 	/** Out of scope: bypassed waypoints, each with its reason. */
 	outOfScope: WaypointRecord[];
+	/** Waypoints in this trail that spawned a child trail via spur_waypoint. */
+	spurs: TrailSpur[];
 	/** Currently live (non-stale) claims. */
 	claimed: WaypointRecord[];
 	terms: TrailTermRecord[];
@@ -441,6 +481,88 @@ export class TrailRepository {
 			[projectId]
 		);
 		return result.rows.map(rowToTrail);
+	}
+
+	/** `listTrails`, each row enriched with its lineage `origin` (wayfinder-trail-lineage)
+	 * so the whole tree is visible from one call, without an N+1 `getTrailOrigin` per trail
+	 * the caller would otherwise need to make by hand. */
+	async listTrailsWithOrigin(projectId: string): Promise<TrailListEntry[]> {
+		const trails = await this.listTrails(projectId);
+		const origins = await Promise.all(trails.map((trail) => this.getTrailOrigin(trail)));
+		return trails.map((trail, index) => ({ ...trail, origin: origins[index] ?? null }));
+	}
+
+	/**
+	 * Resolves a trail's own parent edge (wayfinder-trail-lineage): a `discovery.trail_lineage`
+	 * row keyed on this trail as child (today only ever written by `spurWaypoint`, kind
+	 * 'waypoint'), falling back to `trails.session_id` for a trail chartered directly by a
+	 * `start_session` invocation -- `createTrail` threads that column straight through
+	 * without also writing a 'session'-kind `trail_lineage` row, since the column alone is
+	 * already a complete, directly queryable record of that edge. Checking `trail_lineage`
+	 * first (rather than only ever reading `session_id`) means a future write path that does
+	 * start populating 'session'-kind rows is picked up automatically, with no reader change.
+	 * Returns null for a trail with neither -- the 5 trails predating this feature.
+	 */
+	async getTrailOrigin(trail: TrailRecord): Promise<TrailOrigin | null> {
+		const lineageResult = await this.pool.query<{
+			parent_kind: 'session' | 'waypoint';
+			parent_session_id: string | null;
+			parent_waypoint_id: string | null;
+		}>(
+			`select parent_kind, parent_session_id, parent_waypoint_id from discovery.trail_lineage where child_trail_id = $1`,
+			[trail.id]
+		);
+		const lineageRow = lineageResult.rows[0];
+
+		if (lineageRow?.parent_kind === 'waypoint' && lineageRow.parent_waypoint_id !== null) {
+			const waypointResult = await this.pool.query<WaypointRow & { parent_trail_slug: string; parent_trail_title: string }>(
+				`select w.*, t.slug as parent_trail_slug, t.title as parent_trail_title
+				 from discovery.waypoints w join discovery.trails t on t.id = w.trail_id
+				 where w.id = $1`,
+				[lineageRow.parent_waypoint_id]
+			);
+			const waypointRow = waypointResult.rows[0];
+			if (waypointRow === undefined) {
+				return null;
+			}
+			return {
+				kind: 'waypoint',
+				waypoint: rowToWaypoint(waypointRow),
+				parentTrailId: waypointRow.trail_id,
+				parentTrailSlug: waypointRow.parent_trail_slug,
+				parentTrailTitle: waypointRow.parent_trail_title
+			};
+		}
+
+		const sessionId = lineageRow?.parent_kind === 'session' ? lineageRow.parent_session_id : trail.sessionId;
+		if (sessionId === null || sessionId === undefined) {
+			return null;
+		}
+		const sessionResult = await this.pool.query<SessionRow>(`select * from discovery.sessions where id = $1`, [sessionId]);
+		const sessionRow = sessionResult.rows[0];
+		return sessionRow === undefined ? null : { kind: 'session', session: rowToSession(sessionRow) };
+	}
+
+	/** The reverse of `getTrailOrigin`: every waypoint in this trail that spawned a child
+	 * trail via `spur_waypoint`, each paired with enough of the child to name it. */
+	async listTrailSpurs(trailId: string): Promise<TrailSpur[]> {
+		const result = await this.pool.query<
+			WaypointRow & { child_trail_slug: string; child_trail_title: string; child_trail_status: TrailStatus }
+		>(
+			`select w.*, t.slug as child_trail_slug, t.title as child_trail_title, t.status as child_trail_status
+			 from discovery.waypoints w
+			 join discovery.trails t on t.id = w.spurred_to_trail_id
+			 where w.trail_id = $1 and w.spurred_to_trail_id is not null
+			 order by w.waypoint_number asc`,
+			[trailId]
+		);
+		return result.rows.map((row) => ({
+			waypoint: rowToWaypoint(row),
+			childTrailId: row.spurred_to_trail_id as string,
+			childTrailSlug: row.child_trail_slug,
+			childTrailTitle: row.child_trail_title,
+			childTrailStatus: row.child_trail_status
+		}));
 	}
 
 	async updateTrail(
@@ -668,11 +790,13 @@ export class TrailRepository {
 		if (trail === null) {
 			return null;
 		}
-		const [waypoints, frontier, terms, edges] = await Promise.all([
+		const [waypoints, frontier, terms, edges, origin, spurs] = await Promise.all([
 			this.listWaypoints(trailId),
 			this.getFrontier(trailId),
 			this.listTrailTerms(trailId),
-			this.listWaypointDependencies(trailId)
+			this.listWaypointDependencies(trailId),
+			this.getTrailOrigin(trail),
+			this.listTrailSpurs(trailId)
 		]);
 		const decisions = waypoints
 			.filter((w) => w.status === 'reached')
@@ -680,10 +804,12 @@ export class TrailRepository {
 		const staleCutoff = Date.now() - this.claimTtlHours * 3600_000;
 		return {
 			trail,
+			origin,
 			decisions,
 			frontier,
 			fog: waypoints.filter((w) => w.status === 'sighted'),
 			outOfScope: waypoints.filter((w) => w.status === 'bypassed'),
+			spurs,
 			claimed: waypoints.filter((w) => w.status === 'claimed' && w.claimedAt !== null && Date.parse(w.claimedAt) >= staleCutoff),
 			terms,
 			edges
