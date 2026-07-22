@@ -169,10 +169,12 @@ copy-pasteable reference for it.)
 
 Pi (`@earendil-works/pi-coding-agent`, wired in as `PiExecutor` — see
 `FUNCTIONALITY.md`) launches MCP servers the same way as the other two
-clients: as a local stdio subprocess with `command`/`args`/`env`. Configure
-it the same shape, in whichever settings surface your Pi build reads MCP
-server entries from (global `~/.pi/agent/settings.json` or project
-`.pi/settings.json` — see Pi's own `settings.md`):
+clients: as a local stdio subprocess with `command`/`args`/`env` — **plus an
+explicit `cwd`, which is not optional for Pi** (see
+[Project binding is pinned by `cwd`, not by session cwd](#project-binding-is-pinned-by-cwd-not-by-session-cwd-w15)
+below for why). Configure it in whichever settings surface your Pi build
+reads MCP server entries from — global `~/.pi/agent/mcp.json` or project
+`.pi/mcp.json` (see Pi's own `settings.md`):
 
 ```json
 {
@@ -180,6 +182,7 @@ server entries from (global `~/.pi/agent/settings.json` or project
     "rig": {
       "command": "node",
       "args": ["/absolute/path/to/rig/packages/resolver/dist/cli.js"],
+      "cwd": "/absolute/path/to/rig",
       "env": {
         "RIG_MCP_URL": "http://localhost:8787/mcp",
         "RIG_MCP_BEARER_TOKEN": "dev-local-token"
@@ -196,6 +199,7 @@ or, with `rig-resolver` linked and on `PATH`:
   "mcpServers": {
     "rig": {
       "command": "rig-resolver",
+      "cwd": "/absolute/path/to/rig",
       "env": {
         "RIG_MCP_URL": "http://localhost:8787/mcp",
         "RIG_MCP_BEARER_TOKEN": "dev-local-token"
@@ -210,23 +214,76 @@ landed and was tested directly against this repo's live server. Pi's core
 `settings.json` still has no built-in `mcpServers` key, but the
 `nicobailon/pi-mcp-adapter` extension (npm: `pi-mcp-adapter`) supplies one —
 it reads the same `command`/`args`/`env` stdio shape shown above from a
-`mcp.json` file (precedence: global `~/.pi/agent/mcp.json`, then project
-`.mcp.json` / `.pi/mcp.json`), registers a proxy tool with Pi, and — even
-when Pi is driven headlessly through an ACP session via the community
-`pi-acp` adapter (which does *not* itself forward MCP servers passed over
-ACP) — genuinely calls through to the configured MCP server. Confirmed
-end-to-end against `http://localhost:8787/mcp` with real, non-hallucinated
-results for both a no-arg tool (`list_projects`) and a parameterized one
-(`get_trail`).
+`mcp.json` file (precedence, later wins: `~/.config/mcp/mcp.json`, then
+`~/.pi/agent/mcp.json`, then project `.mcp.json`, then project
+`.pi/mcp.json`), registers a proxy tool with Pi, and — even when Pi is driven
+headlessly through an ACP session via the community `pi-acp` adapter —
+genuinely calls through to the configured MCP server. Confirmed end-to-end
+against `http://localhost:8787/mcp` with real, non-hallucinated results for
+both a no-arg tool (`list_projects`) and a parameterized one (`get_trail`).
 
-**Remaining gap:** which project a Pi session's MCP calls resolve against is
-controlled by this static config file, not by the ACP session's `cwd`. A
-stale global config can silently win over a project-local one (observed
-during the spike — see `diff-plans.md` §9 point 3 for details). Anything
-that provisions Pi sessions per-project (e.g. the Rig Console backend) needs
-to write/verify the correct `.pi/mcp.json` for that project before spawning,
-rather than assuming session `cwd` alone binds it the way it does for the
-resolver itself.
+### Project binding is pinned by `cwd`, not by session cwd (W15)
+
+The spike above passed by coincidence, not because per-session binding
+actually worked. Root-caused by reading `pi-acp@0.0.31` and
+`pi-mcp-adapter`'s source directly:
+
+- **`pi-acp` never forwards ACP's `mcpServers` session param.** It's parsed
+  into `this.mcpServers` in the session constructor
+  (`dist/index.js` — search `this.mcpServers`) and never read again anywhere
+  in the bundle. A client that passes per-session MCP server config over ACP
+  (as the protocol allows) gets silently ignored.
+- **`pi-mcp-adapter` resolves its config once per process, from
+  `ExtensionContext.cwd`, not from anything ACP-session-scoped**
+  (`init.ts`: `loadMcpConfig(configPath, ctx.cwd)`). A single long-lived
+  `pi-acp` process serving multiple ACP sessions with different logical
+  `cwd`s (each tracked only in `~/.pi/pi-acp/session-map.json` for session-file
+  bookkeeping) does not re-resolve MCP config per session.
+- **A server entry's own `cwd` field wins outright over both.**
+  `server-manager.ts:151`: `cwd: resolveConfigPath(definition.cwd) ??
+  this.defaultCwd` — if the merged config entry carries an explicit `cwd`,
+  that value is what the resolver subprocess is spawned with, full stop.
+
+Put together: this machine's global `~/.pi/agent/mcp.json` had a `rig` entry
+with a stale `cwd` baked in from an earlier session
+(`/Users/somniactic/Development/workspaces`, not any actual project repo).
+Every Pi session on this machine — regardless of ACP `cwd`, regardless of
+which project it was meant to serve — spawned the resolver there. The spike
+"passed" purely because that directory happens to contain
+`ai-application-bts.code-workspace` (alphabetically first among three
+`.code-workspace` files sitting in the same folder — `rig-resolver`'s
+`findNearestWorkspace` takes the first `readdirSync` match in its starting
+directory, no other tie-break), which happens to declare
+`"rig": { "projectId": "rig" }` — the same project the spike was testing
+against. A session meant for a *different* project would have silently
+bound to `rig` instead, with no error. Verified live: re-running
+`pi-mcp-adapter`'s own `loadMcpConfig(undefined, cwd)` against
+`/Users/somniactic/Development/haven` (a project with no local
+`.pi/mcp.json` override) still resolves the stale
+`cwd: .../workspaces` today.
+
+**The fix, settled:** every project that needs Pi ACP sessions must carry
+its own `.pi/mcp.json` (this repo now does — `rig/.pi/mcp.json`) with an
+explicit `cwd` pinned to that project's absolute path on the `rig` server
+entry. `.pi/mcp.json` is `pi-project` scope, merged last, and a per-field
+merge (`mergeServerMaps` in `config.ts`) means its `cwd` always overrides
+whatever the global file set. This sidesteps both dead ends above — it
+doesn't depend on `pi-acp` forwarding session `mcpServers`, and it doesn't
+depend on `ctx.cwd` reflecting the right project, since the entry's own
+`cwd` wins regardless. Anything that provisions Pi sessions per-project
+(e.g. the Rig Console's live-session backend, W8) must write/verify this
+file for the target project before spawning — the same conclusion this
+section's previous "remaining gap" note already pointed at, now confirmed
+mechanistically and with the concrete root cause identified.
+
+The global `~/.pi/agent/mcp.json` should never carry a project-specific
+`cwd` on a shared server key like `rig` — being global, it has no single
+correct project to pin, and a stale value silently wins for every project
+that lacks its own override, exactly as observed here. Drop `cwd` from the
+global entry entirely (or drop the `rig` key from the global file and rely
+purely on project-local `.pi/mcp.json` files); this machine's global file
+still needs that manual cleanup — tracked as a to-do for whoever runs Pi
+interactively here, since it's outside any one project's repo.
 
 ---
 

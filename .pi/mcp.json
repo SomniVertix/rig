@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "rig": {
+      "command": "node",
+      "args": ["/Users/somniactic/Development/rig/packages/resolver/dist/cli.js"],
+      "cwd": "/Users/somniactic/Development/rig",
+      "env": {
+        "RIG_MCP_URL": "http://localhost:8787/mcp",
+        "RIG_MCP_BEARER_TOKEN": "dev-local-token"
+      }
+    }
+  }
+}
