@@ -95,18 +95,27 @@
 --                                              reached | bypassed
 --     discovery.waypoint_approach                 grilling | research |
 --                                              prototype | task
+--     discovery.lineage_parent_kind                session | waypoint (see
+--                                              trail_lineage, wayfinder-trail-
+--                                              lineage)
 --   Functions
 --     discovery.set_updated_at()                  updated_at maintenance trigger
 --     discovery.reject_cross_trail_waypoint_edge() edges stay within one trail
 --   Tables
+--     discovery.sessions                          one row per wayfinder/
+--                                              grilling invocation
 --     discovery.trails                            one effort (a grill, short or
 --       + trails_one_per_spec                   campaign-length)
+--       + trails.session_id -> discovery.sessions  which invocation chartered it
 --       -> discovery.waypoints                    one question each
 --            + waypoints_trail_id_status_idx
+--            + waypoints.spurred_to_trail_id       set by spur_waypoint; UNIQUE
 --            -> discovery.waypoint_assets         what resolving it produced
 --            -> discovery.waypoint_dependency_edges  "from" blocks "to"
 --                 + waypoint_dependency_edges_to_idx
 --       -> discovery.trail_terms                  per-trail terminology
+--     discovery.trail_lineage                     a trail's parent edge
+--       (session that chartered it, or waypoint that spurred it)
 --   Canonical queries (documented inline beside waypoints; implemented in
 --   application code, never as triggers)
 --     claim_waypoint                           atomic claim UPDATE; stale-
@@ -904,6 +913,18 @@ EXCEPTION
     WHEN duplicate_object THEN NULL;
 END $$;
 
+-- wayfinder-trail-lineage: a trail's parent edge is one of these kinds today;
+-- extensible later (e.g. a future 'triage' kind) without redesigning
+-- trail_lineage, just adding a value here plus a new nullable FK column.
+DO $$ BEGIN
+    CREATE TYPE discovery.lineage_parent_kind AS ENUM (
+        'session',      -- trail was chartered directly by a wayfinder session
+        'waypoint'      -- trail was spun off from a waypoint via spur_waypoint
+    );
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
 -- -----------------------------------------------------------------------------
 -- Shared trigger: keep updated_at current on row modification.
 -- -----------------------------------------------------------------------------
@@ -914,6 +935,23 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- =============================================================================
+-- sessions — one row per wayfinder/grilling invocation (a conversation),
+-- stamped explicitly so trails and trail_lineage can record who chartered them
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS discovery.sessions (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor      TEXT NOT NULL,   -- validated against spec_pipeline.known_actors
+                                 -- at the application layer, like every other
+                                 -- write tool's actor argument
+    label      TEXT,            -- optional human-readable note for this
+                                 -- invocation
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE discovery.sessions IS
+    'One row per wayfinder/grilling invocation, stamped explicitly by the start_session MCP tool -- no implicit/inferred session boundaries. trails.session_id and trail_lineage.parent_session_id both reference this table. The 5 trails that predate this feature keep session_id NULL (no backfill), matching how previous_status was left NULL on pre-existing waypoints in wayfinder-undo.';
 
 -- =============================================================================
 -- trails — one row per effort (a grill, short or campaign-length)
@@ -934,6 +972,9 @@ CREATE TABLE IF NOT EXISTS discovery.trails (
     outcome_kind     discovery.trail_outcome_kind,
     outcome_spec_id  UUID REFERENCES spec_pipeline.specs (id) ON DELETE SET NULL,
     outcome_summary  TEXT,           -- prose record of what the trail yielded
+    session_id       UUID REFERENCES discovery.sessions (id), -- which wayfinder
+                                     -- invocation chartered this trail; NULL
+                                     -- for the pre-existing trails (no backfill)
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (project_id, slug),
@@ -956,6 +997,11 @@ COMMENT ON TABLE discovery.trails IS
 -- reopened trail can keep outcome_kind/outcome_spec_id from a prior
 -- completion while status is 'active' again.
 ALTER TABLE discovery.trails DROP CONSTRAINT IF EXISTS trails_outcome_only_when_complete;
+
+-- Existing databases (this table predates session_id, added for
+-- wayfinder-trail-lineage): apply the same shape without dropping data.
+ALTER TABLE discovery.trails
+    ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES discovery.sessions (id);
 
 -- The handoff pointer: at most one trail behind any given spec, mirroring the
 -- old one-decisions.md-per-spec rule. requirements-compiler resolves a spec's
@@ -1011,6 +1057,11 @@ CREATE TABLE IF NOT EXISTS discovery.waypoints (
     reached_in      TEXT,             -- provenance stamp: identifier of the
                                       -- conversation that resolved it
     reached_at      TIMESTAMPTZ,
+    spurred_to_trail_id UUID REFERENCES discovery.trails (id), -- set by
+                                      -- spur_waypoint when this waypoint's
+                                      -- resolution spun off a new trail;
+                                      -- UNIQUE below enforces one waypoint
+                                      -- spawns at most one trail
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (trail_id, waypoint_number),
@@ -1035,6 +1086,14 @@ ALTER TABLE discovery.waypoints
 ALTER TABLE discovery.waypoints
     ADD CONSTRAINT waypoints_previous_status_only_when_bypassed
         CHECK (previous_status IS NULL OR status = 'bypassed');
+
+-- Existing databases (this table predates spurred_to_trail_id, added for
+-- wayfinder-trail-lineage): apply the same shape without dropping data.
+ALTER TABLE discovery.waypoints
+    ADD COLUMN IF NOT EXISTS spurred_to_trail_id UUID REFERENCES discovery.trails (id);
+CREATE UNIQUE INDEX IF NOT EXISTS waypoints_spurred_to_trail_id_key
+    ON discovery.waypoints (spurred_to_trail_id)
+    WHERE spurred_to_trail_id IS NOT NULL;
 COMMENT ON TABLE discovery.waypoints IS
     'The unified question lifecycle: sighted (fog) -> marked (frontier-eligible) -> claimed -> reached (a decision) | bypassed (out of scope). A grilling conversation reaches straight from marked — add_waypoint accepts an inline resolution and inserts directly at reached; a wayfinder campaign leaves marked waypoints for later conversations to claim. Only marked waypoints are claimable (enforced by the canonical claim UPDATE, not schema).';
 
@@ -1164,6 +1223,32 @@ DROP TRIGGER IF EXISTS trail_terms_set_updated_at ON discovery.trail_terms;
 CREATE TRIGGER trail_terms_set_updated_at
     BEFORE UPDATE ON discovery.trail_terms
     FOR EACH ROW EXECUTE FUNCTION discovery.set_updated_at();
+
+-- =============================================================================
+-- trail_lineage — a trail's parent edge (the session that chartered it, or
+-- the waypoint that spurred it), replacing the free-text bypassReason "see
+-- trail X" pattern with a real, atomically-created edge
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS discovery.trail_lineage (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    child_trail_id     UUID NOT NULL UNIQUE REFERENCES discovery.trails (id) ON DELETE CASCADE,
+    parent_kind        discovery.lineage_parent_kind NOT NULL,
+    parent_session_id  UUID REFERENCES discovery.sessions (id),
+    parent_waypoint_id UUID REFERENCES discovery.waypoints (id),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT trail_lineage_parent_matches_kind CHECK (
+        (parent_kind = 'session'  AND parent_session_id  IS NOT NULL AND parent_waypoint_id IS NULL) OR
+        (parent_kind = 'waypoint' AND parent_waypoint_id IS NOT NULL AND parent_session_id  IS NULL)
+    )
+);
+COMMENT ON TABLE discovery.trail_lineage IS
+    'Each trail''s single parent edge (child_trail_id is UNIQUE: at most one parent per trail). parent_kind is typed with dedicated FK columns per kind (not one opaque parent_id) so future parent kinds (e.g. a later "triage" kind) can be added by extending discovery.lineage_parent_kind plus a new nullable FK column, without redesigning this table, while keeping parent_waypoint_id directly queryable. spur_waypoint creates the child trail AND this row atomically in one transaction -- no bare pointer to a trail that may not exist yet. unspur_waypoint removes this row without touching the now-parentless child trail.';
+
+CREATE INDEX IF NOT EXISTS trail_lineage_parent_waypoint_id_idx
+    ON discovery.trail_lineage (parent_waypoint_id);
+CREATE INDEX IF NOT EXISTS trail_lineage_parent_session_id_idx
+    ON discovery.trail_lineage (parent_session_id);
 
 -- =============================================================================
 -- PART 3 — RUN-ENGINE TABLES (public schema)

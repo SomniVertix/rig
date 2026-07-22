@@ -205,18 +205,28 @@ or, with `rig-resolver` linked and on `PATH`:
 }
 ```
 
-**Caveat:** as of the `pi-coding-agent` release this repo currently installs
-(`0.80.7`), Pi's own docs state it "intentionally does not include built-in
-MCP" — its `settings.json` schema has no `mcpServers` key yet, unlike VS Code
-and Claude Code CLI. This section documents the *target* config shape (same
-`command`/`args`/`env` stdio pattern as the other two clients, same
-`RIG_MCP_URL`/`RIG_MCP_BEARER_TOKEN` env vars, no HTTP `url`/`Authorization`
-entry) for whenever Pi's MCP support lands natively or via an extension
-bridge (`.pi/extensions/`, see Pi's `extensions.md`). This gap is the reason
-"Resolver packaging/distribution across three clients" is called out as an
-open design flag — check Pi's current documentation before relying on this
-section, and update it once Pi ships (or a bridging extension supplies)
-concrete MCP config support.
+**Update (2026-07-21, verified by spike):** the bridging extension has
+landed and was tested directly against this repo's live server. Pi's core
+`settings.json` still has no built-in `mcpServers` key, but the
+`nicobailon/pi-mcp-adapter` extension (npm: `pi-mcp-adapter`) supplies one —
+it reads the same `command`/`args`/`env` stdio shape shown above from a
+`mcp.json` file (precedence: global `~/.pi/agent/mcp.json`, then project
+`.mcp.json` / `.pi/mcp.json`), registers a proxy tool with Pi, and — even
+when Pi is driven headlessly through an ACP session via the community
+`pi-acp` adapter (which does *not* itself forward MCP servers passed over
+ACP) — genuinely calls through to the configured MCP server. Confirmed
+end-to-end against `http://localhost:8787/mcp` with real, non-hallucinated
+results for both a no-arg tool (`list_projects`) and a parameterized one
+(`get_trail`).
+
+**Remaining gap:** which project a Pi session's MCP calls resolve against is
+controlled by this static config file, not by the ACP session's `cwd`. A
+stale global config can silently win over a project-local one (observed
+during the spike — see `diff-plans.md` §9 point 3 for details). Anything
+that provisions Pi sessions per-project (e.g. the Rig Console backend) needs
+to write/verify the correct `.pi/mcp.json` for that project before spawning,
+rather than assuming session `cwd` alone binds it the way it does for the
+resolver itself.
 
 ---
 
