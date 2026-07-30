@@ -1,25 +1,25 @@
 import { useQuery } from '@tanstack/react-query';
 import * as api from '../../api/client';
 import { toSpecSummary } from '../../domain/specs';
-import type { Project, StageDistributionStatus } from './types';
+import type { WorkspaceSummary, StageDistributionStatus } from './types';
 
 /**
- * The project list itself now comes from GET /workspaces (real scanned
- * `.code-workspace` files, see internal/workspace/registry) rather than a
- * hardcoded stopgap. Every number shown per project is real: fetched live
+ * The workspace list itself now comes from GET /workspaces (real scanned
+ * `.code-workspace` files, see internal/binding/registry) rather than a
+ * hardcoded stopgap. Every number shown per workspace is real: fetched live
  * from /specs and /expeditions and aggregated client-side.
  */
-export function useProjects() {
-	return useQuery<Project[]>({
-		queryKey: ['projects', 'live-aggregate'],
+export function useWorkspaceSummaries() {
+	return useQuery<WorkspaceSummary[]>({
+		queryKey: ['workspaces', 'live-aggregate'],
 		queryFn: async () => {
 			const workspaces = await api.listWorkspaces();
-			return Promise.all(workspaces.map((w) => loadProject(w.workspaceId, w.label)));
+			return Promise.all(workspaces.map((w) => loadWorkspaceSummary(w.workspaceId, w.label)));
 		}
 	});
 }
 
-async function loadProject(slug: string, name: string): Promise<Project> {
+async function loadWorkspaceSummary(slug: string, name: string): Promise<WorkspaceSummary> {
 	const [specs, expeditions] = await Promise.all([api.listSpecs(slug), api.listExpeditions(slug)]);
 	const summaries = specs.map(toSpecSummary);
 

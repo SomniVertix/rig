@@ -12,10 +12,10 @@ const STAGE_FILTERS: (SpecStageName | 'all')[] = ['all', 'requirements', 'design
 
 export function SpecsListPage() {
 	usePageTitle('Specifications');
-	// :project is always present — this route only ever mounts under /:project.
-	const { project } = useParams() as { project: string };
+	// :workspace is always present — this route only ever mounts under /:workspace.
+	const { workspace } = useParams() as { workspace: string };
 	const navigate = useNavigate();
-	const { data: specs, isLoading, isError, error } = useSpecs(project);
+	const { data: specs, isLoading, isError, error } = useSpecs(workspace);
 
 	const [search, setSearch] = useState('');
 	const [stageFilter, setStageFilter] = useState<SpecStageName | 'all'>('all');
@@ -36,7 +36,7 @@ export function SpecsListPage() {
 					<h1>Specifications</h1>
 				</div>
 				<span className="rl-eyebrow" style={{ marginLeft: 8 }}>
-					GET /specs?workspaceId={project}
+					GET /specs?workspaceId={workspace}
 				</span>
 			</div>
 
@@ -79,7 +79,7 @@ export function SpecsListPage() {
 						<div>Updated</div>
 					</div>
 					{filtered.map((spec) => (
-						<div key={spec.id} className="rl-specs-table__row" onClick={() => navigate(`/${project}/specs/${spec.id}`)}>
+						<div key={spec.id} className="rl-specs-table__row" onClick={() => navigate(`/${workspace}/specs/${spec.id}`)}>
 							<div className="rl-specs-table__feature">{spec.featureName}</div>
 							<div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>{spec.currentStage}</div>
 							<div>

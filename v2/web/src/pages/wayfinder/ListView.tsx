@@ -8,10 +8,10 @@ const STATUS_FILTERS: (TrailStatus | 'all')[] = ['all', 'active', 'settled', 'ch
 
 export interface ListViewProps {
 	trails: TrailSummary[];
-	projectId: string;
+	workspaceId: string;
 }
 
-export function ListView({ trails, projectId }: ListViewProps) {
+export function ListView({ trails, workspaceId }: ListViewProps) {
 	const navigate = useNavigate();
 	const [search, setSearch] = useState('');
 	const [statusFilter, setStatusFilter] = useState<TrailStatus | 'all'>('all');
@@ -54,7 +54,7 @@ export function ListView({ trails, projectId }: ListViewProps) {
 							key={trail.id}
 							className={['rl-trail-row', trail.id === selected?.id ? 'rl-trail-row--selected' : ''].filter(Boolean).join(' ')}
 							onClick={() => setSelectedId(trail.id)}
-							onDoubleClick={() => navigate(`/${projectId}/trails/${trail.id}`)}
+							onDoubleClick={() => navigate(`/${workspaceId}/trails/${trail.id}`)}
 						>
 							<div className="rl-trail-row__title">
 								<span>{trail.name}</span>
@@ -82,7 +82,7 @@ export function ListView({ trails, projectId }: ListViewProps) {
 					</div>
 					<div className="rl-eyebrow">TRAIL · {selected.id}</div>
 					<div style={{ marginTop: 12 }}>
-						<Button variant="secondary" size="sm" onClick={() => navigate(`/${projectId}/trails/${selected.id}`)}>
+						<Button variant="secondary" size="sm" onClick={() => navigate(`/${workspaceId}/trails/${selected.id}`)}>
 							Open trail →
 						</Button>
 					</div>
@@ -97,7 +97,7 @@ export function ListView({ trails, projectId }: ListViewProps) {
 					</div>
 					{selected.outcomeSpecId ? (
 						<div className="rl-card__footer" style={{ marginTop: 16, paddingLeft: 0, paddingRight: 0 }}>
-							<Link to={`/${projectId}/specs/${selected.outcomeSpecId}`}>Outcome spec →</Link>
+							<Link to={`/${workspaceId}/specs/${selected.outcomeSpecId}`}>Outcome spec →</Link>
 						</div>
 					) : null}
 				</div>

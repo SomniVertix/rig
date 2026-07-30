@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../ds';
 import { usePageTitle } from '../app/state/AppStateContext';
-import { useProjects } from '../data/projects';
-import type { Project, StageDistributionStatus } from '../data/projects/types';
+import { useWorkspaceSummaries } from '../data/workspaceSummaries';
+import type { WorkspaceSummary, StageDistributionStatus } from '../data/workspaceSummaries/types';
 
 const STAGE_COLOR: Record<StageDistributionStatus, string> = {
 	not_started: 'var(--status-draft-fg)',
@@ -12,29 +12,29 @@ const STAGE_COLOR: Record<StageDistributionStatus, string> = {
 	denied: 'var(--status-denied-fg)'
 };
 
-export function ProjectsOverview() {
-	usePageTitle('Projects');
+export function WorkspacesOverview() {
+	usePageTitle('Workspaces');
 	const navigate = useNavigate();
-	const { data: projects, isLoading } = useProjects();
+	const { data: workspaces, isLoading } = useWorkspaceSummaries();
 
 	const { needsReview, quiet } = useMemo(() => {
-		const sorted = [...(projects ?? [])].sort((a, b) => b.gatesWaiting - a.gatesWaiting);
+		const sorted = [...(workspaces ?? [])].sort((a, b) => b.gatesWaiting - a.gatesWaiting);
 		return {
-			needsReview: sorted.filter((p) => p.gatesWaiting > 0),
-			quiet: sorted.filter((p) => p.gatesWaiting === 0)
+			needsReview: sorted.filter((w) => w.gatesWaiting > 0),
+			quiet: sorted.filter((w) => w.gatesWaiting === 0)
 		};
-	}, [projects]);
+	}, [workspaces]);
 
-	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading projects…</p>;
+	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading workspaces…</p>;
 
 	return (
 		<div>
-			<h1 style={{ marginBottom: 24 }}>Projects</h1>
+			<h1 style={{ marginBottom: 24 }}>Workspaces</h1>
 			{needsReview.length > 0 ? (
-				<Section label="Needs your review first" projects={needsReview} onOpen={(slug) => navigate(`/${slug}/specs`)} />
+				<Section label="Needs your review first" workspaces={needsReview} onOpen={(slug) => navigate(`/${slug}/specs`)} />
 			) : null}
 			{quiet.length > 0 ? (
-				<Section label="Quiet" projects={quiet} quiet onOpen={(slug) => navigate(`/${slug}/specs`)} />
+				<Section label="Quiet" workspaces={quiet} quiet onOpen={(slug) => navigate(`/${slug}/specs`)} />
 			) : null}
 		</div>
 	);
@@ -42,12 +42,12 @@ export function ProjectsOverview() {
 
 function Section({
 	label,
-	projects,
+	workspaces,
 	quiet = false,
 	onOpen
 }: {
 	label: string;
-	projects: Project[];
+	workspaces: WorkspaceSummary[];
 	quiet?: boolean;
 	onOpen: (slug: string) => void;
 }) {
@@ -55,16 +55,16 @@ function Section({
 		<div style={{ marginBottom: 28 }}>
 			<div className="rl-section-label">{label}</div>
 			<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 14 }}>
-				{projects.map((project) => (
-					<ProjectCard key={project.slug} project={project} quiet={quiet} onClick={() => onOpen(project.slug)} />
+				{workspaces.map((workspace) => (
+					<WorkspaceCard key={workspace.slug} workspace={workspace} quiet={quiet} onClick={() => onOpen(workspace.slug)} />
 				))}
 			</div>
 		</div>
 	);
 }
 
-function ProjectCard({ project, quiet, onClick }: { project: Project; quiet: boolean; onClick: () => void }) {
-	const total = project.stageDistribution.reduce((sum, s) => sum + s.count, 0);
+function WorkspaceCard({ workspace, quiet, onClick }: { workspace: WorkspaceSummary; quiet: boolean; onClick: () => void }) {
+	const total = workspace.stageDistribution.reduce((sum, s) => sum + s.count, 0);
 
 	return (
 		<div
@@ -74,29 +74,29 @@ function ProjectCard({ project, quiet, onClick }: { project: Project; quiet: boo
 		>
 			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
 				<span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>
-					{project.slug}
+					{workspace.slug}
 				</span>
 				<StatusBadge
-					status={project.gatesWaiting > 0 ? 'in_review' : 'draft'}
-					label={project.gatesWaiting > 0 ? `${project.gatesWaiting} gates` : 'quiet'}
+					status={workspace.gatesWaiting > 0 ? 'in_review' : 'draft'}
+					label={workspace.gatesWaiting > 0 ? `${workspace.gatesWaiting} gates` : 'quiet'}
 				/>
 			</div>
 
 			<div style={{ display: 'flex', gap: 2, height: 5, borderRadius: 3, overflow: 'hidden', marginBottom: 10, background: 'var(--bg-inset)' }}>
 				{total > 0
-					? project.stageDistribution.map((s) => (
+					? workspace.stageDistribution.map((s) => (
 							<span key={s.status} style={{ flex: s.count / total, background: STAGE_COLOR[s.status] }} />
 						))
 					: null}
 			</div>
 
 			<div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', marginBottom: quiet ? 0 : 6 }}>
-				{project.specCount} specs · {project.trailCount} trails
+				{workspace.specCount} specs · {workspace.trailCount} trails
 			</div>
 
 			{!quiet ? (
 				<div style={{ fontSize: 12, color: 'var(--status-review-fg)', marginBottom: 6 }}>
-					{project.gatesWaiting} stage{project.gatesWaiting > 1 ? 's' : ''} waiting on you
+					{workspace.gatesWaiting} stage{workspace.gatesWaiting > 1 ? 's' : ''} waiting on you
 				</div>
 			) : null}
 
@@ -110,7 +110,7 @@ function ProjectCard({ project, quiet, onClick }: { project: Project; quiet: boo
 					color: 'var(--text-faint)'
 				}}
 			>
-				{project.lastWriteAt ? `last write ${project.lastWriteAt}` : 'no writes yet'}
+				{workspace.lastWriteAt ? `last write ${workspace.lastWriteAt}` : 'no writes yet'}
 			</div>
 		</div>
 	);

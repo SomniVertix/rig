@@ -21,8 +21,8 @@ const TRAIL_STAGES = [
 ];
 
 export function TrailDetailPage() {
-	// :project is always present — this route only ever mounts under /:project.
-	const { project, trailId = '' } = useParams() as { project: string; trailId?: string };
+	// :workspace is always present — this route only ever mounts under /:workspace.
+	const { workspace, trailId = '' } = useParams() as { workspace: string; trailId?: string };
 	const { data: trail, isLoading, isError, error } = useTrail(trailId);
 	usePageTitle(trail ? trail.name : 'Trail detail');
 
@@ -44,7 +44,7 @@ export function TrailDetailPage() {
 
 	return (
 		<div>
-			<Link to={`/${project}/trails`} className="rl-breadcrumb">
+			<Link to={`/${workspace}/trails`} className="rl-breadcrumb">
 				← wayfinder
 			</Link>
 			<div className="rl-page-header" style={{ marginBottom: 4 }}>
@@ -97,7 +97,7 @@ export function TrailDetailPage() {
 					{trail.outcomeSpecId ? (
 						<div className="rl-card rl-card__pad">
 							<div className="rl-eyebrow">Outcome</div>
-							<Link to={`/${project}/specs/${trail.outcomeSpecId}`} style={{ marginTop: 6, display: 'inline-block' }}>
+							<Link to={`/${workspace}/specs/${trail.outcomeSpecId}`} style={{ marginTop: 6, display: 'inline-block' }}>
 								Chartered spec →
 							</Link>
 						</div>

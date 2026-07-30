@@ -4,10 +4,10 @@ import { Icon } from '../../ds';
 import { useAppState } from '../state/AppStateContext';
 import { useTrails } from '../../data/trails';
 import { useSpecs } from '../../data/specs';
-import { ProjectPicker } from './ProjectPicker';
+import { WorkspacePicker } from './WorkspacePicker';
 
 export interface SidebarProps {
-	projectId?: string;
+	workspaceId?: string;
 }
 
 interface NavItem {
@@ -17,18 +17,18 @@ interface NavItem {
 	count?: number;
 }
 
-export function Sidebar({ projectId }: SidebarProps) {
+export function Sidebar({ workspaceId }: SidebarProps) {
 	const { sidebarCollapsed, setSidebarCollapsed } = useAppState();
 	// Real counts (Stage A). Runs/Audit have no V2 backend at all yet (see
 	// GAPS.md §3) — their nav items just show no count, same as before,
 	// rather than mixing in a fixture-derived number that would look just
 	// as "live" as the real ones next to it.
-	const { data: trails } = useTrails(projectId);
-	const { data: specs } = useSpecs(projectId);
+	const { data: trails } = useTrails(workspaceId);
+	const { data: specs } = useSpecs(workspaceId);
 
-	// No project selected (e.g. on /projects) — nav items have nowhere
-	// project-scoped to point yet, so they stay put on the overview.
-	const scoped = (path: string) => (projectId ? `/${projectId}/${path}` : '/projects');
+	// No workspace selected (e.g. on /workspaces) — nav items have nowhere
+	// workspace-scoped to point yet, so they stay put on the overview.
+	const scoped = (path: string) => (workspaceId ? `/${workspaceId}/${path}` : '/workspaces');
 
 	const groups: { label: string; items: NavItem[] }[] = [
 		{
@@ -56,7 +56,7 @@ export function Sidebar({ projectId }: SidebarProps) {
 				<span className="rl-sidebar__version">v0.4</span>
 			</div>
 
-			<ProjectPicker currentProjectId={projectId} projectCount={specs?.length} />
+			<WorkspacePicker currentWorkspaceId={workspaceId} workspaceCount={specs?.length} />
 
 			<nav className="rl-nav">
 				{groups.map((group) => (
@@ -64,20 +64,20 @@ export function Sidebar({ projectId }: SidebarProps) {
 						<div className="rl-nav__group-label">{group.label}</div>
 						{group.items.map((item) => (
 							<NavLink
-								// Keyed by label, not `to`: when no project is selected every
-								// item's `to` falls back to the same '/projects' href, so
+								// Keyed by label, not `to`: when no workspace is selected every
+								// item's `to` falls back to the same '/workspaces' href, so
 								// keying on `to` gave sibling items duplicate React keys —
 								// harmless on a fresh mount, but a real bug on the live
-								// transition into a project, where React has to reconcile
+								// transition into a workspace, where React has to reconcile
 								// "two children sharing one key" into distinct hrefs and can
 								// leave a stray duplicated DOM node behind.
 								key={item.label}
 								to={item.to}
-								// isActive alone isn't enough: with no project selected every
-								// item falls back to the same '/projects' href, and NavLink
+								// isActive alone isn't enough: with no workspace selected every
+								// item falls back to the same '/workspaces' href, and NavLink
 								// would mark all of them active against that one location.
 								className={({ isActive }) =>
-									['rl-nav__item', isActive && projectId ? 'rl-nav__item--active' : ''].filter(Boolean).join(' ')
+									['rl-nav__item', isActive && workspaceId ? 'rl-nav__item--active' : ''].filter(Boolean).join(' ')
 								}
 							>
 								<Icon icon={item.icon} size={17} />

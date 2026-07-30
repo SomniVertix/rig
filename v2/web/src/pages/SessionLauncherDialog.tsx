@@ -14,18 +14,18 @@ import {
 export interface SessionLauncherDialogProps {
 	open: boolean;
 	onClose: () => void;
-	defaultProjectId?: string;
+	defaultWorkspaceId?: string;
 }
 
-export function SessionLauncherDialog({ open, onClose, defaultProjectId }: SessionLauncherDialogProps) {
-	const { data: projects } = useWorkspaces();
+export function SessionLauncherDialog({ open, onClose, defaultWorkspaceId }: SessionLauncherDialogProps) {
+	const { data: workspaces } = useWorkspaces();
 	const [type, setType] = useState<SessionType>('discovery');
 	const [executor, setExecutor] = useState<Executor>('claude');
 	const [model, setModel] = useState(MODEL_CONFIG_BY_EXECUTOR.claude.default);
-	const [projectId, setProjectId] = useState(defaultProjectId ?? '');
+	const [workspaceId, setWorkspaceId] = useState(defaultWorkspaceId ?? '');
 	const [seed, setSeed] = useState('');
 	const [agent, setAgent] = useState(DEFAULT_LAUNCHER_AGENT);
-	const selectedProjectId = projectId || projects?.[0]?.id || '';
+	const selectedWorkspaceId = workspaceId || workspaces?.[0]?.id || '';
 
 	const setExecutorAndResetModel = (next: Executor) => {
 		setExecutor(next);
@@ -87,16 +87,16 @@ export function SessionLauncherDialog({ open, onClose, defaultProjectId }: Sessi
 					</div>
 				</Field>
 
-				<Field label="Project">
+				<Field label="Workspace">
 					<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-						{(projects ?? []).map((p) => (
+						{(workspaces ?? []).map((w) => (
 							<button
-								key={p.id}
+								key={w.id}
 								type="button"
-								className={['rl-filter-pill', selectedProjectId === p.id ? 'rl-filter-pill--active' : ''].join(' ')}
-								onClick={() => setProjectId(p.id)}
+								className={['rl-filter-pill', selectedWorkspaceId === w.id ? 'rl-filter-pill--active' : ''].join(' ')}
+								onClick={() => setWorkspaceId(w.id)}
 							>
-								{p.label}
+								{w.label}
 							</button>
 						))}
 					</div>

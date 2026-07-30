@@ -5,9 +5,9 @@ import { useAudit } from '../data/audit';
 
 export function AuditLog() {
 	usePageTitle('Audit log');
-	// :project is always present — this route only ever mounts under /:project.
-	const { project } = useParams() as { project: string };
-	const { data: rows, isLoading } = useAudit(project);
+	// :workspace is always present — this route only ever mounts under /:workspace.
+	const { workspace } = useParams() as { workspace: string };
+	const { data: rows, isLoading } = useAudit(workspace);
 
 	return (
 		<div>

@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from './shell/AppShell';
 import { Gallery } from '../gallery/Gallery';
-import { ProjectsOverview } from '../pages/ProjectsOverview';
+import { WorkspacesOverview } from '../pages/WorkspacesOverview';
 import { SpecsListPage } from '../pages/specs/SpecsListPage';
 import { SpecDetailPage } from '../pages/specs/SpecDetailPage';
 import { TrailsPage } from '../pages/wayfinder/TrailsPage';
@@ -12,22 +12,22 @@ import { AuditLog } from '../pages/AuditLog';
 import { Runs } from '../pages/Runs';
 
 export const router = createBrowserRouter([
-	// No default project to guess at anymore — GET /workspaces is the real
-	// source of which projects exist, so "/" lands on the overview that
+	// No default workspace to guess at anymore — GET /workspaces is the real
+	// source of which workspaces exist, so "/" lands on the overview that
 	// lists them instead of assuming one.
-	{ path: '/', element: <Navigate to="/projects" replace /> },
+	{ path: '/', element: <Navigate to="/workspaces" replace /> },
 	{ path: '/_gallery', element: <Gallery /> },
 	{
-		// Projects overview isn't scoped to one project — it's the picker
+		// Workspaces overview isn't scoped to one workspace — it's the picker
 		// across all of them — but still renders inside the app shell like
 		// every other screen; AppShell already defaults gracefully when
-		// `:project` is absent from the URL.
-		path: '/projects',
+		// `:workspace` is absent from the URL.
+		path: '/workspaces',
 		element: <AppShell />,
-		children: [{ index: true, element: <ProjectsOverview /> }]
+		children: [{ index: true, element: <WorkspacesOverview /> }]
 	},
 	{
-		path: '/:project',
+		path: '/:workspace',
 		element: <AppShell />,
 		children: [
 			{ path: 'specs', element: <SpecsListPage /> },

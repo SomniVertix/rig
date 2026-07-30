@@ -6,8 +6,8 @@ import { TranscriptTurns } from './TranscriptTurns';
 import './sessions.css';
 
 export function SessionTranscriptPage() {
-	// :project is always present — this route only ever mounts under /:project.
-	const { project, sessionId = '' } = useParams() as { project: string; sessionId?: string };
+	// :workspace is always present — this route only ever mounts under /:workspace.
+	const { workspace, sessionId = '' } = useParams() as { workspace: string; sessionId?: string };
 	const { data: session, isLoading } = useSessionTranscript(sessionId);
 	usePageTitle('Session transcript');
 
@@ -16,7 +16,7 @@ export function SessionTranscriptPage() {
 	return (
 		<div>
 			{session.trailId ? (
-				<Link to={`/${project}/trails/${session.trailId}`} className="rl-breadcrumb">
+				<Link to={`/${workspace}/trails/${session.trailId}`} className="rl-breadcrumb">
 					← trail {session.trailId}
 				</Link>
 			) : null}
@@ -70,10 +70,10 @@ export function SessionTranscriptPage() {
 							</div>
 							{session.trailId ? (
 								<div style={{ marginBottom: 6 }}>
-									<Link to={`/${project}/trails/${session.trailId}`}>Trail: {session.trailId} →</Link>
+									<Link to={`/${workspace}/trails/${session.trailId}`}>Trail: {session.trailId} →</Link>
 								</div>
 							) : null}
-							{session.outcomeSpecId ? <Link to={`/${project}/specs/${session.outcomeSpecId}`}>Outcome spec →</Link> : null}
+							{session.outcomeSpecId ? <Link to={`/${workspace}/specs/${session.outcomeSpecId}`}>Outcome spec →</Link> : null}
 						</div>
 					) : null}
 				</div>

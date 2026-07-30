@@ -59,12 +59,12 @@ export const FIXTURE_LIVE_SESSION_SCRIPT: FixtureSession = {
 		{
 			n: 1,
 			question: 'What\'s the itch — what should exist that doesn\'t?',
-			answer: 'We keep re-deriving project scope from cwd. It should just be a stable identity the console can hold onto.'
+			answer: 'We keep re-deriving workspace scope from cwd. It should just be a stable identity the console can hold onto.'
 		},
 		{
 			n: 2,
-			question: 'Is "project" the right unit, or is it something narrower — a workspace, a repo?',
-			answer: 'Project. A workspace can span repos but a project is the thing specs/trails actually belong to.'
+			question: 'Is "workspace" the right unit, or is it something narrower — a project, a repo?',
+			answer: 'Workspace. It can span repos, and it\'s the thing specs/trails actually belong to.'
 		}
 	]
 };
@@ -72,5 +72,5 @@ export const FIXTURE_LIVE_SESSION_SCRIPT: FixtureSession = {
 /** Questions revealed one at a time after the two seeded turns above, simulating the agent asking the next question. */
 export const FIXTURE_LIVE_SESSION_UPCOMING = [
 	'Where should that identity live — issued by the server, or derived client-side from something stable?',
-	'What happens when two browser tabs have different projects open at once — is that even allowed?'
+	'What happens when two browser tabs have different workspaces open at once — is that even allowed?'
 ];

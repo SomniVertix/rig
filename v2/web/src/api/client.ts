@@ -16,7 +16,7 @@ import type {
 	StageActionResponse,
 	RenderDocumentResponse,
 	SpecStageName,
-	WorkspaceProjectDTO
+	WorkspaceDTO
 } from './types';
 
 interface ApiErrorBody {
@@ -154,11 +154,11 @@ export function denyStage(id: string, body: StageActionRequest): Promise<StageAc
 // ── Workspaces ───────────────────────────────────────────────────────────
 
 interface ListWorkspacesResponse {
-	workspaces: WorkspaceProjectDTO[];
+	workspaces: WorkspaceDTO[];
 }
 
 /** Every workspaceId a scanned `.code-workspace` file claims — the real
  * source for "which workspaces exist," no cwd required. */
-export async function listWorkspaces(): Promise<WorkspaceProjectDTO[]> {
+export async function listWorkspaces(): Promise<WorkspaceDTO[]> {
 	return (await apiFetch<ListWorkspacesResponse>('/workspaces')).workspaces;
 }

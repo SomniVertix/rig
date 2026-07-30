@@ -11,14 +11,14 @@ import './wayfinder.css';
 
 export function TrailsPage() {
 	usePageTitle('Wayfinder');
-	// :project is always present — this route only ever mounts under /:project.
-	const { project } = useParams() as { project: string };
+	// :workspace is always present — this route only ever mounts under /:workspace.
+	const { workspace } = useParams() as { workspace: string };
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [infoOpen, setInfoOpen] = useState(false);
 	const { openSessionLauncher } = useAppState();
 	const view = searchParams.get('view') === 'list' ? 'list' : 'board';
 
-	const { data: trails, isLoading, isError, error } = useTrails(project);
+	const { data: trails, isLoading, isError, error } = useTrails(workspace);
 
 	const setView = (next: 'board' | 'list') => {
 		const params = new URLSearchParams(searchParams);
@@ -71,9 +71,9 @@ export function TrailsPage() {
 
 			{trails && trails.length > 0 ? (
 				view === 'board' ? (
-					<BoardView trails={trails} projectId={project} />
+					<BoardView trails={trails} workspaceId={workspace} />
 				) : (
-					<ListView trails={trails} projectId={project} />
+					<ListView trails={trails} workspaceId={workspace} />
 				)
 			) : null}
 

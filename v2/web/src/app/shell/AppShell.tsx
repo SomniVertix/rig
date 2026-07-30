@@ -11,9 +11,9 @@ interface RouteHandle {
 }
 
 export function AppShell() {
-	// Absent on /projects (no :project segment) — Sidebar/SessionLauncherDialog
-	// both handle an unselected project gracefully rather than guessing one.
-	const { project } = useParams<{ project: string }>();
+	// Absent on /workspaces (no :workspace segment) — Sidebar/SessionLauncherDialog
+	// both handle an unselected workspace gracefully rather than guessing one.
+	const { workspace } = useParams<{ workspace: string }>();
 	const { sidebarCollapsed, pageTitle, sessionLauncherOpen, openSessionLauncher, closeSessionLauncher } = useAppState();
 	const matches = useMatches();
 	// Deepest matched route wins — only leaf routes set a non-default width.
@@ -29,7 +29,7 @@ export function AppShell() {
 
 	return (
 		<div className={['rl-shell', sidebarCollapsed ? 'rl-shell--collapsed' : ''].filter(Boolean).join(' ')}>
-			<Sidebar projectId={project} />
+			<Sidebar workspaceId={workspace} />
 			<Topbar title={pageTitle} onNewSession={openSessionLauncher} />
 			<main className="rl-shell__main">
 				<div className={innerClass}>
@@ -37,7 +37,7 @@ export function AppShell() {
 				</div>
 			</main>
 			<ToastHost />
-			<SessionLauncherDialog open={sessionLauncherOpen} onClose={closeSessionLauncher} defaultProjectId={project} />
+			<SessionLauncherDialog open={sessionLauncherOpen} onClose={closeSessionLauncher} defaultWorkspaceId={workspace} />
 		</div>
 	);
 }

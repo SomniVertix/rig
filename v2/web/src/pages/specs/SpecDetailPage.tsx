@@ -16,8 +16,8 @@ const STEPPER_STEPS = [...SPEC_STAGE_ORDER, 'implementation'].map((key) => ({
 }));
 
 export function SpecDetailPage() {
-	// :project is always present — this route only ever mounts under /:project.
-	const { project, specId = '' } = useParams() as { project: string; specId?: string };
+	// :workspace is always present — this route only ever mounts under /:workspace.
+	const { workspace, specId = '' } = useParams() as { workspace: string; specId?: string };
 	const { data: spec, isLoading, isError, error } = useSpec(specId);
 	usePageTitle(spec ? spec.featureName : 'Spec detail');
 
@@ -39,7 +39,7 @@ export function SpecDetailPage() {
 
 	return (
 		<div>
-			<Link to={`/${project}/specs`} className="rl-breadcrumb">
+			<Link to={`/${workspace}/specs`} className="rl-breadcrumb">
 				← specs
 			</Link>
 			<div className="rl-page-header" style={{ marginBottom: 4 }}>
@@ -74,7 +74,7 @@ export function SpecDetailPage() {
 						<ReviewGateCard specId={spec.id} stage={activeStage} status={spec.stages[activeStage]} />
 					) : null}
 					<StageAgentModelCard />
-					<OriginTrailCard specId={spec.id} project={project} />
+					<OriginTrailCard specId={spec.id} workspace={workspace} />
 				</div>
 			</div>
 		</div>
@@ -223,7 +223,7 @@ function StageAgentModelCard() {
 	);
 }
 
-function OriginTrailCard({ specId, project }: { specId: string; project: string }) {
+function OriginTrailCard({ specId, workspace }: { specId: string; workspace: string }) {
 	const { data: trail } = useOriginTrail(specId);
 	if (!trail) return null;
 
@@ -232,7 +232,7 @@ function OriginTrailCard({ specId, project }: { specId: string; project: string 
 			<div className="rl-eyebrow" style={{ marginBottom: 6 }}>
 				Origin trail
 			</div>
-			<Link to={`/${project}/trails/${trail.id}`}>{trail.name} →</Link>
+			<Link to={`/${workspace}/trails/${trail.id}`}>{trail.name} →</Link>
 		</div>
 	);
 }

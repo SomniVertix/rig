@@ -12,11 +12,11 @@ extraction script if re-syncing against an updated prototype.
 `audit`, `actors`, `trails` (+`trailDetails`). Only the sections with no
 live V2 backend are kept here as fixtures — `specs`, `trails`, and
 `projects` are **not** re-exported as fixtures since Stage A build-out wires
-those to the real API instead (see GAPS.md §3): `data/projects/live.ts`
-aggregates real `/specs` and `/expeditions` results per project, and the
-project *list* itself now comes from `GET /workspaces`
+those to the real API instead (see GAPS.md §3): `data/workspaceSummaries/live.ts`
+aggregates real `/specs` and `/expeditions` results per workspace, and the
+workspace *list* itself now comes from `GET /workspaces`
 (`data/workspaces/live.ts`) — real scanned `.code-workspace` files via
-`internal/workspace/registry`, no more hand-maintained stopgap. `stages`
+`internal/binding/registry`, no more hand-maintained stopgap. `stages`
 (the per-stage agent/model assignment) *is* kept, as
 `src/config/specStages.ts` — that's static UI config, not mocked API data,
 and applies to the live Specs screens too since `SpecDTO` has no agent/model

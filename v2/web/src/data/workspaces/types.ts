@@ -1,4 +1,4 @@
-export interface WorkspaceProject {
+export interface Workspace {
 	id: string;
 	label: string;
 }

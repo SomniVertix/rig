@@ -125,7 +125,7 @@ export interface RenderDocumentResponse {
 
 /** One workspaceId discovered from a scanned `.code-workspace` file. Folder
  * paths are intentionally not part of this DTO — the server keeps those. */
-export interface WorkspaceProjectDTO {
+export interface WorkspaceDTO {
 	workspaceId: string;
 	label: string;
 }

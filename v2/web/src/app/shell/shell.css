@@ -24,7 +24,7 @@
 }
 
 /* Generic page-header row (title + actions) — used by Wayfinder, Specs,
-   Runs, Audit, Projects. Same cross-page-availability reasoning as above. */
+   Runs, Audit, Workspaces. Same cross-page-availability reasoning as above. */
 .rl-page-header {
 	display: flex;
 	align-items: center;
@@ -173,15 +173,15 @@
 .rl-shell--collapsed .rl-nav__group-label,
 .rl-shell--collapsed .rl-sidebar__footer-text,
 .rl-shell--collapsed .rl-sidebar__collapse-label,
-.rl-shell--collapsed .rl-project-picker__text {
+.rl-shell--collapsed .rl-workspace-picker__text {
 	display: none;
 }
 
-.rl-project-picker {
+.rl-workspace-picker {
 	margin: 0 var(--space-4) var(--space-4);
 	position: relative;
 }
-.rl-project-picker__btn {
+.rl-workspace-picker__btn {
 	width: 100%;
 	display: flex;
 	align-items: center;
@@ -195,17 +195,17 @@
 	font-family: var(--font-mono);
 	font-size: 12.5px;
 }
-.rl-project-picker__btn:hover {
+.rl-workspace-picker__btn:hover {
 	border-color: var(--border-strong);
 }
-.rl-project-picker__text {
+.rl-workspace-picker__text {
 	flex: 1;
 	text-align: left;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.rl-project-picker__menu {
+.rl-workspace-picker__menu {
 	position: absolute;
 	top: calc(100% + 4px);
 	left: 0;
@@ -217,7 +217,7 @@
 	z-index: 30;
 	overflow: hidden;
 }
-.rl-project-picker__item {
+.rl-workspace-picker__item {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -228,21 +228,21 @@
 	font-size: var(--text-sm);
 	color: var(--text-body);
 }
-.rl-project-picker__item:hover {
+.rl-workspace-picker__item:hover {
 	background: var(--bg-hover);
 }
-.rl-project-picker__item--active {
+.rl-workspace-picker__item--active {
 	color: var(--text-strong);
 	background: var(--accent-soft);
 }
-.rl-project-picker__footer {
+.rl-workspace-picker__footer {
 	padding: var(--space-3);
 	border-top: 1px solid var(--border-subtle);
 	font-size: var(--text-sm);
 	color: var(--text-link);
 	cursor: pointer;
 }
-.rl-project-picker__footer:hover {
+.rl-workspace-picker__footer:hover {
 	color: var(--text-link-hover);
 }
 

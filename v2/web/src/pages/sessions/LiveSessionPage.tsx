@@ -52,7 +52,7 @@ export function LiveSessionPage() {
 					<Badge tone="accent">claude</Badge>
 					<StatusBadge status="running" />
 					<span className="rl-session-pane__meta">
-						actor claude · project {FIXTURE_LIVE_SESSION_SCRIPT.executor} · run-id {sessionId}
+						actor claude · workspace {FIXTURE_LIVE_SESSION_SCRIPT.executor} · run-id {sessionId}
 					</span>
 				</div>
 				<div className="rl-session-pane__body">
