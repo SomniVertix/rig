@@ -1,0 +1,153 @@
+/* ── Rig · Color tokens ────────────────────────────────────────────
+   Cool graphite ink neutrals + signal-green brand accent (terminal phosphor).
+   Amber remains as the warning / in-review status hue.
+   Base ramps first, then semantic aliases. Consumers should prefer aliases. */
+:root {
+  /* Neutral — cool graphite ("ink") */
+  --ink-950: #0B0D10;
+  --ink-900: #101319;
+  --ink-850: #161A22;
+  --ink-800: #1B212B;
+  --ink-700: #262E3A;
+  --ink-600: #364150;
+  --slate-500: #55617440;
+  --slate-500-solid: #556174;
+  --slate-400: #737F92;
+  --slate-300: #9AA4B4;
+  --slate-200: #C4CBD6;
+  --slate-100: #E1E6ED;
+  --slate-50: #EFF2F6;
+  --paper: #F7F8FA;
+  --white: #FFFFFF;
+
+  /* Brand — signal green */
+  --green-100: #D8F7E5;
+  --green-200: #A8EFC7;
+  --green-300: #6FE7A6;
+  --green-400: #4AE38A;  /* dark-theme primary */
+  --green-500: #27CE74;
+  --green-600: #178A4C;  /* light-theme primary */
+  --green-700: #10693A;
+  --green-800: #0B4C2B;
+
+  /* Status — amber (warning / in-review) */
+  --amber-100: #FCEFD6;
+  --amber-200: #FADBA3;
+  --amber-300: #F6C062;
+  --amber-400: #F0A031;
+  --amber-500: #E8850C;  /* primary brand */
+  --amber-600: #C46A05;
+  --amber-700: #94500A;
+  --amber-800: #6B3B0C;
+
+  /* Semantic hues */
+  --emerald-100: #D6F5E3;
+  --emerald-500: #12A150;
+  --emerald-600: #0C8A43;
+  --emerald-700: #0A6E36;
+
+  --rose-100: #FBDDDD;
+  --rose-500: #E5484D;
+  --rose-600: #CC3438;
+  --rose-700: #A82327;
+
+  --sky-100: #D7EDFB;
+  --sky-500: #1B92E3;
+  --sky-600: #1476BD;
+  --sky-700: #0F5C94;
+
+  --violet-100: #E6E0FB;
+  --violet-500: #7059E0;
+  --violet-600: #5A45C2;
+
+  /* ── Semantic aliases (light theme = default) ────────────────────────── */
+  --bg-app: var(--paper);
+  --bg-surface: var(--white);
+  --bg-surface-2: var(--slate-50);
+  --bg-inset: var(--slate-100);
+  --bg-hover: #00000008;
+  --bg-active: #00000012;
+
+  --text-strong: var(--ink-900);
+  --text-body: var(--ink-700);
+  --text-muted: var(--slate-400);
+  --text-faint: var(--slate-300);
+  --text-inverse: var(--white);
+  --text-brand: var(--green-700);
+  --text-link: var(--green-700);
+  --text-link-hover: var(--green-800);
+
+  --border-subtle: var(--slate-100);
+  --border-default: var(--slate-200);
+  --border-strong: var(--slate-300);
+  --border-focus: var(--green-600);
+
+  --accent: var(--green-600);
+  --accent-hover: var(--green-700);
+  --accent-active: var(--green-800);
+  --accent-soft: var(--green-100);
+  --on-accent: #FFFFFF;
+
+  /* Workflow / status semantics */
+  --status-draft-fg: var(--slate-500-solid);
+  --status-draft-bg: var(--slate-100);
+  --status-review-fg: var(--amber-700);
+  --status-review-bg: var(--amber-100);
+  --status-approved-fg: var(--emerald-700);
+  --status-approved-bg: var(--emerald-100);
+  --status-denied-fg: var(--rose-700);
+  --status-denied-bg: var(--rose-100);
+  --status-running-fg: var(--sky-700);
+  --status-running-bg: var(--sky-100);
+
+  --success: var(--emerald-500);
+  --danger: var(--rose-500);
+  --info: var(--sky-500);
+  --warning: var(--amber-500);
+
+  --focus-ring: 0 0 0 3px #178A4C40;
+}
+
+/* ── Dark theme ("ink") ─────────────────────────────────────────────────
+   Apply to a scope via [data-theme="dark"] or .theme-dark. */
+[data-theme="dark"], .theme-dark {
+  --bg-app: var(--ink-950);
+  --bg-surface: var(--ink-900);
+  --bg-surface-2: var(--ink-850);
+  --bg-inset: var(--ink-800);
+  --bg-hover: #FFFFFF0A;
+  --bg-active: #FFFFFF14;
+
+  --text-strong: #F4F6FA;
+  --text-body: #C4CBD6;
+  --text-muted: #7B8698;
+  --text-faint: #556174;
+  --text-inverse: var(--ink-950);
+  --text-brand: var(--green-400);
+  --text-link: var(--green-400);
+  --text-link-hover: var(--green-300);
+
+  --border-subtle: #FFFFFF12;
+  --border-default: #FFFFFF1F;
+  --border-strong: #FFFFFF33;
+  --border-focus: var(--green-400);
+
+  --accent: var(--green-400);
+  --accent-hover: var(--green-300);
+  --accent-active: var(--green-200);
+  --accent-soft: #4AE38A1F;
+  --on-accent: #062B18;
+
+  --status-draft-fg: var(--slate-300);
+  --status-draft-bg: #FFFFFF12;
+  --status-review-fg: var(--amber-300);
+  --status-review-bg: #E8850C24;
+  --status-approved-fg: #4FD98A;
+  --status-approved-bg: #12A15024;
+  --status-denied-fg: #F58A8D;
+  --status-denied-bg: #E5484D24;
+  --status-running-fg: #5CBDF5;
+  --status-running-bg: #1B92E324;
+
+  --focus-ring: 0 0 0 3px #4AE38A40;
+}

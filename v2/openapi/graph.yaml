@@ -1,0 +1,819 @@
+openapi: 3.0.3
+info:
+  title: rig graph service
+  version: 0.1.0
+  description: >
+    Expeditions/waypoints graph API: one effort (an expedition) to turn a
+    loose idea into a destination, made of waypoints (questions) driven
+    through sighted -> marked -> claimed -> reached | bypassed, linked by
+    dependency edges and expedition-spurring lineage. Ported from v1's
+    discovery Postgres schema (.meta/spec/db/schema.sql, originally
+    "trails"); implemented against Neo4j.
+servers:
+  - url: http://localhost:8789
+
+paths:
+  /expeditions:
+    post:
+      summary: Create an expedition
+      operationId: createExpedition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExpeditionRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    get:
+      summary: List expeditions for a workspace
+      operationId: listExpeditions
+      parameters:
+        - name: workspaceId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/ExpeditionStatus" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Expedition" }
+
+  /expedition-by-spec/{specId}:
+    get:
+      summary: Get the expedition linked to a spec (at most one per spec)
+      operationId: getExpeditionBySpec
+      parameters:
+        - name: specId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /expeditions/{id}:
+    get:
+      summary: Get an expedition
+      operationId: getExpedition
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update an expedition's title/destination/notes
+      operationId: updateExpedition
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateExpeditionRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /expeditions/{id}/complete:
+    post:
+      summary: Complete an expedition with an outcome
+      operationId: completeExpedition
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteExpeditionRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /expeditions/{id}/abandon:
+    post:
+      summary: Abandon an expedition
+      operationId: abandonExpedition
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /expeditions/{id}/reopen:
+    post:
+      summary: Reopen a completed or abandoned expedition
+      operationId: reopenExpedition
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /expeditions/{id}/lineage:
+    get:
+      summary: Get an expedition's parent edge (chartering session or spurring waypoint)
+      operationId: getExpeditionLineage
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExpeditionLineage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /expeditions/{expeditionId}/waypoints:
+    post:
+      summary: Add a waypoint to an expedition
+      operationId: addWaypoint
+      parameters: [ { $ref: "#/components/parameters/ExpeditionIdPath" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddWaypointRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      summary: List an expedition's waypoints in waypoint-number order
+      operationId: listWaypoints
+      parameters: [ { $ref: "#/components/parameters/ExpeditionIdPath" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Waypoint" }
+
+  /expeditions/{expeditionId}/waypoints/frontier:
+    get:
+      summary: >
+        Get the frontier: marked waypoints whose blockers have all
+        terminated (reached or bypassed).
+      operationId: getFrontier
+      parameters: [ { $ref: "#/components/parameters/ExpeditionIdPath" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Waypoint" }
+
+  /waypoints/{id}:
+    get:
+      summary: Get a waypoint
+      operationId: getWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update a waypoint's title/question/approach
+      operationId: updateWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateWaypointRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /waypoints/{id}/claim:
+    post:
+      summary: Atomically claim a marked waypoint
+      operationId: claimWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [claimedBy]
+              properties:
+                claimedBy: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "409":
+          description: Already claimed, or not in a claimable status
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /waypoints/{id}/release:
+    post:
+      summary: Release a claimed waypoint back to marked
+      operationId: releaseWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /waypoints/{id}/reach:
+    post:
+      summary: Reach a waypoint (record its resolution)
+      operationId: reachWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReachWaypointRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /waypoints/{id}/bypass:
+    post:
+      summary: Bypass a waypoint (consciously route around it)
+      operationId: bypassWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /waypoints/{id}/unbypass:
+    post:
+      summary: Restore a bypassed waypoint to its previous status
+      operationId: unbypassWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Waypoint is not bypassed
+
+  /waypoints/{id}/spur:
+    post:
+      summary: Spin a new expedition off this waypoint's resolution
+      operationId: spurWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpurWaypointRequest" }
+      responses:
+        "201":
+          description: Created. The origin waypoint is reached in the same call.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expedition" }
+        "409":
+          description: Waypoint already spurred an expedition, or is not marked/claimed
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Remove a waypoint's spur lineage edge (child expedition is untouched)
+      operationId: unspurWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      responses:
+        "204": { description: No Content }
+
+  /expeditions/{expeditionId}/waypoint-dependencies:
+    get:
+      summary: List every dependency edge between two waypoints of this expedition
+      operationId: listWaypointDependencies
+      parameters: [ { $ref: "#/components/parameters/ExpeditionIdPath" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WaypointDependencyEdge" }
+
+  /waypoint-dependencies:
+    post:
+      summary: Add a dependency edge (fromWaypointId must terminate before toWaypointId is frontier-eligible)
+      operationId: addWaypointDependency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WaypointDependencyRequest" }
+      responses:
+        "204": { description: No Content }
+        "409":
+          description: Same waypoint, or from/to belong to different expeditions
+    delete:
+      summary: Remove a dependency edge
+      operationId: removeWaypointDependency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WaypointDependencyRequest" }
+      responses:
+        "204": { description: No Content }
+
+  # Spec pipeline — read/lifecycle + approve/deny only. Every per-artifact
+  # CRUD operation (user stories, design components, task items, ...) has a
+  # full mcp__rig__* tool equivalent instead (see mcpserver/spec.go and
+  # spec-pipeline-graph.md at the repo root) — mirroring all of it here
+  # would duplicate an already-tested surface for a REST client that, today,
+  # doesn't exist. Approve/deny have no MCP tool at all (human-only, per
+  # .meta/spec/README.md) and need this as their one interface.
+  /specs:
+    get:
+      summary: List specs for a workspace
+      operationId: listSpecs
+      parameters:
+        - name: workspaceId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Spec" }
+
+  /specs/{id}:
+    get:
+      summary: Get one spec, including derived tasksStageStatus
+      operationId: getSpec
+      parameters:
+        - { $ref: "#/components/parameters/SpecId" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Spec" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /specs/{id}/next-stage:
+    get:
+      summary: Get which stage to work on next, and any lagging components once tasks is active
+      operationId: getNextStage
+      parameters:
+        - { $ref: "#/components/parameters/SpecId" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NextStageInfo" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /specs/{id}/render:
+    get:
+      summary: Render a stage's markdown from live graph state — there is no stored document
+      operationId: renderDocument
+      parameters:
+        - { $ref: "#/components/parameters/SpecId" }
+        - name: stage
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/SpecStage" }
+        - name: component
+          in: query
+          required: false
+          description: 'Tasks stage only: a component slug, or "all" for the index'
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenderDocumentResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /specs/{id}/finalize:
+    post:
+      summary: Submit a stage's draft for review (status -> in_review); blocked by unresolved open questions and that stage's own completeness gate
+      operationId: finalizeStage
+      parameters:
+        - { $ref: "#/components/parameters/SpecId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StageActionRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StageActionResponse" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /specs/{id}/approve:
+    post:
+      summary: Approve a stage (in_review -> approved). Human-only — no MCP tool equivalent.
+      operationId: approveStage
+      parameters:
+        - { $ref: "#/components/parameters/SpecId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StageActionRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StageActionResponse" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /specs/{id}/deny:
+    post:
+      summary: Deny a stage (in_review -> not_started, destructive — content untouched, no history kept). Human-only — no MCP tool equivalent.
+      operationId: denyStage
+      parameters:
+        - { $ref: "#/components/parameters/SpecId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StageActionRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StageActionResponse" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+components:
+  parameters:
+    ExpeditionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ExpeditionIdPath:
+      name: expeditionId
+      in: path
+      required: true
+      schema: { type: string }
+    WaypointId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    SpecId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: >
+        A stage/state-transition rule rejected this action — e.g. an
+        unresolved open question, an incomplete stage, an orphaned tasks
+        doc, or a task-dependency cycle.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    ExpeditionStatus:
+      type: string
+      enum: [active, complete, abandoned]
+
+    ExpeditionOutcomeKind:
+      type: string
+      enum: [spec, decision, change]
+
+    WaypointStatus:
+      type: string
+      enum: [sighted, marked, claimed, reached, bypassed]
+
+    WaypointApproach:
+      type: string
+      enum: [grilling, research, prototype, task]
+
+    LineageParentKind:
+      type: string
+      enum: [session, waypoint]
+
+    Expedition:
+      type: object
+      required: [id, workspaceId, slug, title, briefingPrompt, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        slug: { type: string, pattern: "^[a-z0-9]+(-[a-z0-9]+)*$" }
+        title: { type: string }
+        briefingPrompt: { type: string }
+        destination: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/ExpeditionStatus" }
+        outcomeKind: { allOf: [ { $ref: "#/components/schemas/ExpeditionOutcomeKind" } ], nullable: true }
+        outcomeSpecId: { type: string, nullable: true }
+        outcomeSummary: { type: string, nullable: true }
+        sessionId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateExpeditionRequest:
+      type: object
+      required: [workspaceId, slug, title, briefingPrompt]
+      properties:
+        workspaceId: { type: string }
+        slug: { type: string, pattern: "^[a-z0-9]+(-[a-z0-9]+)*$" }
+        title: { type: string }
+        briefingPrompt: { type: string }
+        destination: { type: string }
+        notes: { type: string }
+        sessionId: { type: string }
+
+    SpurWaypointRequest:
+      type: object
+      required: [workspaceId, slug, title, briefingPrompt]
+      properties:
+        workspaceId: { type: string }
+        slug: { type: string, pattern: "^[a-z0-9]+(-[a-z0-9]+)*$" }
+        title: { type: string }
+        briefingPrompt: { type: string }
+        destination: { type: string }
+        notes: { type: string }
+        rationale:
+          type: string
+          description: Recorded on the origin waypoint's reach, same as ReachWaypointRequest.rationale.
+        reachedIn:
+          type: string
+          description: Recorded on the origin waypoint's reach, same as ReachWaypointRequest.reachedIn.
+
+    UpdateExpeditionRequest:
+      type: object
+      properties:
+        title: { type: string }
+        destination: { type: string }
+        notes: { type: string }
+
+    CompleteExpeditionRequest:
+      type: object
+      required: [outcomeKind]
+      properties:
+        outcomeKind: { $ref: "#/components/schemas/ExpeditionOutcomeKind" }
+        outcomeSummary:
+          type: string
+          description: Required for outcomeKind decision/change.
+        specSlug:
+          type: string
+          description: 'Required when outcomeKind is "spec": kebab-case slug for the new spec.'
+        featureName:
+          type: string
+          description: 'Required when outcomeKind is "spec": the spec''s feature name.'
+
+    ExpeditionLineage:
+      type: object
+      required: [childExpeditionId, parentKind]
+      properties:
+        childExpeditionId: { type: string }
+        parentKind: { $ref: "#/components/schemas/LineageParentKind" }
+        parentSessionId: { type: string, nullable: true }
+        parentWaypointId: { type: string, nullable: true }
+
+    Waypoint:
+      type: object
+      required: [id, expeditionId, waypointNumber, title, question, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        expeditionId: { type: string }
+        waypointNumber: { type: integer }
+        title: { type: string }
+        question: { type: string }
+        approach: { allOf: [ { $ref: "#/components/schemas/WaypointApproach" } ], nullable: true }
+        status: { $ref: "#/components/schemas/WaypointStatus" }
+        claimedBy: { type: string, nullable: true }
+        claimedAt: { type: string, format: date-time, nullable: true }
+        resolution: { type: string, nullable: true }
+        resolutionGist: { type: string, nullable: true }
+        rationale: { type: string, nullable: true }
+        bypassReason: { type: string, nullable: true }
+        previousStatus: { allOf: [ { $ref: "#/components/schemas/WaypointStatus" } ], nullable: true }
+        reachedIn: { type: string, nullable: true }
+        reachedAt: { type: string, format: date-time, nullable: true }
+        spurredToExpeditionId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AddWaypointRequest:
+      type: object
+      required: [title, question]
+      properties:
+        title: { type: string }
+        question: { type: string }
+        approach: { $ref: "#/components/schemas/WaypointApproach" }
+        resolution:
+          type: string
+          description: Set together with resolutionGist to insert directly at "reached" (grilling's inline-reach case).
+        resolutionGist: { type: string }
+        reachedIn: { type: string }
+
+    UpdateWaypointRequest:
+      type: object
+      properties:
+        title: { type: string }
+        question: { type: string }
+        approach: { $ref: "#/components/schemas/WaypointApproach" }
+
+    ReachWaypointRequest:
+      type: object
+      required: [resolution, resolutionGist]
+      properties:
+        resolution: { type: string }
+        resolutionGist: { type: string }
+        rationale: { type: string }
+        reachedIn: { type: string }
+
+    WaypointDependencyRequest:
+      type: object
+      required: [fromWaypointId, toWaypointId]
+      properties:
+        fromWaypointId:
+          type: string
+          description: Must terminate (reached or bypassed) before toWaypointId is frontier-eligible.
+        toWaypointId: { type: string }
+
+    WaypointDependencyEdge:
+      type: object
+      properties:
+        fromWaypointId: { type: string }
+        toWaypointId: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    SpecStage:
+      type: string
+      enum: [requirements, design, tasks]
+
+    SpecStageStatus:
+      type: string
+      enum: [not_started, in_review, approved]
+
+    Spec:
+      type: object
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        slug: { type: string }
+        featureName: { type: string }
+        requirementsOverview: { type: string }
+        requirementsStageStatus: { $ref: "#/components/schemas/SpecStageStatus" }
+        requirementsDeniedAt: { type: string, format: date-time, nullable: true }
+        requirementsLastDenialReason: { type: string, nullable: true }
+        designOverview: { type: string }
+        designArchitecture: { type: string }
+        designDataModelOverview: { type: string, nullable: true }
+        designStageStatus: { $ref: "#/components/schemas/SpecStageStatus" }
+        designDeniedAt: { type: string, format: date-time, nullable: true }
+        designLastDenialReason: { type: string, nullable: true }
+        tasksStageStatus:
+          allOf: [ { $ref: "#/components/schemas/SpecStageStatus" } ]
+          description: Derived live from every component's TasksDoc — never stored.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TasksDoc:
+      type: object
+      properties:
+        id: { type: string }
+        specId: { type: string }
+        designComponentId: { type: string }
+        componentSlug: { type: string }
+        componentName: { type: string }
+        status: { $ref: "#/components/schemas/SpecStageStatus" }
+        deniedAt: { type: string, format: date-time, nullable: true }
+        lastDenialReason: { type: string, nullable: true }
+
+    NextStageInfo:
+      type: object
+      properties:
+        nextStage:
+          type: string
+          enum: [requirements, design, tasks, implementation]
+        laggingComponents:
+          type: array
+          items: { type: string }
+          description: Component slugs not yet approved; only populated when nextStage is "tasks".
+
+    RenderDocumentResponse:
+      type: object
+      properties:
+        markdown: { type: string }
+
+    StageActionRequest:
+      type: object
+      required: [stage]
+      properties:
+        stage: { $ref: "#/components/schemas/SpecStage" }
+        component:
+          type: string
+          description: 'Required when stage is "tasks": the design component''s slug.'
+        reason:
+          type: string
+          description: Required for deny; ignored otherwise.
+
+    StageActionResponse:
+      type: object
+      properties:
+        spec:
+          allOf: [ { $ref: "#/components/schemas/Spec" } ]
+          nullable: true
+          description: Set for stage requirements/design.
+        tasksDoc:
+          allOf: [ { $ref: "#/components/schemas/TasksDoc" } ]
+          nullable: true
+          description: Set for stage tasks.

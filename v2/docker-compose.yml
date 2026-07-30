@@ -1,0 +1,49 @@
+# Full local/self-hosted deployment of the rig platform: the bundled Neo4j
+# graph store plus the single rig service (REST + MCP on one port).
+#
+# Quickstart:
+#   cp .env .env.local   # if you want to keep the checked-in defaults intact
+#   edit .env: set RIG_WORKSPACES_HOST_DIR and a real NEO4J_PASSWORD
+#   docker compose up -d --build
+#
+# rig then listens on http://localhost:${RIG_HTTP_PORT:-8789}
+# (REST at /, MCP at /mcp) and Neo4j Browser on http://localhost:${NEO4J_HTTP_PORT:-7474}.
+name: rig
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$NEO4J_PASSWORD\" 'RETURN 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rig:
+    build: .
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      RIG_HTTP_ADDR: ":8789"
+      GRAPH_NEO4J_URI: "neo4j://neo4j:7687"
+      GRAPH_NEO4J_USERNAME: "neo4j"
+      GRAPH_NEO4J_PASSWORD: "${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}"
+      GRAPH_NEO4J_DATABASE: "neo4j"
+      WORKSPACE_ROOT: /workspaces
+    ports:
+      - "${RIG_HTTP_PORT:-8789}:8789"
+    volumes:
+      - "${RIG_WORKSPACES_HOST_DIR:?set RIG_WORKSPACES_HOST_DIR in .env}:/workspaces:ro"
+
+volumes:
+  neo4j-data:
+  neo4j-logs:
