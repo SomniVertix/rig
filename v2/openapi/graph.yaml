@@ -133,6 +133,11 @@ paths:
       summary: Reopen a completed or abandoned expedition
       operationId: reopenExpedition
       parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
       responses:
         "200":
           description: OK
@@ -311,6 +316,11 @@ paths:
       summary: Restore a bypassed waypoint to its previous status
       operationId: unbypassWaypoint
       parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
       responses:
         "200":
           description: OK
@@ -320,6 +330,189 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: Waypoint is not bypassed
+
+  /waypoints/{id}/rehydrate:
+    post:
+      summary: >
+        Redo a reached or bypassed waypoint's decision: snapshots the
+        current terminal state to history (nothing deleted), then sets it
+        to rehydrating. Legal only when the owning expedition is active.
+      operationId: rehydrateWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Waypoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Waypoint is not reached/bypassed, or the owning expedition is not active
+
+  /waypoints/{id}/history:
+    get:
+      summary: List a waypoint's append-only history of superseded terminal states, oldest first
+      operationId: listWaypointHistory
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WaypointHistoryEntry" }
+
+  /waypoints/{id}/flags:
+    post:
+      summary: Raise a non-mutating marker that this waypoint's decision may need reconsidering
+      operationId: flagWaypoint
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FlagWaypointRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flag" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      summary: List every flag (resolved and unresolved) targeting this waypoint
+      operationId: listWaypointFlags
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Flag" }
+
+  /flags/{id}/resolve:
+    post:
+      summary: Mark a flag resolved, without deleting the flag record
+      operationId: resolveWaypointFlag
+      parameters: [ { $ref: "#/components/parameters/FlagId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flag" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /expeditions/{id}/flags:
+    get:
+      summary: List unresolved flags targeting any of this expedition's waypoints (incoming only)
+      operationId: listUnresolvedExpeditionFlags
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Flag" }
+
+  /waypoints/{id}/assets:
+    post:
+      summary: >
+        Attach an asset to a waypoint: what resolving it produced. Exactly
+        one of contentMarkdown/repoPath. Unguarded — legal regardless of
+        the waypoint's current status.
+      operationId: addWaypointAsset
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddWaypointAssetRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      summary: List a waypoint's assets, oldest first
+      operationId: listWaypointAssets
+      parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Asset" }
+
+  /expeditions/{id}/terms:
+    post:
+      summary: Pin a piece of terminology to an expedition. Rejects a case-insensitive duplicate term.
+      operationId: addExpeditionTerm
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddExpeditionTermRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Term" }
+        "409":
+          description: A term with this text already exists on this expedition (case-insensitive)
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      summary: List an expedition's terms
+      operationId: listExpeditionTerms
+      parameters: [ { $ref: "#/components/parameters/ExpeditionId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Term" }
+
+  /terms/{id}:
+    patch:
+      summary: Correct a term's definition. The term text itself is fixed once added.
+      operationId: updateExpeditionTerm
+      parameters: [ { $ref: "#/components/parameters/TermId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateExpeditionTermRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Term" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /waypoints/{id}/spur:
     post:
@@ -344,6 +537,11 @@ paths:
       summary: Remove a waypoint's spur lineage edge (child expedition is untouched)
       operationId: unspurWaypoint
       parameters: [ { $ref: "#/components/parameters/WaypointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
       responses:
         "204": { description: No Content }
 
@@ -540,6 +738,16 @@ components:
       in: path
       required: true
       schema: { type: string }
+    FlagId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    TermId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
 
   responses:
     NotFound:
@@ -603,6 +811,7 @@ components:
         outcomeSpecId: { type: string, nullable: true }
         outcomeSummary: { type: string, nullable: true }
         sessionId: { type: string, nullable: true }
+        reopenReason: { type: string, nullable: true, description: Why reopen_expedition was last called, if ever. }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -683,6 +892,8 @@ components:
         resolutionGist: { type: string, nullable: true }
         rationale: { type: string, nullable: true }
         bypassReason: { type: string, nullable: true }
+        unbypassReason: { type: string, nullable: true, description: Why unbypass_waypoint was last called, if ever; nulled by a subsequent bypass. }
+        unspurReason: { type: string, nullable: true, description: Why unspur_waypoint was last called, if ever; nulled by a subsequent spur. }
         previousStatus: { allOf: [ { $ref: "#/components/schemas/WaypointStatus" } ], nullable: true }
         reachedIn: { type: string, nullable: true }
         reachedAt: { type: string, format: date-time, nullable: true }
@@ -734,6 +945,126 @@ components:
         fromWaypointId: { type: string }
         toWaypointId: { type: string }
         createdAt: { type: string, format: date-time }
+
+    ReasonRequest:
+      type: object
+      required: [reason]
+      description: Shared shape for reopen_expedition, unbypass_waypoint, unspur_waypoint, rehydrate_waypoint, resolve_waypoint_flag.
+      properties:
+        reason: { type: string }
+
+    WaypointHistoryEntry:
+      type: object
+      required: [id, waypointId, ordinal, sourceStatus, reason, supersededAt, createdAt]
+      description: >
+        An append-only snapshot of a waypoint's terminal state, taken by
+        rehydrate_waypoint immediately before a redo overwrites the live
+        fields. Nothing about a waypoint's prior resolution or bypass
+        reason is ever deleted — it moves here instead.
+      properties:
+        id: { type: string }
+        waypointId: { type: string }
+        ordinal: { type: integer }
+        sourceStatus:
+          type: string
+          enum: [reached, bypassed]
+          description: The status this snapshot superseded.
+        resolution: { type: string, nullable: true }
+        resolutionGist: { type: string, nullable: true }
+        rationale: { type: string, nullable: true }
+        reachedIn: { type: string, nullable: true }
+        reachedAt: { type: string, format: date-time, nullable: true }
+        bypassReason: { type: string, nullable: true }
+        reason:
+          type: string
+          description: The reason passed to rehydrate_waypoint.
+        supersededAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    Flag:
+      type: object
+      required: [id, targetWaypointId, note, raisedAt, resolved]
+      description: >
+        A non-mutating marker that a waypoint's decision may need
+        reconsidering. Never deleted, only resolved.
+      properties:
+        id: { type: string }
+        targetWaypointId: { type: string }
+        sourceWaypointId:
+          type: string
+          nullable: true
+          description: The waypoint whose decision motivated this flag, if any — optional, since a flag can be raised narratively.
+        note: { type: string }
+        raisedAt: { type: string, format: date-time }
+        resolved: { type: boolean }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        resolvedReason: { type: string, nullable: true }
+
+    FlagWaypointRequest:
+      type: object
+      required: [note]
+      properties:
+        note: { type: string }
+        sourceWaypointId: { type: string }
+
+    Asset:
+      type: object
+      required: [id, waypointId, ordinal, kind, title, createdAt]
+      description: >
+        What resolving a waypoint produced. Exactly one of
+        contentMarkdown/repoPath is set per asset.
+      properties:
+        id: { type: string }
+        waypointId: { type: string }
+        ordinal: { type: integer }
+        kind:
+          type: string
+          description: 'Open set, e.g. research_summary, analysis, prototype_ref.'
+        title: { type: string }
+        contentMarkdown:
+          type: string
+          nullable: true
+          description: Documents stored whole; exactly one of contentMarkdown/repoPath.
+        repoPath:
+          type: string
+          nullable: true
+          description: Prototype code committed to main; exactly one of contentMarkdown/repoPath.
+        commitSha: { type: string, nullable: true, description: Only meaningful alongside repoPath. }
+        createdAt: { type: string, format: date-time }
+
+    AddWaypointAssetRequest:
+      type: object
+      required: [kind, title]
+      properties:
+        kind: { type: string }
+        title: { type: string }
+        contentMarkdown: { type: string }
+        repoPath: { type: string }
+        commitSha: { type: string }
+
+    Term:
+      type: object
+      required: [id, expeditionId, term, definition]
+      description: A piece of terminology pinned down while walking an expedition. Per-expedition, not a workspace-level glossary.
+      properties:
+        id: { type: string }
+        expeditionId: { type: string }
+        term: { type: string }
+        definition: { type: string }
+
+    AddExpeditionTermRequest:
+      type: object
+      required: [term, definition]
+      properties:
+        term: { type: string }
+        definition: { type: string }
+
+    UpdateExpeditionTermRequest:
+      type: object
+      required: [definition]
+      description: Only the definition is updatable; the term text itself is fixed once added.
+      properties:
+        definition: { type: string }
 
     SpecStage:
       type: string

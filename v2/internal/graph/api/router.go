@@ -42,6 +42,21 @@ func NewRouter(h *Handlers) *http.ServeMux {
 	mux.HandleFunc("POST /waypoints/{id}/spur", h.SpurWaypoint)
 	mux.HandleFunc("DELETE /waypoints/{id}/spur", h.UnspurWaypoint)
 
+	mux.HandleFunc("POST /waypoints/{id}/rehydrate", h.RehydrateWaypoint)
+	mux.HandleFunc("GET /waypoints/{id}/history", h.ListWaypointHistory)
+
+	mux.HandleFunc("POST /waypoints/{id}/flags", h.FlagWaypoint)
+	mux.HandleFunc("GET /waypoints/{id}/flags", h.ListWaypointFlags)
+	mux.HandleFunc("POST /flags/{id}/resolve", h.ResolveWaypointFlag)
+	mux.HandleFunc("GET /expeditions/{id}/flags", h.ListUnresolvedExpeditionFlags)
+
+	mux.HandleFunc("POST /waypoints/{id}/assets", h.AddWaypointAsset)
+	mux.HandleFunc("GET /waypoints/{id}/assets", h.ListWaypointAssets)
+
+	mux.HandleFunc("POST /expeditions/{id}/terms", h.AddExpeditionTerm)
+	mux.HandleFunc("GET /expeditions/{id}/terms", h.ListExpeditionTerms)
+	mux.HandleFunc("PATCH /terms/{id}", h.UpdateExpeditionTerm)
+
 	mux.HandleFunc("POST /waypoint-dependencies", h.AddWaypointDependency)
 	mux.HandleFunc("DELETE /waypoint-dependencies", h.RemoveWaypointDependency)
 	mux.HandleFunc("GET /expeditions/{expeditionId}/waypoint-dependencies", h.ListWaypointDependencies)

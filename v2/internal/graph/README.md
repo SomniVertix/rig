@@ -148,12 +148,20 @@ a waypoint now is `ReleaseWaypoint`.
 - Real test coverage. `mcpserver` has one smoke test (tool
   registration/schema-inference doesn't panic) — everything else, REST
   included, is still untested.
-- REST DTOs (`api/dto.go`) lag the MCP wire shapes: rehydrate history,
-  flags, assets, terms, and the reopen/unbypass/unspur reason fields below
-  are all readable over MCP but not yet exposed in `expeditionDTO`/
-  `waypointDTO`. `reopen_expedition`/`unbypass_waypoint`/`unspur_waypoint`'s
-  `reason` argument is now persisted (`reopenReason` on the expedition,
+- `reopen_expedition`/`unbypass_waypoint`/`unspur_waypoint`'s `reason`
+  argument is persisted (`reopenReason` on the expedition,
   `unbypassReason`/`unspurReason` on the waypoint — each the single most
-  recent value, not a log), same as `rehydrate_waypoint`'s history snapshot
-  and `resolve_waypoint_flag`'s `resolvedReason`; there is still no general
-  audit log, just per-field "last reason" properties.
+  recent value, not a log); there is still no general audit log, just
+  per-field "last reason" properties.
+
+REST DTOs no longer lag the MCP wire shapes: rehydrate/history
+(`POST /waypoints/{id}/rehydrate`, `GET /waypoints/{id}/history`), flags
+(`POST`/`GET /waypoints/{id}/flags`, `POST /flags/{id}/resolve`,
+`GET /expeditions/{id}/flags`), assets (`POST`/`GET /waypoints/{id}/assets`),
+and terms (`POST`/`GET /expeditions/{id}/terms`, `PATCH /terms/{id}`) are
+now all exposed over REST too, and `expeditionDTO`/`waypointDTO` carry
+`reopenReason`/`unbypassReason`/`unspurReason`. `openapi/graph.yaml` was
+updated to match, including two pre-existing doc/implementation drifts it
+had before this pass: `reopen_expedition`/`unbypass_waypoint`/
+`unspur_waypoint` all require a `reason` body at runtime but the spec
+didn't document any request body for them.

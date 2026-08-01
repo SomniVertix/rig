@@ -354,6 +354,159 @@ func (h *Handlers) UnspurWaypoint(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// --- Rehydrate / history / flags / assets / terms ---
+
+func (h *Handlers) RehydrateWaypoint(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeJSON[reasonRequest](r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	wp, err := h.svc.RehydrateWaypoint(r.Context(), r.PathValue("id"), req.Reason)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newWaypointDTO(wp))
+}
+
+func (h *Handlers) ListWaypointHistory(w http.ResponseWriter, r *http.Request) {
+	entries, err := h.svc.ListWaypointHistory(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	dtos := make([]waypointHistoryEntryDTO, len(entries))
+	for i, e := range entries {
+		dtos[i] = newWaypointHistoryEntryDTO(e)
+	}
+	writeJSON(w, http.StatusOK, dtos)
+}
+
+func (h *Handlers) FlagWaypoint(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeJSON[flagWaypointRequest](r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	flag, err := h.svc.FlagWaypoint(r.Context(), r.PathValue("id"), store.FlagWaypointParams{
+		Note: req.Note, SourceWaypointID: req.SourceWaypointID,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, newFlagDTO(flag))
+}
+
+func (h *Handlers) ResolveWaypointFlag(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeJSON[reasonRequest](r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	flag, err := h.svc.ResolveWaypointFlag(r.Context(), r.PathValue("id"), req.Reason)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newFlagDTO(flag))
+}
+
+func (h *Handlers) ListWaypointFlags(w http.ResponseWriter, r *http.Request) {
+	flags, err := h.svc.ListWaypointFlags(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	dtos := make([]flagDTO, len(flags))
+	for i, f := range flags {
+		dtos[i] = newFlagDTO(f)
+	}
+	writeJSON(w, http.StatusOK, dtos)
+}
+
+func (h *Handlers) ListUnresolvedExpeditionFlags(w http.ResponseWriter, r *http.Request) {
+	flags, err := h.svc.ListUnresolvedFlagsForExpedition(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	dtos := make([]flagDTO, len(flags))
+	for i, f := range flags {
+		dtos[i] = newFlagDTO(f)
+	}
+	writeJSON(w, http.StatusOK, dtos)
+}
+
+func (h *Handlers) AddWaypointAsset(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeJSON[addWaypointAssetRequest](r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	asset, err := h.svc.AddWaypointAsset(r.Context(), r.PathValue("id"), req.toParams())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, newAssetDTO(asset))
+}
+
+func (h *Handlers) ListWaypointAssets(w http.ResponseWriter, r *http.Request) {
+	assets, err := h.svc.ListWaypointAssets(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	dtos := make([]assetDTO, len(assets))
+	for i, a := range assets {
+		dtos[i] = newAssetDTO(a)
+	}
+	writeJSON(w, http.StatusOK, dtos)
+}
+
+func (h *Handlers) AddExpeditionTerm(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeJSON[addExpeditionTermRequest](r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	term, err := h.svc.AddExpeditionTerm(r.Context(), r.PathValue("id"), req.Term, req.Definition)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, newTermDTO(term))
+}
+
+func (h *Handlers) UpdateExpeditionTerm(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeJSON[updateExpeditionTermRequest](r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	term, err := h.svc.UpdateExpeditionTerm(r.Context(), r.PathValue("id"), req.Definition)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newTermDTO(term))
+}
+
+func (h *Handlers) ListExpeditionTerms(w http.ResponseWriter, r *http.Request) {
+	terms, err := h.svc.ListExpeditionTerms(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	dtos := make([]termDTO, len(terms))
+	for i, t := range terms {
+		dtos[i] = newTermDTO(t)
+	}
+	writeJSON(w, http.StatusOK, dtos)
+}
+
 // --- Dependency edges ---
 
 func (h *Handlers) AddWaypointDependency(w http.ResponseWriter, r *http.Request) {

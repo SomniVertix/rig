@@ -23,6 +23,7 @@ type expeditionDTO struct {
 	OutcomeSpecID  *string   `json:"outcomeSpecId,omitempty"`
 	OutcomeSummary *string   `json:"outcomeSummary,omitempty"`
 	SessionID      *string   `json:"sessionId,omitempty"`
+	ReopenReason   *string   `json:"reopenReason,omitempty"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
@@ -40,6 +41,7 @@ func newExpeditionDTO(e *domain.Expedition) expeditionDTO {
 		OutcomeSpecID:  e.OutcomeSpecID,
 		OutcomeSummary: e.OutcomeSummary,
 		SessionID:      e.SessionID,
+		ReopenReason:   e.ReopenReason,
 		CreatedAt:      e.CreatedAt,
 		UpdatedAt:      e.UpdatedAt,
 	}
@@ -64,6 +66,8 @@ type waypointDTO struct {
 	ResolutionGist        *string    `json:"resolutionGist,omitempty"`
 	Rationale             *string    `json:"rationale,omitempty"`
 	BypassReason          *string    `json:"bypassReason,omitempty"`
+	UnbypassReason        *string    `json:"unbypassReason,omitempty"`
+	UnspurReason          *string    `json:"unspurReason,omitempty"`
 	PreviousStatus        *string    `json:"previousStatus,omitempty"`
 	ReachedIn             *string    `json:"reachedIn,omitempty"`
 	ReachedAt             *time.Time `json:"reachedAt,omitempty"`
@@ -86,6 +90,8 @@ func newWaypointDTO(w *domain.Waypoint) waypointDTO {
 		ResolutionGist:        w.ResolutionGist,
 		Rationale:             w.Rationale,
 		BypassReason:          w.BypassReason,
+		UnbypassReason:        w.UnbypassReason,
+		UnspurReason:          w.UnspurReason,
 		ReachedIn:             w.ReachedIn,
 		ReachedAt:             w.ReachedAt,
 		SpurredToExpeditionID: w.SpurredToExpeditionID,
@@ -285,6 +291,136 @@ func newWaypointDependencyDTO(e domain.WaypointDependencyEdge) waypointDependenc
 
 type errorResponse struct {
 	Error string `json:"error"`
+}
+
+// --- Rehydrate / history / flags / assets / terms ---
+//
+// Previously readable over MCP only (see mcpserver/rehydrate.go,
+// mcpserver/assets.go, mcpserver/terms.go) but absent from this REST
+// surface. Mirrors those tools' request/response shapes.
+
+type waypointHistoryEntryDTO struct {
+	ID             string     `json:"id"`
+	WaypointID     string     `json:"waypointId"`
+	Ordinal        int        `json:"ordinal"`
+	SourceStatus   string     `json:"sourceStatus"`
+	Resolution     *string    `json:"resolution,omitempty"`
+	ResolutionGist *string    `json:"resolutionGist,omitempty"`
+	Rationale      *string    `json:"rationale,omitempty"`
+	ReachedIn      *string    `json:"reachedIn,omitempty"`
+	ReachedAt      *time.Time `json:"reachedAt,omitempty"`
+	BypassReason   *string    `json:"bypassReason,omitempty"`
+	Reason         string     `json:"reason"`
+	SupersededAt   time.Time  `json:"supersededAt"`
+	CreatedAt      time.Time  `json:"createdAt"`
+}
+
+func newWaypointHistoryEntryDTO(h *domain.WaypointHistoryEntry) waypointHistoryEntryDTO {
+	return waypointHistoryEntryDTO{
+		ID:             h.ID,
+		WaypointID:     h.WaypointID,
+		Ordinal:        h.Ordinal,
+		SourceStatus:   string(h.SourceStatus),
+		Resolution:     h.Resolution,
+		ResolutionGist: h.ResolutionGist,
+		Rationale:      h.Rationale,
+		ReachedIn:      h.ReachedIn,
+		ReachedAt:      h.ReachedAt,
+		BypassReason:   h.BypassReason,
+		Reason:         h.Reason,
+		SupersededAt:   h.SupersededAt,
+		CreatedAt:      h.CreatedAt,
+	}
+}
+
+type flagDTO struct {
+	ID               string     `json:"id"`
+	TargetWaypointID string     `json:"targetWaypointId"`
+	SourceWaypointID *string    `json:"sourceWaypointId,omitempty"`
+	Note             string     `json:"note"`
+	RaisedAt         time.Time  `json:"raisedAt"`
+	Resolved         bool       `json:"resolved"`
+	ResolvedAt       *time.Time `json:"resolvedAt,omitempty"`
+	ResolvedReason   *string    `json:"resolvedReason,omitempty"`
+}
+
+func newFlagDTO(f *domain.WaypointFlag) flagDTO {
+	return flagDTO{
+		ID:               f.ID,
+		TargetWaypointID: f.TargetWaypointID,
+		SourceWaypointID: f.SourceWaypointID,
+		Note:             f.Note,
+		RaisedAt:         f.RaisedAt,
+		Resolved:         f.Resolved,
+		ResolvedAt:       f.ResolvedAt,
+		ResolvedReason:   f.ResolvedReason,
+	}
+}
+
+type flagWaypointRequest struct {
+	Note             string  `json:"note"`
+	SourceWaypointID *string `json:"sourceWaypointId,omitempty"`
+}
+
+type assetDTO struct {
+	ID              string    `json:"id"`
+	WaypointID      string    `json:"waypointId"`
+	Ordinal         int       `json:"ordinal"`
+	Kind            string    `json:"kind"`
+	Title           string    `json:"title"`
+	ContentMarkdown *string   `json:"contentMarkdown,omitempty"`
+	RepoPath        *string   `json:"repoPath,omitempty"`
+	CommitSHA       *string   `json:"commitSha,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
+func newAssetDTO(a *domain.WaypointAsset) assetDTO {
+	return assetDTO{
+		ID:              a.ID,
+		WaypointID:      a.WaypointID,
+		Ordinal:         a.Ordinal,
+		Kind:            a.Kind,
+		Title:           a.Title,
+		ContentMarkdown: a.ContentMarkdown,
+		RepoPath:        a.RepoPath,
+		CommitSHA:       a.CommitSHA,
+		CreatedAt:       a.CreatedAt,
+	}
+}
+
+type addWaypointAssetRequest struct {
+	Kind            string  `json:"kind"`
+	Title           string  `json:"title"`
+	ContentMarkdown *string `json:"contentMarkdown,omitempty"`
+	RepoPath        *string `json:"repoPath,omitempty"`
+	CommitSHA       *string `json:"commitSha,omitempty"`
+}
+
+func (r addWaypointAssetRequest) toParams() store.AddWaypointAssetParams {
+	return store.AddWaypointAssetParams{
+		Kind: r.Kind, Title: r.Title,
+		ContentMarkdown: r.ContentMarkdown, RepoPath: r.RepoPath, CommitSHA: r.CommitSHA,
+	}
+}
+
+type termDTO struct {
+	ID           string `json:"id"`
+	ExpeditionID string `json:"expeditionId"`
+	Term         string `json:"term"`
+	Definition   string `json:"definition"`
+}
+
+func newTermDTO(t *domain.ExpeditionTerm) termDTO {
+	return termDTO{ID: t.ID, ExpeditionID: t.ExpeditionID, Term: t.Term, Definition: t.Definition}
+}
+
+type addExpeditionTermRequest struct {
+	Term       string `json:"term"`
+	Definition string `json:"definition"`
+}
+
+type updateExpeditionTermRequest struct {
+	Definition string `json:"definition"`
 }
 
 // --- Spec pipeline ---
