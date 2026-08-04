@@ -15,7 +15,7 @@
 	border-color: var(--border-strong);
 	box-shadow: var(--shadow-sm);
 }
-.rl-graph-node--selected {
+.rl-graph-node.rl-graph-node--selected {
 	border-color: var(--accent);
 	box-shadow: 0 0 0 3px var(--accent-soft);
 }

@@ -10,7 +10,7 @@ export type WaypointNodeData = {
 
 export type WaypointFlowNode = Node<WaypointNodeData, 'waypoint'>;
 
-export function WaypointNode({ data, selected }: NodeProps<WaypointFlowNode>) {
+export function WaypointNode({ data, selected, sourcePosition, targetPosition }: NodeProps<WaypointFlowNode>) {
 	const { waypoint } = data;
 	const pill = WAYPOINT_STATE_PILL[waypoint.state];
 	const bypassed = waypoint.state === 'bypassed';
@@ -21,7 +21,10 @@ export function WaypointNode({ data, selected }: NodeProps<WaypointFlowNode>) {
 
 	return (
 		<div className={classes}>
-			<Handle type="target" position={Position.Left} />
+			{/* Side follows the layout direction (set by useTrailGraph per LR/TB) rather than a
+			    hardcoded Left/Right — otherwise TB edges loop around the node sides instead of
+			    running top-to-bottom. */}
+			<Handle type="target" position={targetPosition ?? Position.Left} />
 			<div className="rl-graph-node__top">
 				<span className={`rl-graph-pill rl-graph-pill--${waypoint.state}`} style={{ color: pill.fg, background: pill.bg }}>
 					<span className="rl-graph-pill__dot" />
@@ -30,7 +33,7 @@ export function WaypointNode({ data, selected }: NodeProps<WaypointFlowNode>) {
 				<span className="rl-graph-node__id">{waypoint.id.slice(0, 6)}</span>
 			</div>
 			<div className="rl-graph-node__title">{waypoint.title}</div>
-			<Handle type="source" position={Position.Right} />
+			<Handle type="source" position={sourcePosition ?? Position.Right} />
 		</div>
 	);
 }
