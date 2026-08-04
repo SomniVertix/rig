@@ -154,3 +154,28 @@
 .rl-stepper__step--current .rl-stepper__label{color:var(--text-strong);font-weight:var(--weight-semibold)}
 .rl-stepper__step--current ~ .rl-stepper__bar,.rl-stepper__bar--pending{background:var(--border-default)}
 .rl-stepper__bar--done{background:var(--emerald-500)}
+
+/* ── Markdown ───────────────────────────────────────────────────────── */
+.rl-markdown{font-size:var(--text-sm);color:var(--text-body);line-height:var(--leading-normal)}
+.rl-markdown>*+*{margin-top:var(--space-3)}
+.rl-markdown h1,.rl-markdown h2,.rl-markdown h3,.rl-markdown h4,.rl-markdown h5,.rl-markdown h6{margin-top:var(--space-6)}
+.rl-markdown>h1:first-child,.rl-markdown>h2:first-child,.rl-markdown>h3:first-child,.rl-markdown>h4:first-child,.rl-markdown>h5:first-child,.rl-markdown>h6:first-child{margin-top:0}
+.rl-markdown h1{font-size:var(--text-2xl)}
+.rl-markdown h2{font-size:var(--text-xl);padding-bottom:var(--space-2);border-bottom:1px solid var(--border-subtle)}
+.rl-markdown h3{font-size:var(--text-lg)}
+.rl-markdown h4,.rl-markdown h5,.rl-markdown h6{font-size:var(--text-md)}
+.rl-markdown p{text-wrap:pretty}
+.rl-markdown a{text-decoration:underline;text-underline-offset:2px}
+.rl-markdown strong{color:var(--text-strong);font-weight:var(--weight-semibold)}
+.rl-markdown ul,.rl-markdown ol{padding-left:var(--space-5)}
+.rl-markdown li+li{margin-top:var(--space-1)}
+.rl-markdown li>ul,.rl-markdown li>ol{margin-top:var(--space-1)}
+.rl-markdown code{font-family:var(--font-mono);font-size:0.92em;background:var(--bg-inset);border-radius:var(--radius-xs);padding:0.1em 0.4em}
+.rl-markdown pre{font-family:var(--font-mono);font-size:0.92em;background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);overflow-x:auto}
+.rl-markdown pre code{background:none;padding:0;border-radius:0}
+.rl-markdown blockquote{margin:0;padding-left:var(--space-4);border-left:2px solid var(--border-default);color:var(--text-muted)}
+.rl-markdown hr{border:none;border-top:1px solid var(--border-subtle)}
+.rl-markdown table{border-collapse:collapse;width:100%;font-size:var(--text-sm)}
+.rl-markdown th,.rl-markdown td{border:1px solid var(--border-subtle);padding:var(--space-1) var(--space-3);text-align:left}
+.rl-markdown th{background:var(--bg-inset);color:var(--text-strong);font-weight:var(--weight-semibold)}
+.rl-markdown img{max-width:100%;border-radius:var(--radius-sm)}

@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { Map, FileText, Play, ScrollText, PanelLeftClose } from 'lucide-react';
 import { Icon } from '../../ds';
 import { useAppState } from '../state/AppStateContext';
@@ -50,11 +50,11 @@ export function Sidebar({ workspaceId }: SidebarProps) {
 
 	return (
 		<aside className="rl-sidebar">
-			<div className="rl-sidebar__wordmark">
+			<Link to="/workspaces" className="rl-sidebar__wordmark">
 				<span className="rl-sidebar__dot" />
 				<span className="rl-sidebar__wordmark-text">rig</span>
 				<span className="rl-sidebar__version">v0.4</span>
-			</div>
+			</Link>
 
 			<WorkspacePicker currentWorkspaceId={workspaceId} workspaceCount={specs?.length} />
 

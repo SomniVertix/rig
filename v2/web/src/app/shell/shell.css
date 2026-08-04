@@ -146,6 +146,11 @@
 	padding: var(--space-4);
 	height: var(--topbar-h);
 	flex: none;
+	text-decoration: none;
+	color: inherit;
+}
+.rl-sidebar__wordmark:hover .rl-sidebar__wordmark-text {
+	color: var(--accent);
 }
 .rl-sidebar__dot {
 	width: 10px;

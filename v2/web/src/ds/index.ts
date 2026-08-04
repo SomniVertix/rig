@@ -12,3 +12,4 @@ export * from './components/Select';
 export * from './components/Textarea';
 export * from './components/Dialog';
 export * from './components/Toast';
+export * from './components/Markdown';

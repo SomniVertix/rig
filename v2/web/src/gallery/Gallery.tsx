@@ -19,12 +19,47 @@ import {
 	Textarea,
 	Dialog,
 	Toast,
+	Markdown,
 	type Status
 } from '../ds';
 
 const statuses: Status[] = ['draft', 'in_review', 'approved', 'denied', 'running'];
 const badgeTones = ['neutral', 'accent', 'success', 'danger', 'info', 'outline'] as const;
 const btnVariants = ['primary', 'secondary', 'ghost', 'success', 'danger'] as const;
+
+const SAMPLE_MARKDOWN = `# Requirements
+
+## User story
+
+As a **spec author**, I want documents to render as *formatted* markdown so I can read them without squinting at raw \`#\` characters.
+
+### Acceptance criteria
+
+1. Headings render at distinct sizes
+2. Lists nest correctly
+   - like this
+   - and this
+3. \`inline code\` and fenced blocks are monospaced
+
+\`\`\`ts
+function render(doc: string) {
+	return parse(doc);
+}
+\`\`\`
+
+> A blockquote noting an open question.
+
+| Stage | Status |
+| --- | --- |
+| requirements | approved |
+| design | in_review |
+
+[a link](https://example.com) and a horizontal rule below.
+
+---
+
+Done.
+`;
 
 /** Dev-only visual QA surface — renders every ds/ component + variant against the ported CSS. */
 export function Gallery() {
@@ -129,6 +164,15 @@ export function Gallery() {
 					<Toast tone="danger" title="Deny recorded" />
 					<Toast tone="info" title="Refetching…" />
 				</div>
+			</section>
+
+			<section>
+				<h2>Markdown</h2>
+				<Card style={{ maxWidth: 640 }}>
+					<CardPad>
+						<Markdown>{SAMPLE_MARKDOWN}</Markdown>
+					</CardPad>
+				</Card>
 			</section>
 
 			<section>

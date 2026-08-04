@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Check, X } from 'lucide-react';
-import { Badge, Button, StatusBadge, StageStepper, Tabs, Textarea } from '../../ds';
+import { Badge, Button, Markdown, StatusBadge, StageStepper, Tabs, Textarea } from '../../ds';
 import { usePageTitle } from '../../app/state/AppStateContext';
 import { useSpec, useSpecDocument, useApproveStage, useDenyStage, useOriginTrail } from '../../data/specs';
 import { SPEC_STAGE_CONFIG } from '../../config/specStages';
@@ -103,7 +103,9 @@ function DocumentCard({ specId, stage, stageStatus }: { specId: string; stage: S
 			{isLoading ? (
 				<p style={{ color: 'var(--text-muted)' }}>Loading document…</p>
 			) : (
-				<div className="rl-doc-card__body">{data?.markdown || 'No content yet.'}</div>
+				<div className="rl-doc-card__body">
+						{data?.markdown ? <Markdown>{data.markdown}</Markdown> : 'No content yet.'}
+					</div>
 			)}
 			<div className="rl-doc-card__footer">
 				rendered on demand · GET /specs/{specId}/render?stage={stage}

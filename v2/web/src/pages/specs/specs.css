@@ -80,7 +80,6 @@
 	font-size: 13.5px;
 	color: var(--text-body);
 	line-height: var(--leading-normal);
-	white-space: pre-wrap;
 }
 .rl-doc-card__footer {
 	margin-top: 20px;

@@ -47,6 +47,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		document.documentElement.dataset.theme = theme;
 	}, [theme]);
 
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+				e.preventDefault();
+				setSidebarCollapsed(!sidebarCollapsed);
+			}
+		};
+		document.addEventListener('keydown', onKeyDown);
+		return () => document.removeEventListener('keydown', onKeyDown);
+	}, [sidebarCollapsed, setSidebarCollapsed]);
+
 	const pushToast = (toast: Omit<ToastItem, 'id'>) => {
 		const id = crypto.randomUUID();
 		setToasts((prev) => [...prev, { ...toast, id }]);
