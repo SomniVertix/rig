@@ -7,9 +7,10 @@ export type { SpecStageName, SpecStageStatus };
  * design back to 'not_started' (destructive, per openapi.yaml) but leaves
  * `*LastDenialReason` set until the next finalize. Its presence is what
  * distinguishes "denied, not yet redrafted" from "never started" in the UI
- * (see domain/specs.ts). Tasks has no per-spec denial reason (denials live
- * on individual TasksDocs, which aren't listable via REST today — see
- * GAPS.md) so its display status never resolves to 'denied'.
+ * (see domain/specs.ts). Tasks has no per-spec denial reason — denials live
+ * on individual TasksDocs instead (GET /specs/{id}/tasks-docs), so the
+ * spec-wide `stages.tasks` status here never resolves to 'denied'; use
+ * `tasksDocDisplayStatus` (domain/specs.ts) per component instead.
  */
 export type DisplayStageStatus = SpecStageStatus | 'denied';
 

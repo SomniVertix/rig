@@ -99,6 +99,10 @@ export interface TasksDocDTO {
 	lastDenialReason?: string | null;
 }
 
+export interface ListTasksDocsResponse {
+	tasksDocs: TasksDocDTO[];
+}
+
 export interface NextStageInfoDTO {
 	nextStage: SpecStageName | 'implementation';
 	laggingComponents?: string[];

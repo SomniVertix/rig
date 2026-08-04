@@ -15,6 +15,7 @@ import type {
 	StageActionRequest,
 	StageActionResponse,
 	RenderDocumentResponse,
+	ListTasksDocsResponse,
 	SpecStageName,
 	WorkspaceDTO
 } from './types';
@@ -122,6 +123,10 @@ export function getSpec(id: string): Promise<SpecDTO> {
 
 export function getNextStage(id: string): Promise<NextStageInfoDTO> {
 	return apiFetch<NextStageInfoDTO>(`/specs/${encodeURIComponent(id)}/next-stage`);
+}
+
+export function listTasksDocs(id: string): Promise<ListTasksDocsResponse> {
+	return apiFetch<ListTasksDocsResponse>(`/specs/${encodeURIComponent(id)}/tasks-docs`);
 }
 
 export function renderSpecDocument(id: string, stage: SpecStageName, component?: string): Promise<RenderDocumentResponse> {

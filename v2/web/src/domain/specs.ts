@@ -1,5 +1,5 @@
-import type { SpecDTO, SpecStageName } from '../api/types';
-import type { SpecDetail, SpecSummary } from '../data/specs/types';
+import type { SpecDTO, SpecStageName, TasksDocDTO } from '../api/types';
+import type { DisplayStageStatus, SpecDetail, SpecSummary } from '../data/specs/types';
 
 /** Pipeline order — for StageStepper rendering (requirements → design → tasks → implementation). */
 export const SPEC_STAGE_ORDER: SpecStageName[] = ['requirements', 'design', 'tasks'];
@@ -29,6 +29,13 @@ export function toSpecSummary(spec: SpecDTO): SpecSummary {
 		stages: stagesOf(spec),
 		updatedAt: spec.updatedAt
 	};
+}
+
+/** Same 'denied' derivation stagesOf uses for requirements/design, applied
+ * per component — a TasksDoc's LastDenialReason is the per-component
+ * equivalent of a spec's *LastDenialReason. */
+export function tasksDocDisplayStatus(doc: TasksDocDTO): DisplayStageStatus {
+	return doc.lastDenialReason ? 'denied' : doc.status;
 }
 
 export function toSpecDetail(spec: SpecDTO): SpecDetail {

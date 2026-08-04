@@ -50,9 +50,23 @@ export function useSpecDocument(specId: string, stage: StageActionRequest['stage
 	});
 }
 
+export function useTasksDocs(specId: string) {
+	return useQuery({
+		queryKey: queryKeys.specTasksDocs(specId),
+		queryFn: async () => (await api.listTasksDocs(specId)).tasksDocs,
+		enabled: Boolean(specId)
+	});
+}
+
 function useInvalidateSpec(specId: string) {
 	const queryClient = useQueryClient();
-	return () => queryClient.invalidateQueries({ queryKey: queryKeys.spec(specId) });
+	return () => {
+		queryClient.invalidateQueries({ queryKey: queryKeys.spec(specId) });
+		// Tasks-stage actions carry a component and change that component's
+		// TasksDoc status — cheap to always invalidate, no-op for
+		// requirements/design actions since nothing reads this key then.
+		queryClient.invalidateQueries({ queryKey: queryKeys.specTasksDocs(specId) });
+	};
 }
 
 /** Approve/deny are human-only per the brand guide — agents cannot self-approve a draft. */

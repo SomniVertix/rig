@@ -3,11 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { Check, X } from 'lucide-react';
 import { Badge, Button, Markdown, StatusBadge, StageStepper, Tabs, Textarea } from '../../ds';
 import { usePageTitle } from '../../app/state/AppStateContext';
-import { useSpec, useSpecDocument, useApproveStage, useDenyStage, useOriginTrail } from '../../data/specs';
+import { useSpec, useSpecDocument, useApproveStage, useDenyStage, useOriginTrail, useTasksDocs } from '../../data/specs';
 import { SPEC_STAGE_CONFIG } from '../../config/specStages';
-import { SPEC_STAGE_ORDER } from '../../domain/specs';
+import { SPEC_STAGE_ORDER, tasksDocDisplayStatus } from '../../domain/specs';
 import { toBadgeStatus } from './shared';
 import type { SpecStageName } from '../../data/specs/types';
+import type { TasksDocDTO } from '../../api/types';
 import './specs.css';
 
 const STEPPER_STEPS = [...SPEC_STAGE_ORDER, 'implementation'].map((key) => ({
@@ -31,6 +32,12 @@ export function SpecDetailPage() {
 			setDefaulted(true);
 		}
 	}, [defaulted, spec]);
+
+	// Which component's TasksDoc is open — shared between the pills+doc view
+	// (main column) and its review gate (rail), both siblings below. Unlike
+	// requirements/design, tasks has no single spec-wide status: each
+	// component reviews independently.
+	const [selectedComponent, setSelectedComponent] = useState<string | undefined>();
 
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading spec…</p>;
 	if (isError || !spec) return <p style={{ color: 'var(--rose-500)' }}>Failed to load spec: {(error as Error)?.message ?? 'not found'}</p>;
@@ -63,16 +70,23 @@ export function SpecDetailPage() {
 					/>
 					<div style={{ marginTop: 16 }}>
 						{activeStage === 'tasks' ? (
-							<TasksDocumentPlaceholder status={spec.stages.tasks} />
+							<TasksTabContent
+								specId={spec.id}
+								aggregateStatus={spec.stages.tasks}
+								selected={selectedComponent}
+								onSelect={setSelectedComponent}
+							/>
 						) : (
 							<DocumentCard specId={spec.id} stage={activeStage} stageStatus={spec.stages[activeStage]} />
 						)}
 					</div>
 				</div>
 				<div className="rl-detail-grid__rail">
-					{activeStage !== 'tasks' ? (
+					{activeStage === 'tasks' ? (
+						<TasksReviewGate specId={spec.id} component={selectedComponent} />
+					) : (
 						<ReviewGateCard specId={spec.id} stage={activeStage} status={spec.stages[activeStage]} />
-					) : null}
+					)}
 					<StageAgentModelCard />
 					<OriginTrailCard specId={spec.id} workspace={workspace} />
 				</div>
@@ -114,22 +128,117 @@ function DocumentCard({ specId, stage, stageStatus }: { specId: string; stage: S
 	);
 }
 
-function TasksDocumentPlaceholder({ status }: { status: string }) {
+/** Tasks tab: a spec has one TasksDoc per design component, each reviewed
+ * independently — unlike requirements/design's single spec-wide document.
+ * Components render as a row of status pills; picking one renders that
+ * component's tasks.md below, same footprint as DocumentCard. */
+function TasksTabContent({
+	specId,
+	aggregateStatus,
+	selected,
+	onSelect
+}: {
+	specId: string;
+	aggregateStatus: string;
+	selected?: string;
+	onSelect: (slug: string) => void;
+}) {
+	const { data: docs, isLoading } = useTasksDocs(specId);
+
+	// Default to the first component (alphabetical by slug, per the API's
+	// own ordering) once docs load, so the tab never opens on an empty pane.
+	useEffect(() => {
+		if (!selected && docs && docs.length > 0) onSelect(docs[0]!.componentSlug);
+	}, [selected, docs, onSelect]);
+
+	if (isLoading) {
+		return (
+			<div className="rl-card rl-doc-card">
+				<p style={{ color: 'var(--text-muted)' }}>Loading components…</p>
+			</div>
+		);
+	}
+
+	if (!docs || docs.length === 0) {
+		return (
+			<div className="rl-card rl-doc-card">
+				<div className="rl-doc-card__empty">
+					<p>no document</p>
+					<p style={{ marginTop: 4 }}>Not started. tasks-drafter drafts this stage, per design component.</p>
+				</div>
+			</div>
+		);
+	}
+
+	// docs.length > 0 was just checked above, so docs[0] is safe.
+	const selectedDoc = docs.find((d) => d.componentSlug === selected) ?? docs[0]!;
+
 	return (
-		<div className="rl-card rl-doc-card">
-			<div className="rl-doc-card__empty">
-				<p>Aggregate status: {status}</p>
-				<p style={{ marginTop: 8, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
-					Task documents are per design-component, and V2's REST surface has no endpoint to list a spec's
-					components yet — only <code>render</code>/<code>finalize</code>/<code>approve</code>/<code>deny</code>{' '}
-					accept a component slug you'd already have to know (see GAPS.md §3b).
-				</p>
+		<div>
+			<div className="rl-eyebrow" style={{ marginBottom: 8 }}>
+				{docs.filter((d) => d.status === 'approved').length}/{docs.length} components approved · aggregate {aggregateStatus}
+			</div>
+			<div className="rl-spec-detail__component-pills">
+				{docs.map((doc) => (
+					<button
+						key={doc.id}
+						type="button"
+						className={[
+							'rl-component-pill',
+							doc.componentSlug === selectedDoc.componentSlug ? 'rl-component-pill--selected' : ''
+						]
+							.filter(Boolean)
+							.join(' ')}
+						onClick={() => onSelect(doc.componentSlug)}
+					>
+						<StatusBadge status={toBadgeStatus(tasksDocDisplayStatus(doc))} label={doc.componentName} />
+					</button>
+				))}
+			</div>
+			<div style={{ marginTop: 12 }}>
+				<TaskDocumentCard specId={specId} doc={selectedDoc} />
 			</div>
 		</div>
 	);
 }
 
-function ReviewGateCard({ specId, stage, status }: { specId: string; stage: SpecStageName; status: string }) {
+function TaskDocumentCard({ specId, doc }: { specId: string; doc: TasksDocDTO }) {
+	const { data, isLoading } = useSpecDocument(specId, 'tasks', doc.componentSlug);
+
+	return (
+		<div className="rl-card rl-doc-card">
+			{isLoading ? (
+				<p style={{ color: 'var(--text-muted)' }}>Loading document…</p>
+			) : (
+				<div className="rl-doc-card__body">{data?.markdown ? <Markdown>{data.markdown}</Markdown> : 'No content yet.'}</div>
+			)}
+			<div className="rl-doc-card__footer">
+				rendered on demand · GET /specs/{specId}/render?stage=tasks&component={doc.componentSlug}
+			</div>
+		</div>
+	);
+}
+
+function TasksReviewGate({ specId, component }: { specId: string; component?: string }) {
+	const { data: docs } = useTasksDocs(specId);
+	const doc = docs?.find((d) => d.componentSlug === component);
+
+	if (!doc) return null;
+
+	return <ReviewGateCard specId={specId} stage="tasks" status={tasksDocDisplayStatus(doc)} component={doc.componentSlug} />;
+}
+
+function ReviewGateCard({
+	specId,
+	stage,
+	status,
+	component
+}: {
+	specId: string;
+	stage: SpecStageName;
+	status: string;
+	component?: string;
+}) {
 	const approve = useApproveStage(specId);
 	const deny = useDenyStage(specId);
 	const [denyOpen, setDenyOpen] = useState(false);
@@ -142,7 +251,7 @@ function ReviewGateCard({ specId, stage, status }: { specId: string; stage: Spec
 		return (
 			<div className="rl-card rl-card__pad">
 				<div className="rl-gate-card__line" style={{ color: 'var(--emerald-500)' }}>
-					<Check size={15} /> Stage approved · web-ui
+					<Check size={15} /> {component ? 'Component' : 'Stage'} approved · web-ui
 				</div>
 			</div>
 		);
@@ -167,7 +276,7 @@ function ReviewGateCard({ specId, stage, status }: { specId: string; stage: Spec
 				Human review gate
 			</div>
 			<p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)', marginBottom: 12 }}>
-				{config.label} is in review. Approve to advance, or deny with a reason.
+				{component ? 'This component' : config.label} is in review. Approve to advance, or deny with a reason.
 			</p>
 			{!denyOpen ? (
 				<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -176,7 +285,7 @@ function ReviewGateCard({ specId, stage, status }: { specId: string; stage: Spec
 						block
 						icon={Check}
 						disabled={approve.isPending}
-						onClick={() => approve.mutate({ stage })}
+						onClick={() => approve.mutate({ stage, component })}
 					>
 						Approve
 					</Button>
@@ -194,7 +303,9 @@ function ReviewGateCard({ specId, stage, status }: { specId: string; stage: Spec
 						<Button
 							variant="danger"
 							disabled={!reason.trim() || deny.isPending}
-							onClick={() => deny.mutate({ stage, reason }, { onSuccess: () => { setDenyOpen(false); setReason(''); } })}
+							onClick={() =>
+								deny.mutate({ stage, component, reason }, { onSuccess: () => { setDenyOpen(false); setReason(''); } })
+							}
 						>
 							Confirm deny
 						</Button>

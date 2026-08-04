@@ -63,7 +63,21 @@
 .rl-spec-detail__component-pills {
 	display: flex;
 	gap: 6px;
+	flex-wrap: wrap;
 	margin-bottom: var(--space-3);
+}
+.rl-component-pill {
+	background: none;
+	border: 1px solid transparent;
+	border-radius: var(--radius-full);
+	padding: 1px;
+	cursor: pointer;
+}
+.rl-component-pill:hover {
+	background: var(--bg-hover);
+}
+.rl-component-pill--selected {
+	border-color: var(--accent);
 }
 
 .rl-doc-card {
