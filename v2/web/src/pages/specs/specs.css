@@ -60,24 +60,30 @@
 	color: var(--text-faint);
 }
 
-.rl-spec-detail__component-pills {
+.rl-component-switcher {
 	display: flex;
-	gap: 6px;
-	flex-wrap: wrap;
-	margin-bottom: var(--space-3);
+	flex-direction: column;
+	gap: 4px;
 }
-.rl-component-pill {
+.rl-component-switcher__row {
+	display: flex;
 	background: none;
 	border: 1px solid transparent;
-	border-radius: var(--radius-full);
-	padding: 1px;
+	border-radius: var(--radius-sm);
+	padding: 5px 6px;
 	cursor: pointer;
+	text-align: left;
 }
-.rl-component-pill:hover {
+.rl-component-switcher__row .rl-status {
+	min-width: 0;
+	max-width: 100%;
+}
+.rl-component-switcher__row:hover {
 	background: var(--bg-hover);
 }
-.rl-component-pill--selected {
+.rl-component-switcher__row--selected {
 	border-color: var(--accent);
+	background: var(--accent-soft);
 }
 
 .rl-doc-card {

@@ -87,10 +87,10 @@ describe('SpecDetailPage — Tasks tab', () => {
 		expect(await screen.findByText('Alpha Component')).toBeInTheDocument();
 		expect(screen.getByText('Beta Component')).toBeInTheDocument();
 		expect(await screen.findByText('Tasks: alpha')).toBeInTheDocument();
-		expect(screen.getByText('1/2 components approved · aggregate in_review')).toBeInTheDocument();
+		expect(screen.getByText('1/2 components approved')).toBeInTheDocument();
 	});
 
-	it('switches the rendered doc and review-gate status when another pill is clicked', async () => {
+	it('switches the rendered doc and review-gate status when another switcher row is clicked', async () => {
 		renderPage();
 		await screen.findByText('Tasks: alpha');
 

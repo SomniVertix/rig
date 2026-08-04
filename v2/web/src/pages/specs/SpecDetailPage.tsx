@@ -33,10 +33,10 @@ export function SpecDetailPage() {
 		}
 	}, [defaulted, spec]);
 
-	// Which component's TasksDoc is open — shared between the pills+doc view
-	// (main column) and its review gate (rail), both siblings below. Unlike
-	// requirements/design, tasks has no single spec-wide status: each
-	// component reviews independently.
+	// Which component's TasksDoc is open — shared between the doc view (main
+	// column), its switcher, and its review gate (both rail), all siblings
+	// below. Unlike requirements/design, tasks has no single spec-wide
+	// status: each component reviews independently.
 	const [selectedComponent, setSelectedComponent] = useState<string | undefined>();
 
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading spec…</p>;
@@ -70,12 +70,7 @@ export function SpecDetailPage() {
 					/>
 					<div style={{ marginTop: 16 }}>
 						{activeStage === 'tasks' ? (
-							<TasksTabContent
-								specId={spec.id}
-								aggregateStatus={spec.stages.tasks}
-								selected={selectedComponent}
-								onSelect={setSelectedComponent}
-							/>
+							<TasksDocumentArea specId={spec.id} selected={selectedComponent} />
 						) : (
 							<DocumentCard specId={spec.id} stage={activeStage} stageStatus={spec.stages[activeStage]} />
 						)}
@@ -89,6 +84,9 @@ export function SpecDetailPage() {
 					)}
 					<StageAgentModelCard />
 					<OriginTrailCard specId={spec.id} workspace={workspace} />
+					{activeStage === 'tasks' ? (
+						<TasksComponentSwitcher specId={spec.id} selected={selectedComponent} onSelect={setSelectedComponent} />
+					) : null}
 				</div>
 			</div>
 		</div>
@@ -128,28 +126,12 @@ function DocumentCard({ specId, stage, stageStatus }: { specId: string; stage: S
 	);
 }
 
-/** Tasks tab: a spec has one TasksDoc per design component, each reviewed
- * independently — unlike requirements/design's single spec-wide document.
- * Components render as a row of status pills; picking one renders that
- * component's tasks.md below, same footprint as DocumentCard. */
-function TasksTabContent({
-	specId,
-	aggregateStatus,
-	selected,
-	onSelect
-}: {
-	specId: string;
-	aggregateStatus: string;
-	selected?: string;
-	onSelect: (slug: string) => void;
-}) {
+/** Tasks tab main column: a spec has one TasksDoc per design component,
+ * each reviewed independently — unlike requirements/design's single
+ * spec-wide document. Renders whichever component TasksComponentSwitcher
+ * (rail) has selected, same footprint as DocumentCard. */
+function TasksDocumentArea({ specId, selected }: { specId: string; selected?: string }) {
 	const { data: docs, isLoading } = useTasksDocs(specId);
-
-	// Default to the first component (alphabetical by slug, per the API's
-	// own ordering) once docs load, so the tab never opens on an empty pane.
-	useEffect(() => {
-		if (!selected && docs && docs.length > 0) onSelect(docs[0]!.componentSlug);
-	}, [selected, docs, onSelect]);
 
 	if (isLoading) {
 		return (
@@ -172,20 +154,45 @@ function TasksTabContent({
 
 	// docs.length > 0 was just checked above, so docs[0] is safe.
 	const selectedDoc = docs.find((d) => d.componentSlug === selected) ?? docs[0]!;
+	return <TaskDocumentCard specId={specId} doc={selectedDoc} />;
+}
+
+/** Rail switcher for the tasks tab — picks which component's TasksDoc
+ * TasksDocumentArea (main column) and TasksReviewGate (rail, above this)
+ * are showing. Owns the "default to first component" effect since it's
+ * the one thing on the tasks tab that's always mounted and has the list. */
+function TasksComponentSwitcher({
+	specId,
+	selected,
+	onSelect
+}: {
+	specId: string;
+	selected?: string;
+	onSelect: (slug: string) => void;
+}) {
+	const { data: docs } = useTasksDocs(specId);
+
+	// Default to the first component (alphabetical by slug, per the API's
+	// own ordering) once docs load, so the tab never opens on an empty pane.
+	useEffect(() => {
+		if (!selected && docs && docs.length > 0) onSelect(docs[0]!.componentSlug);
+	}, [selected, docs, onSelect]);
+
+	if (!docs || docs.length === 0) return null;
 
 	return (
-		<div>
-			<div className="rl-eyebrow" style={{ marginBottom: 8 }}>
-				{docs.filter((d) => d.status === 'approved').length}/{docs.length} components approved · aggregate {aggregateStatus}
+		<div className="rl-card rl-card__pad">
+			<div className="rl-eyebrow" style={{ marginBottom: 10 }}>
+				{docs.filter((d) => d.status === 'approved').length}/{docs.length} components approved
 			</div>
-			<div className="rl-spec-detail__component-pills">
+			<div className="rl-component-switcher">
 				{docs.map((doc) => (
 					<button
 						key={doc.id}
 						type="button"
 						className={[
-							'rl-component-pill',
-							doc.componentSlug === selectedDoc.componentSlug ? 'rl-component-pill--selected' : ''
+							'rl-component-switcher__row',
+							doc.componentSlug === selected ? 'rl-component-switcher__row--selected' : ''
 						]
 							.filter(Boolean)
 							.join(' ')}
@@ -194,9 +201,6 @@ function TasksTabContent({
 						<StatusBadge status={toBadgeStatus(tasksDocDisplayStatus(doc))} label={doc.componentName} />
 					</button>
 				))}
-			</div>
-			<div style={{ marginTop: 12 }}>
-				<TaskDocumentCard specId={specId} doc={selectedDoc} />
 			</div>
 		</div>
 	);

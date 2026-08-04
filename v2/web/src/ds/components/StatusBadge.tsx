@@ -13,7 +13,7 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
 	return (
 		<span className={classes}>
 			<span className="rl-status__dot" />
-			{label ?? status}
+			<span className="rl-status__label">{label ?? status}</span>
 		</span>
 	);
 }
