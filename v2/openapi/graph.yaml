@@ -636,6 +636,23 @@ paths:
               schema: { $ref: "#/components/schemas/NextStageInfo" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /specs/{id}/tasks-docs:
+    get:
+      summary: >-
+        List a spec's per-component task docs, so a client can discover the component slugs
+        render/finalize/approve/deny require. Note: a nonexistent spec id returns 200 with an
+        empty list rather than 404 — the underlying store query (shared with
+        /render?stage=tasks) doesn't check spec existence, only matches component docs.
+      operationId: listTasksDocs
+      parameters:
+        - { $ref: "#/components/parameters/SpecId" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListTasksDocsResponse" }
+
   /specs/{id}/render:
     get:
       summary: Render a stage's markdown from live graph state — there is no stored document
@@ -1108,6 +1125,14 @@ components:
         status: { $ref: "#/components/schemas/SpecStageStatus" }
         deniedAt: { type: string, format: date-time, nullable: true }
         lastDenialReason: { type: string, nullable: true }
+
+    ListTasksDocsResponse:
+      type: object
+      properties:
+        tasksDocs:
+          type: array
+          items: { $ref: "#/components/schemas/TasksDoc" }
+          description: Ordered alphabetically by componentSlug. Empty when the tasks stage hasn't started.
 
     NextStageInfo:
       type: object

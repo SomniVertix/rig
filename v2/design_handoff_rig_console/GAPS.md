@@ -41,6 +41,14 @@ stubs. §2 (Specs list) and §3 (Spec detail + review gate) now have a real back
 build against, same as §4/§5 (Wayfinder). This is a fast-moving backend — re-check
 `openapi/graph.yaml` before assuming any section below is still unbuilt.
 
+**Update (2026-08-04):** `GET /specs/{id}/tasks-docs` has landed — lists a spec's
+per-component TasksDocs (slug, name, status), so a REST client can now discover the
+component slugs `render`/`finalize`/`approve`/`deny` require instead of needing to
+already know them (`internal/graph/api/router.go`, `dto.go`). A prior draft of the
+web console's Tasks tab cited this gap as "§3b" — that was always a mistake, §3b below
+is unrelated; this update note is the real record of it, now closed. Frontend wiring
+onto this endpoint is tracked separately, not yet done as of this note.
+
 Still confirmed stub-only or entirely absent in V2 as of this update:
 
 - Sessions / grilling — `start_session` returns `store.ErrNotImplemented`; no

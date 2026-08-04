@@ -67,6 +67,7 @@ func NewRouter(h *Handlers) *http.ServeMux {
 	mux.HandleFunc("GET /specs", h.ListSpecs)
 	mux.HandleFunc("GET /specs/{id}", h.GetSpec)
 	mux.HandleFunc("GET /specs/{id}/next-stage", h.GetNextStage)
+	mux.HandleFunc("GET /specs/{id}/tasks-docs", h.ListTasksDocs)
 	mux.HandleFunc("GET /specs/{id}/render", h.RenderDocument)
 	mux.HandleFunc("POST /specs/{id}/finalize", h.FinalizeStage)
 	mux.HandleFunc("POST /specs/{id}/approve", h.ApproveStage)

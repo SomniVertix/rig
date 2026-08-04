@@ -593,6 +593,15 @@ func (h *Handlers) GetSpec(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto)
 }
 
+func (h *Handlers) ListTasksDocs(w http.ResponseWriter, r *http.Request) {
+	docs, err := h.svc.ListTasksDocs(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, listTasksDocsResponse{TasksDocs: newTasksDocDTOs(docs)})
+}
+
 func (h *Handlers) RenderDocument(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	md, err := h.svc.RenderDocument(r.Context(), r.PathValue("id"), q.Get("stage"), q.Get("component"))

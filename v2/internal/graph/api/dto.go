@@ -433,6 +433,13 @@ type updateExpeditionTermRequest struct {
 // items, ...) already has a full, tested mcp__rig__* equivalent; mirroring
 // all of it here would just duplicate that surface for a REST client that,
 // today, doesn't exist.
+//
+// GET /specs/{id}/tasks-docs is the one explicit, narrow exception: the web
+// console is a real REST client, and it has no way to discover a tasks
+// stage's component slugs — render/finalize/approve/deny all require one
+// as input — without this read path. It stays read-only and reuses
+// svc.ListTasksDocs verbatim; it isn't a reopening of the CRUD surface
+// above, which still has no REST equivalent and shouldn't get one from this.
 
 type specDTO struct {
 	ID                           string     `json:"id"`
@@ -490,6 +497,22 @@ func newTasksDocDTO(t *domain.TasksDoc) tasksDocDTO {
 		ComponentSlug: t.ComponentSlug, ComponentName: t.ComponentName,
 		Status: string(t.Status), DeniedAt: t.DeniedAt, LastDenialReason: t.LastDenialReason,
 	}
+}
+
+func newTasksDocDTOs(ts []*domain.TasksDoc) []tasksDocDTO {
+	dtos := make([]tasksDocDTO, len(ts))
+	for i, t := range ts {
+		dtos[i] = newTasksDocDTO(t)
+	}
+	return dtos
+}
+
+// listTasksDocsResponse is GET /specs/{id}/tasks-docs's body — every
+// component's TasksDoc under a spec, ordered alphabetically by
+// componentSlug (see neo4jstore.ListTasksDocs). Empty (not an error) when
+// the tasks stage hasn't started yet.
+type listTasksDocsResponse struct {
+	TasksDocs []tasksDocDTO `json:"tasksDocs"`
 }
 
 type nextStageInfoDTO struct {
