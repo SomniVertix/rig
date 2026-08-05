@@ -106,6 +106,8 @@
   --warning: var(--amber-500);
 
   --focus-ring: 0 0 0 3px #178A4C40;
+
+  --minimap-mask: rgba(11, 13, 16, 0.08);
 }
 
 /* ── Dark theme ("ink") ─────────────────────────────────────────────────
@@ -150,4 +152,6 @@
   --status-running-bg: #1B92E324;
 
   --focus-ring: 0 0 0 3px #4AE38A40;
+
+  --minimap-mask: rgba(0, 0, 0, 0.55);
 }

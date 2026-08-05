@@ -13,3 +13,5 @@ export * from './components/Textarea';
 export * from './components/Dialog';
 export * from './components/Toast';
 export * from './components/Markdown';
+export * from './components/RelativeTime';
+export * from './components/Tooltip';

@@ -81,6 +81,13 @@ export function useTrailGraph(waypoints: Waypoint[], direction: GraphDirection):
 				id: n.id,
 				type: 'waypoint',
 				position: { x: n.x ?? 0, y: n.y ?? 0 },
+				// Declared up front (matching the fixed size elk laid out against)
+				// rather than left to ReactFlow's post-mount measurement — the
+				// MiniMap only renders nodes it already knows the dimensions of,
+				// so without this it stays empty until (and unless) a measurement
+				// pass lands.
+				width: WAYPOINT_NODE_WIDTH,
+				height: WAYPOINT_NODE_HEIGHT,
 				sourcePosition,
 				targetPosition,
 				data: { waypoint: byId.get(n.id)! }

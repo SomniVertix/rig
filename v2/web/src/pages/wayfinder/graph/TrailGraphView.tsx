@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from 'react';
 import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, useReactFlow, type NodeMouseHandler } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import './graph.css';
 import type { Waypoint } from '../../../data/trails/types';
+import { WAYPOINT_STATE_PILL } from './graphStyle';
 import { WaypointNode, type WaypointFlowNode } from './WaypointNode';
 import { useTrailGraph, type GraphDirection } from './useTrailGraph';
 
@@ -59,7 +61,14 @@ function TrailGraphViewInner({ waypoints, direction, selectedId, onSelect }: Tra
 			>
 				<Background gap={20} />
 				<Controls showInteractive={false} />
-				<MiniMap pannable zoomable />
+				<MiniMap
+					pannable
+					zoomable
+					nodeColor={(n) => {
+						const waypoint = (n as WaypointFlowNode).data?.waypoint;
+						return waypoint ? WAYPOINT_STATE_PILL[waypoint.state].fg : 'var(--text-faint)';
+					}}
+				/>
 			</ReactFlow>
 			{isLayouting && nodes.length === 0 ? (
 				<div

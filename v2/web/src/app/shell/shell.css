@@ -171,6 +171,9 @@
 	color: var(--text-faint);
 	margin-left: auto;
 }
+.rl-shell--collapsed .rl-sidebar__wordmark {
+	justify-content: center;
+}
 .rl-shell--collapsed .rl-sidebar__wordmark-text,
 .rl-shell--collapsed .rl-sidebar__version,
 .rl-shell--collapsed .rl-nav__label,
@@ -211,9 +214,9 @@
 	white-space: nowrap;
 }
 .rl-workspace-picker__menu {
-	position: absolute;
-	top: calc(100% + 4px);
-	left: 0;
+	/* position: fixed and top/left are set inline (WorkspacePicker.tsx),
+	   computed from the trigger button's rect — the menu is portaled to
+	   <body> so it isn't clipped by the sidebar's overflow: hidden. */
 	width: 330px;
 	background: var(--bg-surface);
 	border: 1px solid var(--border-default);

@@ -79,3 +79,30 @@
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0.35; }
 }
+
+/* ── React Flow chrome — remapped onto our own design tokens instead of
+   xyflow's stock (light-only-by-default) palette, so Controls/MiniMap follow
+   the app's actual light/dark theme rather than staying fixed white. ── */
+.react-flow {
+	--xy-minimap-background-color: var(--bg-inset);
+	--xy-minimap-mask-background-color: var(--minimap-mask);
+	--xy-minimap-node-stroke-width: 0;
+
+	--xy-controls-button-background-color: var(--bg-surface);
+	--xy-controls-button-background-color-hover: var(--bg-hover);
+	--xy-controls-button-color: var(--text-body);
+	--xy-controls-button-color-hover: var(--text-strong);
+	--xy-controls-button-border-color: var(--border-default);
+	--xy-controls-box-shadow: var(--shadow-sm);
+
+	--xy-edge-stroke: var(--border-strong);
+	--xy-edge-stroke-selected: var(--accent);
+	--xy-attribution-background-color: transparent;
+}
+.react-flow__controls-button {
+	border-bottom-color: var(--border-subtle);
+}
+.react-flow__minimap {
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+}

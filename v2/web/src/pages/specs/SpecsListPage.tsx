@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FileText } from 'lucide-react';
-import { StatusBadge, Icon } from '../../ds';
+import { StatusBadge, Icon, RelativeTime } from '../../ds';
 import { usePageTitle } from '../../app/state/AppStateContext';
 import { useSpecs } from '../../data/specs';
 import { toBadgeStatus } from './shared';
@@ -91,7 +91,9 @@ export function SpecsListPage() {
 							<div>
 								<StatusBadge status={toBadgeStatus(spec.stages.tasks)} />
 							</div>
-							<div className="rl-specs-table__updated">{spec.updatedAt}</div>
+							<div className="rl-specs-table__updated">
+								<RelativeTime value={spec.updatedAt} />
+							</div>
 						</div>
 					))}
 				</div>

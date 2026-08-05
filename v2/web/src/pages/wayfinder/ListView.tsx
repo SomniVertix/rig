@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Badge, Button } from '../../ds';
+import { Badge, Button, RelativeTime } from '../../ds';
 import type { TrailSummary, TrailStatus, WaypointState } from '../../data/trails/types';
 import { TRAIL_STATUS_LABEL, TRAIL_STATUS_TONE, WaypointStateDot } from './shared';
 
@@ -67,7 +67,9 @@ export function ListView({ trails, workspaceId }: ListViewProps) {
 										trail.waypointCounts[state] > 0 ? <WaypointStateDot key={state} state={state} /> : null
 									)}
 								</span>
-								<span>updated {trail.updatedAt}</span>
+								<span>
+									updated <RelativeTime value={trail.updatedAt} />
+								</span>
 							</div>
 						</div>
 					))}

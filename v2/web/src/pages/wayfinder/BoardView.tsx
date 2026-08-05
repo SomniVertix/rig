@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { RelativeTime } from '../../ds';
 import type { TrailSummary, TrailStatus } from '../../data/trails/types';
 import { TRAIL_STATUS_LABEL } from './shared';
 
@@ -38,7 +39,9 @@ export function BoardView({ trails, workspaceId }: BoardViewProps) {
 										<span>{trail.name}</span>
 									</div>
 									<div className="rl-board__card-subtitle">{trail.trailheadPrompt}</div>
-									<div className="rl-board__card-footer">updated {trail.updatedAt}</div>
+									<div className="rl-board__card-footer">
+										updated <RelativeTime value={trail.updatedAt} />
+									</div>
 								</div>
 							))
 						)}

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Check, X } from 'lucide-react';
-import { Badge, Button, Markdown, StatusBadge, StageStepper, Tabs, Textarea } from '../../ds';
+import { Badge, Button, Markdown, StatusBadge, StageStepper, Tabs, Textarea, Tooltip } from '../../ds';
 import { usePageTitle } from '../../app/state/AppStateContext';
 import { useSpec, useSpecDocument, useApproveStage, useDenyStage, useOriginTrail, useTasksDocs } from '../../data/specs';
 import { SPEC_STAGE_CONFIG } from '../../config/specStages';
 import { SPEC_STAGE_ORDER, tasksDocDisplayStatus } from '../../domain/specs';
+import { parseTaskCompletion, type TaskCompletion } from '../../domain/taskCompletion';
 import { toBadgeStatus } from './shared';
 import type { SpecStageName } from '../../data/specs/types';
 import type { TasksDocDTO } from '../../api/types';
@@ -157,6 +158,69 @@ function TasksDocumentArea({ specId, selected }: { specId: string; selected?: st
 	return <TaskDocumentCard specId={specId} doc={selectedDoc} />;
 }
 
+/** Fetches one component's tasks.md and derives done/total from its
+ * checkbox lines — same document DocumentCard renders when selected, just
+ * read here for its counts instead of its prose. */
+function useComponentCompletion(specId: string, componentSlug: string): TaskCompletion | undefined {
+	const { data } = useSpecDocument(specId, 'tasks', componentSlug);
+	return parseTaskCompletion(data?.markdown);
+}
+
+/** Radial completion indicator — a Tooltip carries the exact "done/total"
+ * ratio on hover, since the ring itself only shows it approximately. Ring's
+ * circles are `fill="none"`, so the wrapper (not the <svg> itself) is what
+ * gives the tooltip a full 18x18 hit box instead of just the thin stroke. */
+function CompletionRing({ completion }: { completion?: TaskCompletion }) {
+	const pct = completion && completion.total > 0 ? completion.done / completion.total : 0;
+	const r = 7;
+	const c = 2 * Math.PI * r;
+	const ring = (
+		<svg width={18} height={18} viewBox="0 0 18 18" style={{ flex: 'none' }}>
+			<circle cx="9" cy="9" r={r} fill="none" stroke="var(--border-default)" strokeWidth={2.5} />
+			<circle
+				cx="9"
+				cy="9"
+				r={r}
+				fill="none"
+				stroke="var(--accent)"
+				strokeWidth={2.5}
+				strokeDasharray={c}
+				strokeDashoffset={c * (1 - pct)}
+				strokeLinecap="round"
+				transform="rotate(-90 9 9)"
+			/>
+		</svg>
+	);
+
+	if (!completion) return ring;
+	return <Tooltip label={`${completion.done}/${completion.total} tasks complete`}>{ring}</Tooltip>;
+}
+
+function ComponentSwitcherRow({
+	doc,
+	selected,
+	onSelect,
+	completion
+}: {
+	doc: TasksDocDTO;
+	selected: boolean;
+	onSelect: () => void;
+	completion?: TaskCompletion;
+}) {
+	const rowClass = ['rl-component-switcher__row', selected ? 'rl-component-switcher__row--selected' : '']
+		.filter(Boolean)
+		.join(' ');
+
+	return (
+		<button type="button" className={rowClass} onClick={onSelect}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+				<CompletionRing completion={completion} />
+				<StatusBadge status={toBadgeStatus(tasksDocDisplayStatus(doc))} label={doc.componentName} />
+			</div>
+		</button>
+	);
+}
+
 /** Rail switcher for the tasks tab — picks which component's TasksDoc
  * TasksDocumentArea (main column) and TasksReviewGate (rail, above this)
  * are showing. Owns the "default to first component" effect since it's
@@ -187,23 +251,32 @@ function TasksComponentSwitcher({
 			</div>
 			<div className="rl-component-switcher">
 				{docs.map((doc) => (
-					<button
+					<TasksComponentSwitcherRow
 						key={doc.id}
-						type="button"
-						className={[
-							'rl-component-switcher__row',
-							doc.componentSlug === selected ? 'rl-component-switcher__row--selected' : ''
-						]
-							.filter(Boolean)
-							.join(' ')}
-						onClick={() => onSelect(doc.componentSlug)}
-					>
-						<StatusBadge status={toBadgeStatus(tasksDocDisplayStatus(doc))} label={doc.componentName} />
-					</button>
+						specId={specId}
+						doc={doc}
+						selected={doc.componentSlug === selected}
+						onSelect={() => onSelect(doc.componentSlug)}
+					/>
 				))}
 			</div>
 		</div>
 	);
+}
+
+function TasksComponentSwitcherRow({
+	specId,
+	doc,
+	selected,
+	onSelect
+}: {
+	specId: string;
+	doc: TasksDocDTO;
+	selected: boolean;
+	onSelect: () => void;
+}) {
+	const completion = useComponentCompletion(specId, doc.componentSlug);
+	return <ComponentSwitcherRow doc={doc} selected={selected} onSelect={onSelect} completion={completion} />;
 }
 
 function TaskDocumentCard({ specId, doc }: { specId: string; doc: TasksDocDTO }) {
