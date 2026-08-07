@@ -115,6 +115,43 @@
 	color: var(--text-faint);
 }
 
+/* W1 decision (wayfinder specs-ui-review-surfaces) — rail card + inline
+ * highlighting for surfacing unresolved open questions, see
+ * openQuestionsAttention.tsx. W3 generalizes this across all three stages. */
+.rl-attention-rail__item {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	font-size: var(--text-sm);
+	color: var(--text-body);
+	padding: 6px 0;
+	border-bottom: 1px solid var(--border-subtle);
+}
+.rl-attention-rail__item:last-child {
+	border-bottom: none;
+}
+
+.rl-attention-inline-open {
+	list-style: none;
+	display: flex;
+	gap: 6px;
+	align-items: flex-start;
+	border-left: 3px solid var(--amber-400);
+	background: var(--status-review-bg);
+	border-radius: 4px;
+	padding: 4px 8px;
+	margin: 3px 0 3px -18px;
+}
+.rl-attention-inline-resolved {
+	list-style: none;
+	display: flex;
+	gap: 6px;
+	align-items: flex-start;
+	color: var(--text-faint);
+	padding: 4px 0;
+	margin: 3px 0 3px -18px;
+}
+
 .rl-gate-card__line {
 	display: flex;
 	align-items: center;

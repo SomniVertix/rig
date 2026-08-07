@@ -22,6 +22,12 @@ import {
 	Markdown,
 	type Status
 } from '../ds';
+import {
+	MOCK_OPEN_QUESTIONS_MARKDOWN,
+	OpenQuestionsRailCardPrototype,
+	OpenQuestionsInlineHighlightPrototype
+} from '../pages/specs/openQuestionsAttention';
+import '../pages/specs/specs.css';
 
 const statuses: Status[] = ['draft', 'in_review', 'approved', 'denied', 'running'];
 const badgeTones = ['neutral', 'accent', 'success', 'danger', 'info', 'outline'] as const;
@@ -173,6 +179,39 @@ export function Gallery() {
 						<Markdown>{SAMPLE_MARKDOWN}</Markdown>
 					</CardPad>
 				</Card>
+			</section>
+
+			<section>
+				<h2>Open questions attention (wayfinder W1)</h2>
+				<p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 16 }}>
+					Decided treatment for floating unresolved open questions: a rail card giving the upfront count, paired with
+					inline highlighting within the doc's own markdown flow. W3 generalizes this across Requirements/Design/Tasks
+					and wires it into SpecDetailPage.tsx for real.
+				</p>
+
+				<h3 style={{ fontSize: 'var(--text-sm)', marginBottom: 8 }}>Rail card</h3>
+				<div style={{ maxWidth: 320, marginBottom: 24 }}>
+					<OpenQuestionsRailCardPrototype markdown={MOCK_OPEN_QUESTIONS_MARKDOWN} />
+				</div>
+
+				<h3 style={{ fontSize: 'var(--text-sm)', marginBottom: 8 }}>Inline highlighting</h3>
+				<Card style={{ maxWidth: 640, marginBottom: 24 }}>
+					<CardPad>
+						<OpenQuestionsInlineHighlightPrototype markdown={MOCK_OPEN_QUESTIONS_MARKDOWN} />
+					</CardPad>
+				</Card>
+
+				<h3 style={{ fontSize: 'var(--text-sm)', marginBottom: 8 }}>Combined, laid out like the real spec detail page</h3>
+				<div className="rl-detail-grid" style={{ maxWidth: 900 }}>
+					<Card>
+						<CardPad>
+							<OpenQuestionsInlineHighlightPrototype markdown={MOCK_OPEN_QUESTIONS_MARKDOWN} />
+						</CardPad>
+					</Card>
+					<div className="rl-detail-grid__rail">
+						<OpenQuestionsRailCardPrototype markdown={MOCK_OPEN_QUESTIONS_MARKDOWN} />
+					</div>
+				</div>
 			</section>
 
 			<section>
