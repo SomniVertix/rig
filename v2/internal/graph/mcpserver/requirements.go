@@ -23,6 +23,10 @@ func registerRequirementsTools(server *mcp.Server, svc *service.Service) {
 		Name:        "delete_user_story",
 		Description: "Delete a user story and its acceptance criteria.",
 	}, deleteUserStory(svc))
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_user_stories",
+		Description: "List a spec's user stories.",
+	}, listUserStories(svc))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "add_acceptance_criterion",
@@ -37,6 +41,10 @@ func registerRequirementsTools(server *mcp.Server, svc *service.Service) {
 		Name:        "delete_acceptance_criterion",
 		Description: "Delete an acceptance criterion.",
 	}, deleteAcceptanceCriterion(svc))
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_acceptance_criteria",
+		Description: "List a user story's acceptance criteria.",
+	}, listAcceptanceCriteria(svc))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "add_non_goal",
@@ -126,6 +134,20 @@ func deleteUserStory(svc *service.Service) func(context.Context, *mcp.CallToolRe
 	}
 }
 
+type listUserStoriesOut struct {
+	UserStories []userStoryOut `json:"userStories"`
+}
+
+func listUserStories(svc *service.Service) func(context.Context, *mcp.CallToolRequest, specIDIn) (*mcp.CallToolResult, listUserStoriesOut, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in specIDIn) (*mcp.CallToolResult, listUserStoriesOut, error) {
+		stories, err := svc.ListUserStories(ctx, in.SpecID)
+		if err != nil {
+			return nil, listUserStoriesOut{}, err
+		}
+		return nil, listUserStoriesOut{UserStories: newUserStoryOuts(stories)}, nil
+	}
+}
+
 type addAcceptanceCriterionIn struct {
 	UserStoryID     string  `json:"userStoryId" jsonschema:"the user story's id"`
 	EarsPattern     string  `json:"earsPattern" jsonschema:"ubiquitous | event_driven | state_driven | unwanted_behavior | complex_conditional | optional_feature"`
@@ -192,6 +214,20 @@ func deleteAcceptanceCriterion(svc *service.Service) func(context.Context, *mcp.
 			return nil, okOut{}, err
 		}
 		return nil, okOut{OK: true}, nil
+	}
+}
+
+type listAcceptanceCriteriaOut struct {
+	AcceptanceCriteria []acceptanceCriterionOut `json:"acceptanceCriteria"`
+}
+
+func listAcceptanceCriteria(svc *service.Service) func(context.Context, *mcp.CallToolRequest, userStoryIDIn) (*mcp.CallToolResult, listAcceptanceCriteriaOut, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in userStoryIDIn) (*mcp.CallToolResult, listAcceptanceCriteriaOut, error) {
+		criteria, err := svc.ListAcceptanceCriteria(ctx, in.UserStoryID)
+		if err != nil {
+			return nil, listAcceptanceCriteriaOut{}, err
+		}
+		return nil, listAcceptanceCriteriaOut{AcceptanceCriteria: newAcceptanceCriterionOuts(criteria)}, nil
 	}
 }
 
