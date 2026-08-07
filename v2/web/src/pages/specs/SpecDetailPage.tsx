@@ -73,7 +73,7 @@ export function SpecDetailPage() {
 						{activeStage === 'tasks' ? (
 							<TasksDocumentArea specId={spec.id} selected={selectedComponent} />
 						) : (
-							<DocumentCard specId={spec.id} stage={activeStage} stageStatus={spec.stages[activeStage]} />
+							<DocumentCard specId={spec.id} stage={activeStage} />
 						)}
 					</div>
 				</div>
@@ -94,22 +94,8 @@ export function SpecDetailPage() {
 	);
 }
 
-function DocumentCard({ specId, stage, stageStatus }: { specId: string; stage: SpecStageName; stageStatus: string }) {
+function DocumentCard({ specId, stage }: { specId: string; stage: SpecStageName }) {
 	const { data, isLoading } = useSpecDocument(specId, stage);
-	const config = SPEC_STAGE_CONFIG.find((s) => s.key === stage)!;
-
-	if (stageStatus === 'not_started') {
-		return (
-			<div className="rl-card rl-doc-card">
-				<div className="rl-doc-card__empty">
-					<p>no document</p>
-					<p style={{ marginTop: 4 }}>
-						Not started. {config.agent} drafts this stage.
-					</p>
-				</div>
-			</div>
-		);
-	}
 
 	return (
 		<div className="rl-card rl-doc-card">
