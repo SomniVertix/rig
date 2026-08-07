@@ -115,9 +115,6 @@
 	color: var(--text-faint);
 }
 
-/* W1 decision (wayfinder specs-ui-review-surfaces) — rail card + inline
- * highlighting for surfacing unresolved open questions, see
- * openQuestionsAttention.tsx. W3 generalizes this across all three stages. */
 .rl-attention-rail__item {
 	display: flex;
 	gap: 8px;

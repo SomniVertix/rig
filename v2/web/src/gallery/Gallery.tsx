@@ -27,6 +27,7 @@ import {
 	OpenQuestionsRailCardPrototype,
 	OpenQuestionsInlineHighlightPrototype
 } from '../pages/specs/openQuestionsAttention';
+import { REAL_TRACEABILITY_MARKDOWN, TraceabilityCardsPrototype } from '../pages/specs/traceabilityViz';
 import '../pages/specs/specs.css';
 
 const statuses: Status[] = ['draft', 'in_review', 'approved', 'denied', 'running'];
@@ -211,6 +212,29 @@ export function Gallery() {
 					<div className="rl-detail-grid__rail">
 						<OpenQuestionsRailCardPrototype markdown={MOCK_OPEN_QUESTIONS_MARKDOWN} />
 					</div>
+				</div>
+			</section>
+
+			<section>
+				<h2>Requirement Traceability (wayfinder W2)</h2>
+				<p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 16 }}>
+					Decided replacement for the flat "| Requirement | Addressed By |" table at the bottom of the Design doc:
+					grouped-by-requirement cards. A coverage matrix and a component-first drill-down were also prototyped and
+					rejected as too noisy. Real data — the Cross-Workspace Handoff spec's actual traceability table, not a mock.
+				</p>
+				<div className="rl-card rl-doc-card" style={{ maxWidth: 760 }}>
+					<div className="rl-doc-card__body">
+						<Markdown>{'# Design: Cross-Workspace Handoff System'}</Markdown>
+						<Markdown>
+							{
+								'## Overview\n\nThis design adds **Handoff** as a first-class entity in rig v2’s graph domain, plus the arbiter-driven handoff-conversation mode layered on top of it.'
+							}
+						</Markdown>
+						<h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.3em', margin: '20px 0 12px' }}>Requirement Traceability</h2>
+						<TraceabilityCardsPrototype markdown={REAL_TRACEABILITY_MARKDOWN} />
+						<Markdown>{'## Alternatives Considered\n\n…'}</Markdown>
+					</div>
+					<div className="rl-doc-card__footer">rendered on demand · GET /specs/{'{specId}'}/render?stage=design</div>
 				</div>
 			</section>
 
