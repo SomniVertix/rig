@@ -186,6 +186,7 @@ func TestListHandoffsSuccess(t *testing.T) {
 			SourceWorkspaceID: "ws1",
 			TargetWorkspaceID: "ws2",
 			Title:             "Migrate auth",
+			BodyMarkdown:      "This body must never appear in a list response.",
 			Type:              "dependency-change",
 			Status:            "pending",
 			SentBy:            "alice",
@@ -211,6 +212,9 @@ func TestListHandoffsSuccess(t *testing.T) {
 	}
 	if got["handoffs"][0].ID != "h1" {
 		t.Fatalf("unexpected handoff id: %s", got["handoffs"][0].ID)
+	}
+	if got["handoffs"][0].Body != nil {
+		t.Fatalf("list row Body = %q, want nil — list rows must omit body even when the store returns it", *got["handoffs"][0].Body)
 	}
 }
 

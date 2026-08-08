@@ -582,7 +582,11 @@ type handoffDTO struct {
 // newHandoffDTO maps a domain.Handoff to its wire shape. hasConversation is
 // supplied by the caller (a lookup the mapper itself shouldn't own) since it
 // requires a second store round-trip the caller may want to batch or skip.
-func newHandoffDTO(h *domain.Handoff, attachments []domain.HandoffAttachment, hasConversation bool) *handoffDTO {
+// includeBody must be false for list rows — ListHandoffs's Cypher returns the
+// full node (including BodyMarkdown) same as GetHandoff, so the mapper is the
+// only place left to enforce "list rows omit body" without a heavier,
+// list-specific store query.
+func newHandoffDTO(h *domain.Handoff, attachments []domain.HandoffAttachment, hasConversation bool, includeBody bool) *handoffDTO {
 	dto := &handoffDTO{
 		ID:                 h.ID,
 		SourceWorkspaceID:  h.SourceWorkspaceID,
@@ -604,7 +608,7 @@ func newHandoffDTO(h *domain.Handoff, attachments []domain.HandoffAttachment, ha
 		CreatedAt:          h.CreatedAt,
 		UpdatedAt:          h.UpdatedAt,
 	}
-	if h.BodyMarkdown != "" {
+	if includeBody && h.BodyMarkdown != "" {
 		body := h.BodyMarkdown
 		dto.Body = &body
 	}

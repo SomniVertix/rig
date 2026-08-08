@@ -26,6 +26,9 @@ func (svc *Service) SendHandoff(ctx context.Context, params store.SendHandoffPar
 	if strings.TrimSpace(params.BodyMarkdown) == "" {
 		return nil, fmt.Errorf("service: send_handoff requires a non-empty bodyMarkdown")
 	}
+	if strings.TrimSpace(params.SentBy) == "" {
+		return nil, fmt.Errorf("service: send_handoff requires a non-empty sentBy")
+	}
 	if !validHandoffTypes[params.Type] {
 		return nil, fmt.Errorf("service: send_handoff requires type to be one of bug/question/fyi/dependency-change, got %q", params.Type)
 	}

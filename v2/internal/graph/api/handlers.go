@@ -648,7 +648,7 @@ func (h *Handlers) ListHandoffs(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
-		dto := newHandoffDTO(&handoffs[i], nil, hasConv)
+		dto := newHandoffDTO(&handoffs[i], nil, hasConv, false)
 		dtos[i] = *dto
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"handoffs": dtos})
@@ -679,7 +679,7 @@ func (h *Handlers) GetHandoff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dto := newHandoffDTO(handoff, attachments, hasConv)
+	dto := newHandoffDTO(handoff, attachments, hasConv, true)
 	writeJSON(w, http.StatusOK, dto)
 }
 

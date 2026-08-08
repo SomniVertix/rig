@@ -353,32 +353,25 @@ func getWorkspaceStatus(svc *service.Service) func(context.Context, *mcp.CallToo
 }
 
 func buildHandoffStatusRows(ctx context.Context, svc *service.Service, workspaceID string) ([]handoffStatusRowOut, error) {
-	// List both pending and read handoffs in both directions
-	pending := string(domain.HandoffStatusPending)
-	read := string(domain.HandoffStatusRead)
-
-	pendingHandoffs, err := svc.ListHandoffs(ctx, store.ListHandoffsParams{
+	// One call, unfiltered by status — get_workspace_status must stay a
+	// single svc.ListHandoffs round-trip (the wayfinder skill's "Status mode
+	// is a single call, not a fan-out" rule), so pending/read filtering
+	// happens client-side below rather than as two separate status-filtered
+	// calls.
+	allHandoffs, err := svc.ListHandoffs(ctx, store.ListHandoffsParams{
 		WorkspaceID: workspaceID,
 		Direction:   string(store.HandoffDirectionBoth),
-		Status:      &pending,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list pending handoffs: %w", err)
+		return nil, fmt.Errorf("list handoffs: %w", err)
 	}
-
-	readHandoffs, err := svc.ListHandoffs(ctx, store.ListHandoffsParams{
-		WorkspaceID: workspaceID,
-		Direction:   string(store.HandoffDirectionBoth),
-		Status:      &read,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list read handoffs: %w", err)
-	}
-
-	handoffs := append(pendingHandoffs, readHandoffs...)
 
 	var rows []handoffStatusRowOut
-	for _, h := range handoffs {
+	for _, h := range allHandoffs {
+		if h.Status != string(domain.HandoffStatusPending) && h.Status != string(domain.HandoffStatusRead) {
+			continue
+		}
+
 		// Determine direction relative to this workspace
 		var direction string
 		var counterparty string
@@ -390,9 +383,18 @@ func buildHandoffStatusRows(ctx context.Context, svc *service.Service, workspace
 			counterparty = h.TargetWorkspaceID
 		}
 
-		// Check if handoff has a conversation
+		// Check if handoff has a conversation. store.ErrNotFound means no —
+		// any other error must propagate, not be silently reported as false.
 		_, err := svc.GetHandoffConversationByHandoff(ctx, h.ID)
-		hasConversation := err == nil
+		hasConversation := false
+		switch {
+		case err == nil:
+			hasConversation = true
+		case err == store.ErrNotFound:
+			hasConversation = false
+		default:
+			return nil, fmt.Errorf("check conversation for handoff %s: %w", h.ID, err)
+		}
 
 		rows = append(rows, handoffStatusRowOut{
 			ID:                    h.ID,

@@ -28,7 +28,7 @@ The arbiter **is always the human's own session**. There is no separate arbiter 
 
 ### Step 1: Validate the Handoff
 
-Get the handoff: `get_handoff(handoffId)`.
+Get the handoff: `get_handoff(id: handoffId)`.
 - **Success:** Proceed to Step 2.
 - **Handoff not found:** Stop and report "Handoff not found."
 - **Handoff already actioned/dismissed:** Stop and report "Handoff is already [actioned/dismissed]; its conversation cannot be opened."
@@ -95,7 +95,7 @@ Root Path: [absolute rootPath]  ← mandatory for handshake fallback
 ## Your Task
 
 Reply with:
-- **First action** (mandatory): Call `resolve_workspace_id([rootPath])` and echo your workspaceId back to confirm you are bound correctly. This is a liveness check and binding verification.
+- **First action** (mandatory): Call `resolve_workspace_id(cwd: rootPath)` and echo your workspaceId back to confirm you are bound correctly. This is a liveness check and binding verification.
 - **Next reply** (after binding confirmed): `content: "[your response prose]"` and `verdict: [action|dismiss|more_info|blocked]`
 
 Do not call send_handoff, action_handoff, or dismiss_handoff yourself. Your only job is to analyze the handoff and propose a verdict (action/dismiss/more_info/blocked).
@@ -107,12 +107,12 @@ Spawn the subagent bound to `rootPath` with the brief above.
 
 **The subagent must immediately reply with:**
 ```
-resolve_workspace_id([rootPath])
+resolve_workspace_id(cwd: rootPath)
 ```
 
 Wait for this call to return. The returned workspaceId must match the expected id for this side.
 
-**If the handshake fails** (see below: conditions a–f), escalate (Step 5c → Step 5e).
+**If the handshake fails** (see below: conditions a–f), classify the failure per Step 5d, then escalate via Step 5f.
 
 #### 5c. Wait for the Subagent's Turn
 
@@ -124,12 +124,12 @@ Examine the subagent's response for one of six conditions:
 
 | Condition | How to Detect | Reason | Handler |
 |---|---|---|---|
-| **a) Spawn error** | Harness returns spawn error (process failed to start, crash, etc.) | `stalled_subagent` | → 5e |
-| **b) stat(rootPath) fails** | Pre-dispatch filesystem check fails | `workspace_unreachable` | → 5e |
-| **c) resolve_workspace_id wrong id** | Handshake returns a different workspaceId than expected | `workspace_unreachable` | → 5e |
-| **d) No reply within 180s** | Timeout waiting for subagent final message | `stalled_subagent` | → 5e |
-| **e) UNREACHABLE reply** | Subagent explicitly sends `UNREACHABLE` (fallback convention when no binding could occur) | `workspace_unreachable` | → 5e |
-| **f) Unparseable twice** | Reply does not contain parseable `content`/`verdict`; ask for clarification; still unparseable on retry | `stalled_subagent` | → 5e |
+| **a) Spawn error** | Harness returns spawn error (process failed to start, crash, etc.) | `stalled_subagent` | → 5f |
+| **b) stat(rootPath) fails** | Pre-dispatch filesystem check fails | `workspace_unreachable` | → 5f |
+| **c) resolve_workspace_id wrong id** | Handshake returns a different workspaceId than expected | `workspace_unreachable` | → 5f |
+| **d) No reply within 180s** | Timeout waiting for subagent final message | `stalled_subagent` | → 5f |
+| **e) UNREACHABLE reply** | Subagent explicitly sends `UNREACHABLE` (fallback convention when no binding could occur) | `workspace_unreachable` | → 5f |
+| **f) Unparseable twice** | Reply does not contain parseable `content`/`verdict`; ask for clarification; still unparseable on retry | `stalled_subagent` | → 5f |
 
 #### 5e. Handle Valid Reply
 
@@ -150,17 +150,21 @@ If the reply is **valid** (contains `content` and `verdict` enum):
 
 #### 5f. Escalation Path (All 6 Conditions Converge Here)
 
-🔴 **This is the unified path for all 6 failure/escalation conditions.** 🔴
+🔴 **This is the unified path for all 6 failure/escalation conditions, plus the turn-cap auto-escalation from 5e.** 🔴
 
-Call `escalate_handoff_conversation(conversationId, reason: [stalled_subagent|workspace_unreachable])` with the reason determined in Step 5d.
+**If arriving from Step 5d** (one of the six stall/unreachable conditions): call `escalate_handoff_conversation(conversationId, reason: [stalled_subagent|workspace_unreachable])` with the reason determined in Step 5d, before prompting the human.
 
-Prompt the human:
+**If arriving from Step 5e** (`status` came back `escalated` because the 15-turn cap was hit): the conversation is already escalated server-side — `record_handoff_turn` itself sets `escalationReason: turn_cap` when the cap is reached. Do NOT call `escalate_handoff_conversation` again (it's a no-op against an already-escalated conversation and `turn_cap` isn't one of the two reasons this step's own call passes); go straight to the human prompt below.
+
+Prompt the human — the situation line depends on which path led here:
 
 ```
-The [source|target] workspace became unreachable/stalled ([reason detail]).
+[If arriving from 5d:] The [source|target] workspace became unreachable/stalled ([reason detail]).
+[If arriving from 5e/turn_cap:] Both sides have exchanged 15 turns without reaching agreement.
+
 What would you like to do?
 
-1) Retry this side (dispatch the same subagent again)
+1) Retry this side (dispatch the same subagent again)   ← only offer this if arriving from 5d; a turn-cap escalation has no "side" to retry
 2) Decide yourself (action or dismiss with a note; resume with your ruling)
 3) End the conversation (close without resolving; handoff stays open)
 ```
@@ -168,6 +172,7 @@ What would you like to do?
 Human choice handler:
 
 - **Choice 1 (Retry):**
+  - The conversation is currently `escalated`; `record_handoff_turn` rejects any call against a non-active conversation, so it must be reactivated before looping back. Call `resume_handoff_conversation(conversationId, humanDirective: "Retrying the [source|target] side after it became unreachable/stalled.", verdict: "more_info")` — `more_info` here is a placeholder, not a real ruling; the human hasn't decided anything yet, they've only chosen to give the subagent another attempt. This is recorded as an arbiter turn and does not count toward the subagent turn cap.
   - Go back to Step 5a (or 5b if this was the handshake itself).
   - Retry the same side with the same brief.
 

@@ -158,6 +158,34 @@ func TestSendHandoffValidation(t *testing.T) {
 			wantCalled: false,
 		},
 		{
+			name: "blank sentBy",
+			params: store.SendHandoffParams{
+				SourceWorkspaceID: "source-ws",
+				TargetWorkspaceID: "target-ws",
+				Title:             "Test Handoff",
+				BodyMarkdown:      "This is a test body",
+				Type:              string(domain.HandoffTypeBug),
+				SentBy:            "",
+			},
+			wantErr:    true,
+			wantErrMsg: "send_handoff requires a non-empty sentBy",
+			wantCalled: false,
+		},
+		{
+			name: "whitespace-only sentBy",
+			params: store.SendHandoffParams{
+				SourceWorkspaceID: "source-ws",
+				TargetWorkspaceID: "target-ws",
+				Title:             "Test Handoff",
+				BodyMarkdown:      "This is a test body",
+				Type:              string(domain.HandoffTypeBug),
+				SentBy:            "   \t  ",
+			},
+			wantErr:    true,
+			wantErrMsg: "send_handoff requires a non-empty sentBy",
+			wantCalled: false,
+		},
+		{
 			name: "whitespace-only body",
 			params: store.SendHandoffParams{
 				SourceWorkspaceID: "source-ws",
