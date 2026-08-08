@@ -9,7 +9,7 @@ export interface HandoffDetailDialogProps {
 
 export function HandoffDetailDialog({ handoffId, isOpen, onClose }: HandoffDetailDialogProps) {
 	const { data: handoff, isLoading, error } = useHandoff(handoffId);
-	const { data: conversation } = useHandoffConversation(handoffId);
+	const { data: conversationData } = useHandoffConversation(handoff?.hasConversation ? handoffId : undefined);
 
 	if (!isOpen) return null;
 
@@ -54,12 +54,12 @@ export function HandoffDetailDialog({ handoffId, isOpen, onClose }: HandoffDetai
 						)}
 
 						{/* Conversation Transcript */}
-						{conversation && (
+						{handoff.hasConversation && conversationData && (
 							<div className="handoff-detail__section">
 								<h3 className="handoff-detail__heading">Conversation Transcript</h3>
 								<div className="handoff-conversation">
-									{conversation.turns && conversation.turns.length > 0 ? (
-										conversation.turns.map((turn) => (
+									{conversationData.turns && conversationData.turns.length > 0 ? (
+										conversationData.turns.map((turn) => (
 											<div key={turn.id} className="handoff-turn">
 												<div className="handoff-turn__header">
 													<span className="handoff-turn__speaker">{turn.speaker}</span>

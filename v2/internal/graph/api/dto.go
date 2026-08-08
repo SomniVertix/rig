@@ -556,40 +556,53 @@ type renderDocumentResponse struct {
 // hasn't fetched them — omitempty then does the rest.
 
 type handoffDTO struct {
-	ID                string                 `json:"id"`
-	SourceWorkspaceID string                 `json:"sourceWorkspaceId"`
-	TargetWorkspaceID string                 `json:"targetWorkspaceId"`
-	Title             string                 `json:"title"`
-	Body              *string                `json:"body,omitempty"`
-	Type              string                 `json:"type"`
-	Status            string                 `json:"status"`
-	SentBy            string                 `json:"sentBy"`
-	SentAt            time.Time              `json:"sentAt"`
-	ReadAt            *time.Time             `json:"readAt,omitempty"`
-	ResolutionNote    *string                `json:"resolutionNote,omitempty"`
-	ResolvedAt        *time.Time             `json:"resolvedAt,omitempty"`
-	ResolvedBy        *string                `json:"resolvedBy,omitempty"`
-	CreatedAt         time.Time              `json:"createdAt"`
-	UpdatedAt         time.Time              `json:"updatedAt"`
-	Attachments       []handoffAttachmentDTO `json:"attachments,omitempty"`
+	ID                 string                 `json:"id"`
+	SourceWorkspaceID  string                 `json:"sourceWorkspaceId"`
+	TargetWorkspaceID  string                 `json:"targetWorkspaceId"`
+	Title              string                 `json:"title"`
+	Body               *string                `json:"body,omitempty"`
+	Type               string                 `json:"type"`
+	Status             string                 `json:"status"`
+	OriginExpeditionID *string                `json:"originExpeditionId,omitempty"`
+	OriginWaypointID   *string                `json:"originWaypointId,omitempty"`
+	OriginCommitSha    *string                `json:"originCommitSha,omitempty"`
+	OriginSessionID    *string                `json:"originSessionId,omitempty"`
+	HasConversation    bool                   `json:"hasConversation"`
+	SentBy             string                 `json:"sentBy"`
+	SentAt             time.Time              `json:"sentAt"`
+	ReadAt             *time.Time             `json:"readAt,omitempty"`
+	ResolutionNote     *string                `json:"resolutionNote,omitempty"`
+	ResolvedAt         *time.Time             `json:"resolvedAt,omitempty"`
+	ResolvedBy         *string                `json:"resolvedBy,omitempty"`
+	CreatedAt          time.Time              `json:"createdAt"`
+	UpdatedAt          time.Time              `json:"updatedAt"`
+	Attachments        []handoffAttachmentDTO `json:"attachments,omitempty"`
 }
 
-func newHandoffDTO(h *domain.Handoff, attachments []domain.HandoffAttachment) *handoffDTO {
+// newHandoffDTO maps a domain.Handoff to its wire shape. hasConversation is
+// supplied by the caller (a lookup the mapper itself shouldn't own) since it
+// requires a second store round-trip the caller may want to batch or skip.
+func newHandoffDTO(h *domain.Handoff, attachments []domain.HandoffAttachment, hasConversation bool) *handoffDTO {
 	dto := &handoffDTO{
-		ID:                h.ID,
-		SourceWorkspaceID: h.SourceWorkspaceID,
-		TargetWorkspaceID: h.TargetWorkspaceID,
-		Title:             h.Title,
-		Type:              h.Type,
-		Status:            h.Status,
-		SentBy:            h.SentBy,
-		SentAt:            h.SentAt,
-		ReadAt:            h.ReadAt,
-		ResolutionNote:    h.ResolutionNote,
-		ResolvedAt:        h.ResolvedAt,
-		ResolvedBy:        h.ResolvedBy,
-		CreatedAt:         h.CreatedAt,
-		UpdatedAt:         h.UpdatedAt,
+		ID:                 h.ID,
+		SourceWorkspaceID:  h.SourceWorkspaceID,
+		TargetWorkspaceID:  h.TargetWorkspaceID,
+		Title:              h.Title,
+		Type:               h.Type,
+		Status:             h.Status,
+		OriginExpeditionID: h.OriginExpeditionID,
+		OriginWaypointID:   h.OriginWaypointID,
+		OriginCommitSha:    h.OriginCommitSHA,
+		OriginSessionID:    h.OriginSessionID,
+		HasConversation:    hasConversation,
+		SentBy:             h.SentBy,
+		SentAt:             h.SentAt,
+		ReadAt:             h.ReadAt,
+		ResolutionNote:     h.ResolutionNote,
+		ResolvedAt:         h.ResolvedAt,
+		ResolvedBy:         h.ResolvedBy,
+		CreatedAt:          h.CreatedAt,
+		UpdatedAt:          h.UpdatedAt,
 	}
 	if h.BodyMarkdown != "" {
 		body := h.BodyMarkdown

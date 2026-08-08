@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -33,12 +34,40 @@ type handoffOut struct {
 	ResolvedBy        *string                `json:"resolvedBy,omitempty"`
 	CreatedAt         time.Time              `json:"createdAt"`
 	UpdatedAt         time.Time              `json:"updatedAt"`
+	Origin            *handoffOriginOut      `json:"origin,omitempty"`
+	HasConversation   bool                   `json:"hasConversation"`
 	Body              *string                `json:"body,omitempty"`
 	Attachments       []handoffAttachmentOut `json:"attachments,omitempty"`
 }
 
+// handoffOriginOut is the optional back-link a Handoff may carry to what it
+// arose from. All four fields are independently optional (decision: origin
+// back-link is always optional, never required).
+type handoffOriginOut struct {
+	ExpeditionID *string `json:"expeditionId,omitempty"`
+	WaypointID   *string `json:"waypointId,omitempty"`
+	CommitSha    *string `json:"commitSha,omitempty"`
+	SessionID    *string `json:"sessionId,omitempty"`
+}
+
+// newHandoffOrigin builds handoffOriginOut from a Handoff's origin back-link
+// fields, or nil when none were supplied at send time.
+func newHandoffOrigin(h domain.Handoff) *handoffOriginOut {
+	if h.OriginExpeditionID == nil && h.OriginWaypointID == nil && h.OriginCommitSHA == nil && h.OriginSessionID == nil {
+		return nil
+	}
+	return &handoffOriginOut{
+		ExpeditionID: h.OriginExpeditionID,
+		WaypointID:   h.OriginWaypointID,
+		CommitSha:    h.OriginCommitSHA,
+		SessionID:    h.OriginSessionID,
+	}
+}
+
 // newHandoffOut builds the list-row shape of a handoff: every field except
-// Body/Attachments, which stay nil.
+// Body/Attachments, which stay nil. HasConversation defaults false; callers
+// that need it accurate (list_handoffs, get_handoff) set it via
+// withHasConversation after checking for a conversation.
 func newHandoffOut(h domain.Handoff) handoffOut {
 	return handoffOut{
 		ID:                h.ID,
@@ -55,7 +84,22 @@ func newHandoffOut(h domain.Handoff) handoffOut {
 		ResolvedBy:        h.ResolvedBy,
 		CreatedAt:         h.CreatedAt,
 		UpdatedAt:         h.UpdatedAt,
+		Origin:            newHandoffOrigin(h),
 	}
+}
+
+// handoffHasConversation reports whether a Handoff has a started
+// HandoffConversation. store.ErrNotFound means no — every other error
+// propagates.
+func handoffHasConversation(ctx context.Context, svc *service.Service, handoffID string) (bool, error) {
+	_, err := svc.GetHandoffConversationByHandoff(ctx, handoffID)
+	if err == nil {
+		return true, nil
+	}
+	if err == store.ErrNotFound {
+		return false, nil
+	}
+	return false, err
 }
 
 func newHandoffOuts(hs []domain.Handoff) []handoffOut {
@@ -234,7 +278,7 @@ func sendHandoff(svc *service.Service) func(context.Context, *mcp.CallToolReques
 			if strings.Contains(err.Error(), "sourceWorkspaceId and targetWorkspaceId to differ") {
 				return toolError("a Handoff must target a different workspace than its source"), handoffOut{}, nil
 			}
-			if strings.Contains(err.Error(), "ErrInvalidSlug") {
+			if errors.Is(err, service.ErrInvalidSlug) {
 				return toolError(fmt.Sprintf("unknown targetWorkspaceId %s — call list_workspaces to see what exists", in.TargetWorkspaceID)), handoffOut{}, nil
 			}
 			return nil, handoffOut{}, err
@@ -286,8 +330,16 @@ func listHandoffs(svc *service.Service) func(context.Context, *mcp.CallToolReque
 			return nil, listHandoffsOut{}, err
 		}
 
-		// Return index rows (no body/attachments)
-		return nil, listHandoffsOut{Handoffs: newHandoffOuts(handoffs)}, nil
+		// Return index rows (no body/attachments), with HasConversation set per row.
+		outs := newHandoffOuts(handoffs)
+		for i, h := range handoffs {
+			hasConv, err := handoffHasConversation(ctx, svc, h.ID)
+			if err != nil {
+				return nil, listHandoffsOut{}, err
+			}
+			outs[i].HasConversation = hasConv
+		}
+		return nil, listHandoffsOut{Handoffs: outs}, nil
 	}
 }
 
@@ -309,9 +361,16 @@ func getHandoff(svc *service.Service) func(context.Context, *mcp.CallToolRequest
 			attachments = []domain.HandoffAttachment{}
 		}
 
+		hasConv, err := handoffHasConversation(ctx, svc, in.ID)
+		if err != nil {
+			return nil, getHandoffOut{}, err
+		}
+
 		// Build detailed output with Body/Attachments
+		handoffDTO := newHandoffOutDetailed(*result.Handoff, attachments)
+		handoffDTO.HasConversation = hasConv
 		out := getHandoffOut{
-			Handoff:            newHandoffOutDetailed(*result.Handoff, attachments),
+			Handoff:            handoffDTO,
 			TransitionedToRead: result.TransitionedToRead,
 		}
 
@@ -348,7 +407,13 @@ func actionHandoff(svc *service.Service) func(context.Context, *mcp.CallToolRequ
 			return nil, handoffOut{}, err
 		}
 
-		return nil, newHandoffOut(*result.Handoff), nil
+		hasConv, err := handoffHasConversation(ctx, svc, in.ID)
+		if err != nil {
+			return nil, handoffOut{}, err
+		}
+		out := newHandoffOut(*result.Handoff)
+		out.HasConversation = hasConv
+		return nil, out, nil
 	}
 }
 
@@ -381,6 +446,12 @@ func dismissHandoff(svc *service.Service) func(context.Context, *mcp.CallToolReq
 			return nil, handoffOut{}, err
 		}
 
-		return nil, newHandoffOut(*result.Handoff), nil
+		hasConv, err := handoffHasConversation(ctx, svc, in.ID)
+		if err != nil {
+			return nil, handoffOut{}, err
+		}
+		out := newHandoffOut(*result.Handoff)
+		out.HasConversation = hasConv
+		return nil, out, nil
 	}
 }

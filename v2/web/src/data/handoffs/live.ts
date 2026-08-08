@@ -81,6 +81,7 @@ function mapToSummary(dto: HandoffDTO, direction: 'inbound' | 'outbound'): Hando
 		direction,
 		counterpartyId,
 		counterpartyName: counterpartyId, // TODO: resolve workspace ID to friendly name
-		sentAt: dto.sentAt
+		sentAt: dto.sentAt,
+		hasConversation: dto.hasConversation
 	};
 }

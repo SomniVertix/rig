@@ -173,14 +173,14 @@ Human choice handler:
 
 - **Choice 2 (Decide Yourself):**
   - Prompt: "Action or dismiss? If action, provide a resolution note."
-  - Human replies: action | dismiss, plus note text.
-  - Call `resume_handoff_conversation(conversationId, verdict: [action|dismiss], note, raiseTurnCapBy: 0)` (optionally allow human to raise the cap 1–10 turns if they want more negotiation after their ruling).
+  - Human replies: action | dismiss, plus a directive to record.
+  - Call `resume_handoff_conversation(conversationId, humanDirective: "[the human's ruling, verbatim]", verdict: [action|dismiss], raiseTurnCapBy?)` (optionally allow human to raise the cap 1–10 turns if they want more negotiation after their ruling). The human's directive is recorded as an arbiter turn — it never counts toward the subagent turn cap or agreement.
   - Check the returned status:
     - If `active`: Back to loop (Step 5a), next speaker is the other side.
     - If any other terminal status: Follow that path (e.g., `closed_agreed` → Step 6).
 
 - **Choice 3 (End):**
-  - Call `close_handoff_conversation_by_human(conversationId)`.
+  - Call `close_handoff_conversation(conversationId, reason: "[why the human is ending it]")`.
   - Report: "Conversation closed. The handoff remains open and untouched in its current state."
   - Stop.
 
@@ -192,7 +192,7 @@ When the conversation reaches `status = closed_agreed`:
 
 ### 6a. Draft the Resolution
 
-Call `draft_handoff_resolution(conversationId, action: [action|dismiss], draftedNote: "[synthesized note from transcript]")`.
+Call `draft_handoff_resolution(conversationId, action: [action|dismiss], resolutionNote: "[synthesized note from transcript]")`.
 
 This records the proposed resolution on the conversation **without touching the Handoff's status**.
 
@@ -218,8 +218,8 @@ Proceed? (Yes to finalize / No to abandon)
 
 Human said "Yes". Now and only now call the terminal tool:
 
-- If agreed verdict was `action`: `action_handoff(handoffId, resolutionNote: "[note]")`.
-- If agreed verdict was `dismiss`: `dismiss_handoff(handoffId, resolutionNote: "[note]")`.
+- If agreed verdict was `action`: `action_handoff(id: handoffId, resolutionNote: "[note]", resolvedBy?)`.
+- If agreed verdict was `dismiss`: `dismiss_handoff(id: handoffId, resolutionNote: "[note]", resolvedBy?)`.
 
 This is the **only path** by which a Handoff reaches a terminal status (`actioned` or `dismissed`) via the conversation flow.
 

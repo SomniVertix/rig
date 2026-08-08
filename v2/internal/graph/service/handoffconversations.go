@@ -48,9 +48,21 @@ func (svc *Service) RecordHandoffTurn(ctx context.Context, params store.RecordHa
 		}
 	}
 
-	// TODO: Reject back-to-back same-side turns
-	// (This would require fetching the latest turn from the conversation, which should be
-	// validated in the store layer or as a separate check)
+	// Reject back-to-back same-side turns: the same speaker (source or
+	// target) may not appear twice in a row. Arbiter turns are exempt — they
+	// don't occupy a side in the alternating relay.
+	if params.Speaker == string(domain.HandoffTurnSpeakerSource) || params.Speaker == string(domain.HandoffTurnSpeakerTarget) {
+		turns, err := svc.store.ListHandoffTurns(ctx, params.ConversationID)
+		if err != nil {
+			return nil, err
+		}
+		if len(turns) > 0 {
+			last := turns[len(turns)-1]
+			if string(last.Speaker) == params.Speaker {
+				return nil, fmt.Errorf("service: record_handoff_turn rejects back-to-back turns from the same speaker (%s)", params.Speaker)
+			}
+		}
+	}
 
 	result, err := svc.store.RecordHandoffTurn(ctx, params)
 	if err != nil {
@@ -65,6 +77,11 @@ func (svc *Service) RecordHandoffTurn(ctx context.Context, params store.RecordHa
 	}
 
 	return result, nil
+}
+
+// GetHandoffConversation fetches a conversation by its own id.
+func (svc *Service) GetHandoffConversation(ctx context.Context, id string) (*domain.HandoffConversation, error) {
+	return svc.store.GetHandoffConversation(ctx, id)
 }
 
 // ResumeHandoffConversation validates and delegates to the store.

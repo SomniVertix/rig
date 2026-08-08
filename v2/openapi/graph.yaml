@@ -1257,6 +1257,13 @@ components:
           description: Populated only on single-get (GET /handoffs/{id}); omitted on list rows
         type: { type: string, enum: [bug, question, fyi, dependency-change] }
         status: { type: string, enum: [pending, read, actioned, dismissed] }
+        originExpeditionId: { type: string, nullable: true }
+        originWaypointId: { type: string, nullable: true }
+        originCommitSha: { type: string, nullable: true }
+        originSessionId: { type: string, nullable: true }
+        hasConversation:
+          type: boolean
+          description: Whether a HandoffConversation has been started for this Handoff.
         sentBy: { type: string }
         sentAt: { type: string, format: date-time }
         readAt: { type: string, format: date-time, nullable: true }

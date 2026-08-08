@@ -21,6 +21,7 @@ const mockHandoff: HandoffDTO = {
 	body: '# This is a test\n\nWith some content',
 	type: 'bug',
 	status: 'read',
+	hasConversation: true,
 	sentBy: 'alice',
 	sentAt: '2026-08-07T12:00:00Z',
 	createdAt: '2026-08-07T12:00:00Z',
@@ -72,6 +73,7 @@ const mockTurns: HandoffTurnDTO[] = [
 describe('HandoffDetailDialog', () => {
 	beforeEach(() => {
 		queryClient.clear();
+		vi.clearAllMocks();
 	});
 
 	it('renders loading state initially', () => {
@@ -169,6 +171,23 @@ describe('HandoffDetailDialog', () => {
 			const verdictElements = screen.getAllByText('action', { selector: '.handoff-turn__verdict strong' });
 			expect(verdictElements.length).toBeGreaterThan(0);
 		});
+	});
+
+	it('never fetches or renders a conversation when hasConversation is false', async () => {
+		vi.mocked(api.getHandoff).mockResolvedValue({ ...mockHandoff, hasConversation: false });
+
+		render(
+			<QueryClientProvider client={queryClient}>
+				<HandoffDetailDialog handoffId="h1" isOpen={true} onClose={() => {}} />
+			</QueryClientProvider>
+		);
+
+		await waitFor(() => {
+			expect(screen.getByText(/This is a test/)).toBeInTheDocument();
+		});
+
+		expect(screen.queryByText(/Conversation Transcript/)).not.toBeInTheDocument();
+		expect(api.getHandoffConversation).not.toHaveBeenCalled();
 	});
 
 	it('hides dialog when isOpen is false', () => {

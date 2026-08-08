@@ -43,6 +43,7 @@ Gather the essential message content from the current session context. Invoke an
 - **Title:** a short summary (one line, <100 chars) of the issue or topic — derived from the session context (e.g., current task name, the human's stated problem, or a tag/label if visible).
 - **Type:** one of `bug`, `question`, `fyi`, or `dependency-change`. If the session context makes it obvious (a known defect, an unanswered question, a heads-up announcement), choose it silently; if ambiguous, ask the human to pick.
 - **Body:** full markdown describing the message. **Include every turn from the session transcript so far**, arranged chronologically under a `## Transcript` heading at the end (see format below). Before the transcript, include a 2–3 sentence summary of the handoff's main point or request.
+- **`sentBy`** (required by `send_handoff`, not optional): the current session's identifier — the same ambient value used for `originSessionId` in Step 4. If no session identifier is available at all, use a short descriptive fallback like `"agent"` rather than leaving it blank; `send_handoff` rejects an empty `sentBy`.
 
 ### Transcript format in body
 
@@ -121,6 +122,7 @@ send_handoff(
   title: [from Step 3 or Step 5 edit],
   type: [from Step 3 or Step 5 edit],
   bodyMarkdown: [from Step 3 or Step 5 edit, including transcript],
+  sentBy: [from Step 3],
   attachments: [from Step 5 edits, if any],
   originCommitSha: [from Step 4, if available],
   originExpeditionId: [from Step 4, if available],

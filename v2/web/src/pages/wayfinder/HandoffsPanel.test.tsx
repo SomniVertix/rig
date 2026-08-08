@@ -25,6 +25,7 @@ const mockHandoff: HandoffDTO = {
 	title: 'Test Handoff',
 	type: 'bug',
 	status: 'pending',
+	hasConversation: false,
 	sentBy: 'alice',
 	sentAt: '2026-08-07T12:00:00Z',
 	createdAt: '2026-08-07T11:00:00Z',

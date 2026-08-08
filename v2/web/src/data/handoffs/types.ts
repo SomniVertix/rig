@@ -13,4 +13,5 @@ export interface HandoffSummary {
 	counterpartyId: string;
 	counterpartyName: string;
 	sentAt: string;
+	hasConversation: boolean;
 }

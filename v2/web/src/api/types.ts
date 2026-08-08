@@ -159,6 +159,11 @@ export interface HandoffDTO {
 	body?: string | null;
 	type: HandoffType;
 	status: HandoffStatus;
+	originExpeditionId?: string | null;
+	originWaypointId?: string | null;
+	originCommitSha?: string | null;
+	originSessionId?: string | null;
+	hasConversation: boolean;
 	sentBy: string;
 	sentAt: string;
 	readAt?: string | null;

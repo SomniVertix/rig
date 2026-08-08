@@ -22,6 +22,7 @@ func (s *Neo4jStore) StartHandoffConversation(ctx context.Context, params store.
 	query := `
 		MATCH (h:Handoff {id: $handoffId})
 		WHERE h.status IN ['pending', 'read']
+		AND NOT EXISTS { (h)-[:HAS_CONVERSATION]->(:HandoffConversation) }
 		CREATE (c:HandoffConversation {
 			id: $conversationId,
 			handoffId: $handoffId,

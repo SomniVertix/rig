@@ -643,7 +643,12 @@ func (h *Handlers) ListHandoffs(w http.ResponseWriter, r *http.Request) {
 
 	dtos := make([]handoffDTO, len(handoffs))
 	for i := range handoffs {
-		dto := newHandoffDTO(&handoffs[i], nil)
+		hasConv, err := handoffHasConversation(r.Context(), h.svc, handoffs[i].ID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		dto := newHandoffDTO(&handoffs[i], nil, hasConv)
 		dtos[i] = *dto
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"handoffs": dtos})
@@ -668,8 +673,28 @@ func (h *Handlers) GetHandoff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dto := newHandoffDTO(handoff, attachments)
+	hasConv, err := handoffHasConversation(r.Context(), h.svc, handoffID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	dto := newHandoffDTO(handoff, attachments, hasConv)
 	writeJSON(w, http.StatusOK, dto)
+}
+
+// handoffHasConversation reports whether a Handoff has a started
+// HandoffConversation. store.ErrNotFound means no — every other error
+// propagates to the caller.
+func handoffHasConversation(ctx context.Context, svc *service.Service, handoffID string) (bool, error) {
+	_, err := svc.GetHandoffConversationByHandoff(ctx, handoffID)
+	if err == nil {
+		return true, nil
+	}
+	if err == store.ErrNotFound {
+		return false, nil
+	}
+	return false, err
 }
 
 func (h *Handlers) GetHandoffConversation(w http.ResponseWriter, r *http.Request) {
