@@ -293,12 +293,139 @@ type UpdateDefinitionOfDoneItemParams struct {
 	IsChecked   *bool
 }
 
+// --- Handoffs ----------------------------------------------------------
+//
+// Cross-workspace messages, optionally anchored to the origin
+// expedition/waypoint/commit/session they arose from. Handoffs are
+// append-only after send: there is deliberately no UpdateHandoff or
+// DeleteHandoff method anywhere in this interface — immutability is a
+// structural absence, not a runtime check. The only permitted mutations
+// post-send are read tracking (MarkHandoffRead) and terminal resolution
+// (CloseHandoff), plus appending attachments.
+
+// HandoffDirection selects which side of a Handoff's SourceWorkspaceID/
+// TargetWorkspaceID edge ListHandoffs filters on, relative to
+// ListHandoffsParams.WorkspaceID.
+type HandoffDirection string
+
+const (
+	HandoffDirectionInbound  HandoffDirection = "inbound"
+	HandoffDirectionOutbound HandoffDirection = "outbound"
+	HandoffDirectionBoth     HandoffDirection = "both"
+)
+
+// HandoffAttachmentInput describes one attachment supplied inline at send
+// time, before a HandoffID exists to hang it off of.
+type HandoffAttachmentInput struct {
+	RepoPath  string
+	CommitSHA string
+	Note      string
+}
+
+// SendHandoffParams creates a Handoff from SourceWorkspaceID to
+// TargetWorkspaceID, optionally back-linking to the origin
+// expedition/waypoint/commit/session it arose from and carrying any number
+// of attachments created in the same call.
+type SendHandoffParams struct {
+	SourceWorkspaceID string
+	TargetWorkspaceID string
+	Title             string
+	BodyMarkdown      string
+	Type              string
+	Attachments       []HandoffAttachmentInput
+
+	// Optional origin back-link fields.
+	OriginExpeditionID *string
+	OriginWaypointID   *string
+	OriginCommitSHA    *string
+	OriginSessionID    *string
+
+	SentBy string
+}
+
+// AddHandoffAttachmentParams appends one piece of supporting evidence to an
+// existing Handoff.
+type AddHandoffAttachmentParams struct {
+	HandoffID string
+	RepoPath  string
+	CommitSHA string
+	Note      string
+}
+
+// ListHandoffsParams scopes ListHandoffs to one workspace, optionally
+// filtered by direction (inbound/outbound/both, relative to WorkspaceID)
+// and by Status.
+type ListHandoffsParams struct {
+	WorkspaceID string
+	Direction   string
+	Status      *string
+}
+
+// CloseHandoff moves a Handoff into a terminal state ("actioned" or
+// "dismissed"), recording who resolved it and why.
+type CloseHandoffParams struct {
+	ID             string
+	Terminal       string // one of "actioned" or "dismissed"
+	ResolutionNote string
+	ResolvedBy     string
+}
+
+// --- Handoff conversations ----------------------------------------------
+//
+// The multi-turn negotiation a Handoff's source and target workspaces carry
+// out when they can't resolve it unilaterally, arbitrated by a session when
+// the two sides stall or disagree. See domain.HandoffConversation.
+
+// StartHandoffConversationParams opens a HandoffConversation for an existing
+// Handoff, anchoring it to the source/target workspace root paths and the
+// arbiter session that will mediate turns.
+type StartHandoffConversationParams struct {
+	HandoffID        string
+	SourceRootPath   string
+	TargetRootPath   string
+	ArbiterSessionID string
+}
+
+// RecordHandoffTurnParams appends one message to a HandoffConversation.
+// TurnNumber is never caller-supplied — it's derived server-side from turn
+// order, mirroring AddTaskItemParams's Ordinal-style fields.
+type RecordHandoffTurnParams struct {
+	ConversationID string
+	Speaker        string // one of "source", "target", "arbiter"
+	Content        string
+	Verdict        string // one of "action", "dismiss", "more_info", "blocked"
+}
+
+// EscalateHandoffConversationParams moves a HandoffConversation into the
+// escalated state ahead of arbitration.
+type EscalateHandoffConversationParams struct {
+	ConversationID string
+	Reason         string // one of "turn_cap", "tie_break", "stalled_subagent", "workspace_unreachable"
+}
+
+// ResumeHandoffConversationParams reactivates an escalated
+// HandoffConversation, optionally raising its turn cap so it doesn't
+// immediately re-escalate.
+type ResumeHandoffConversationParams struct {
+	ConversationID string
+	RaiseTurnCapBy *int
+}
+
+// DraftHandoffResolutionParams records the arbiter's proposed resolution on
+// an escalated HandoffConversation, pending a human's final close.
+type DraftHandoffResolutionParams struct {
+	ConversationID string
+	Action         *string
+	ResolutionNote string
+}
+
 // Store is the graph service's storage port. Method names mirror the v1
 // mcp__rig__* trail/waypoint tool catalog one-for-one (renamed
 // trail->expedition) so porting callers is mechanical.
 type Store interface {
 	// Expeditions
 	CreateExpedition(ctx context.Context, params CreateExpeditionParams) (*domain.Expedition, error)
+	CreateExpeditionFromHandoff(ctx context.Context, handoffID string, params CreateExpeditionParams) (*domain.Expedition, error)
 	GetExpedition(ctx context.Context, id string) (*domain.Expedition, error)
 	GetExpeditionBySpec(ctx context.Context, specID string) (*domain.Expedition, error)
 	ListExpeditions(ctx context.Context, params ListExpeditionsParams) ([]*domain.Expedition, error)
@@ -479,6 +606,52 @@ type Store interface {
 	UpdateDefinitionOfDoneItem(ctx context.Context, id string, params UpdateDefinitionOfDoneItemParams) (*domain.DefinitionOfDoneItem, error)
 	DeleteDefinitionOfDoneItem(ctx context.Context, id string) error
 	ListDefinitionOfDoneItems(ctx context.Context, specID string) ([]*domain.DefinitionOfDoneItem, error)
+
+	// Handoffs — cross-workspace messages. Append-only after send: no
+	// UpdateHandoff/DeleteHandoff method exists (see comment above
+	// SendHandoffParams).
+	SendHandoff(ctx context.Context, params SendHandoffParams) (*domain.Handoff, error)
+	GetHandoff(ctx context.Context, id string) (*domain.Handoff, error)
+	ListHandoffs(ctx context.Context, params ListHandoffsParams) ([]domain.Handoff, error)
+	// MarkHandoffRead transitions a pending Handoff to read, recording
+	// ReadAt. A no-op past pending is left to the caller's discretion; it
+	// does not error on a Handoff already read or resolved.
+	MarkHandoffRead(ctx context.Context, handoffID string) error
+	// CloseHandoff moves a Handoff to a terminal status ("actioned" or
+	// "dismissed"), recording ResolutionNote/ResolvedBy/ResolvedAt.
+	CloseHandoff(ctx context.Context, params CloseHandoffParams) error
+	AddHandoffAttachment(ctx context.Context, params AddHandoffAttachmentParams) (*domain.HandoffAttachment, error)
+	ListHandoffAttachments(ctx context.Context, handoffID string) ([]domain.HandoffAttachment, error)
+
+	// Handoff conversations — the multi-turn negotiation between a Handoff's
+	// source and target workspaces, arbitrated when they can't agree alone.
+	//
+	// StartHandoffConversation opens a conversation for a Handoff, anchoring
+	// it to the source/target workspace root paths the arbiter session will
+	// operate against.
+	StartHandoffConversation(ctx context.Context, params StartHandoffConversationParams) (*domain.HandoffConversation, error)
+	GetHandoffConversation(ctx context.Context, id string) (*domain.HandoffConversation, error)
+	// GetHandoffConversationByHandoff looks up the conversation for a given
+	// Handoff, if one has been started.
+	GetHandoffConversationByHandoff(ctx context.Context, handoffId string) (*domain.HandoffConversation, error)
+	ListHandoffTurns(ctx context.Context, conversationId string) ([]domain.HandoffTurn, error)
+	// RecordHandoffTurn appends a message to the conversation and returns the
+	// server-derived HandoffConversationState — not just the recorded turn —
+	// so the caller learns in the same call whether the turn cap was hit,
+	// whether the two sides have reached agreement, and who speaks next.
+	RecordHandoffTurn(ctx context.Context, params RecordHandoffTurnParams) (*domain.HandoffConversationState, error)
+	// EscalateHandoffConversation moves an active conversation into the
+	// escalated state ahead of arbitration, recording why.
+	EscalateHandoffConversation(ctx context.Context, params EscalateHandoffConversationParams) error
+	// ResumeHandoffConversation reactivates an escalated conversation,
+	// optionally raising its turn cap so it doesn't immediately re-escalate.
+	ResumeHandoffConversation(ctx context.Context, params ResumeHandoffConversationParams) error
+	// CloseHandoffConversationByHuman moves a conversation to its
+	// closed_by_human terminal state, bypassing arbitration.
+	CloseHandoffConversationByHuman(ctx context.Context, id string) error
+	// DraftHandoffResolution records the arbiter's proposed resolution on an
+	// escalated conversation, pending a human's final close.
+	DraftHandoffResolution(ctx context.Context, params DraftHandoffResolutionParams) error
 
 	// Close releases underlying driver resources.
 	Close(ctx context.Context) error

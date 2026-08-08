@@ -4,6 +4,7 @@
 package api
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/somnivertix/rig/internal/graph/domain"
@@ -543,4 +544,160 @@ type stageActionResponse struct {
 
 type renderDocumentResponse struct {
 	Markdown string `json:"markdown"`
+}
+
+// --- Handoffs ---
+//
+// handoffDTO's Body and Attachments are populated only on the single-get
+// path (GetHandoff + ListHandoffAttachments); list rows leave them nil so
+// list responses stay light. newHandoffDTO derives that split from its
+// inputs rather than an explicit flag: BodyMarkdown is empty on the
+// (lighter) list query's rows, and attachments is nil when the caller
+// hasn't fetched them — omitempty then does the rest.
+
+type handoffDTO struct {
+	ID                string                 `json:"id"`
+	SourceWorkspaceID string                 `json:"sourceWorkspaceId"`
+	TargetWorkspaceID string                 `json:"targetWorkspaceId"`
+	Title             string                 `json:"title"`
+	Body              *string                `json:"body,omitempty"`
+	Type              string                 `json:"type"`
+	Status            string                 `json:"status"`
+	SentBy            string                 `json:"sentBy"`
+	SentAt            time.Time              `json:"sentAt"`
+	ReadAt            *time.Time             `json:"readAt,omitempty"`
+	ResolutionNote    *string                `json:"resolutionNote,omitempty"`
+	ResolvedAt        *time.Time             `json:"resolvedAt,omitempty"`
+	ResolvedBy        *string                `json:"resolvedBy,omitempty"`
+	CreatedAt         time.Time              `json:"createdAt"`
+	UpdatedAt         time.Time              `json:"updatedAt"`
+	Attachments       []handoffAttachmentDTO `json:"attachments,omitempty"`
+}
+
+func newHandoffDTO(h *domain.Handoff, attachments []domain.HandoffAttachment) *handoffDTO {
+	dto := &handoffDTO{
+		ID:                h.ID,
+		SourceWorkspaceID: h.SourceWorkspaceID,
+		TargetWorkspaceID: h.TargetWorkspaceID,
+		Title:             h.Title,
+		Type:              h.Type,
+		Status:            h.Status,
+		SentBy:            h.SentBy,
+		SentAt:            h.SentAt,
+		ReadAt:            h.ReadAt,
+		ResolutionNote:    h.ResolutionNote,
+		ResolvedAt:        h.ResolvedAt,
+		ResolvedBy:        h.ResolvedBy,
+		CreatedAt:         h.CreatedAt,
+		UpdatedAt:         h.UpdatedAt,
+	}
+	if h.BodyMarkdown != "" {
+		body := h.BodyMarkdown
+		dto.Body = &body
+	}
+	if len(attachments) > 0 {
+		dto.Attachments = make([]handoffAttachmentDTO, len(attachments))
+		for i := range attachments {
+			dto.Attachments[i] = *newHandoffAttachmentDTO(&attachments[i])
+		}
+	}
+	return dto
+}
+
+type handoffAttachmentDTO struct {
+	ID        string `json:"id"`
+	Ordinal   int    `json:"ordinal"`
+	RepoPath  string `json:"repoPath"`
+	CommitSHA string `json:"commitSha"`
+	Note      string `json:"note"`
+}
+
+func newHandoffAttachmentDTO(a *domain.HandoffAttachment) *handoffAttachmentDTO {
+	return &handoffAttachmentDTO{
+		ID:        a.ID,
+		Ordinal:   a.Ordinal,
+		RepoPath:  a.RepoPath,
+		CommitSHA: a.CommitSHA,
+		Note:      a.Note,
+	}
+}
+
+// --- Handoff conversations ---
+//
+// handoffConversationDTO deliberately omits domain.HandoffConversation's
+// SourceRootPath/TargetRootPath: those are subagent-invocation plumbing
+// (where to run the source/target sides' CLI), not something a REST client
+// needs to see.
+
+type handoffConversationDTO struct {
+	ID                    string     `json:"id"`
+	HandoffID             string     `json:"handoffId"`
+	Status                string     `json:"status"`
+	TurnCap               *string    `json:"turnCap,omitempty"`
+	EscalationReason      *string    `json:"escalationReason,omitempty"`
+	EscalatedAt           *time.Time `json:"escalatedAt,omitempty"`
+	DraftedAction         *string    `json:"draftedAction,omitempty"`
+	DraftedResolutionNote *string    `json:"draftedResolutionNote,omitempty"`
+	DraftedAt             *string    `json:"draftedAt,omitempty"`
+	ArbiterSessionID      string     `json:"arbiterSessionId"`
+	ClosedAt              *time.Time `json:"closedAt,omitempty"`
+	CreatedAt             time.Time  `json:"createdAt"`
+	UpdatedAt             time.Time  `json:"updatedAt"`
+}
+
+func newHandoffConversationDTO(c *domain.HandoffConversation) *handoffConversationDTO {
+	capStr := strconv.Itoa(c.TurnCap)
+	arbSessionID := ""
+	if c.ArbiterSessionID != nil {
+		arbSessionID = *c.ArbiterSessionID
+	}
+	return &handoffConversationDTO{
+		ID:                    c.ID,
+		HandoffID:             c.HandoffID,
+		Status:                string(c.Status),
+		TurnCap:               &capStr,
+		EscalationReason:      (*string)(c.EscalationReason),
+		EscalatedAt:           c.EscalatedAt,
+		DraftedAction:         (*string)(c.DraftedAction),
+		DraftedResolutionNote: c.DraftedResolutionNote,
+		DraftedAt:             timePtr(c.DraftedAt),
+		ArbiterSessionID:      arbSessionID,
+		ClosedAt:              c.ClosedAt,
+		CreatedAt:             c.CreatedAt,
+		UpdatedAt:             c.UpdatedAt,
+	}
+}
+
+type handoffTurnDTO struct {
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversationId"`
+	TurnNumber     int       `json:"turnNumber"`
+	Speaker        string    `json:"speaker"`
+	Content        string    `json:"content"`
+	Verdict        string    `json:"verdict"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+func newHandoffTurnDTO(t *domain.HandoffTurn) *handoffTurnDTO {
+	verdict := ""
+	if t.Verdict != nil {
+		verdict = string(*t.Verdict)
+	}
+	return &handoffTurnDTO{
+		ID:             t.ID,
+		ConversationID: t.ConversationID,
+		TurnNumber:     t.TurnNumber,
+		Speaker:        string(t.Speaker),
+		Content:        t.Content,
+		Verdict:        verdict,
+		CreatedAt:      t.CreatedAt,
+	}
+}
+
+func timePtr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.Format(time.RFC3339)
+	return &s
 }

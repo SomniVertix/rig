@@ -98,7 +98,6 @@ export interface TasksDocDTO {
 	deniedAt?: string | null;
 	lastDenialReason?: string | null;
 }
-
 export interface ListTasksDocsResponse {
 	tasksDocs: TasksDocDTO[];
 }
@@ -132,4 +131,75 @@ export interface RenderDocumentResponse {
 export interface WorkspaceDTO {
 	workspaceId: string;
 	label: string;
+}
+
+export type HandoffType = 'bug' | 'question' | 'fyi' | 'dependency-change';
+export type HandoffStatus = 'pending' | 'read' | 'actioned' | 'dismissed';
+
+/** Which side of a Handoff's source/target workspace a list request is
+ * filtering by, relative to the workspace making the request. */
+export type HandoffDirection = 'inbound' | 'outbound' | 'both';
+
+export interface HandoffAttachmentDTO {
+	id: string;
+	ordinal: number;
+	repoPath: string;
+	commitSha: string;
+	note: string;
+}
+
+/** Body and attachments are populated only on the single-get path
+ * (GetHandoff + ListHandoffAttachments); list rows leave them unset so list
+ * responses stay light. */
+export interface HandoffDTO {
+	id: string;
+	sourceWorkspaceId: string;
+	targetWorkspaceId: string;
+	title: string;
+	body?: string | null;
+	type: HandoffType;
+	status: HandoffStatus;
+	sentBy: string;
+	sentAt: string;
+	readAt?: string | null;
+	resolutionNote?: string | null;
+	resolvedAt?: string | null;
+	resolvedBy?: string | null;
+	createdAt: string;
+	updatedAt: string;
+	attachments?: HandoffAttachmentDTO[];
+}
+
+export type HandoffTurnSpeaker = 'source' | 'target' | 'arbiter';
+export type HandoffVerdict = 'action' | 'dismiss' | 'more_info' | 'blocked';
+
+export interface HandoffTurnDTO {
+	id: string;
+	conversationId: string;
+	turnNumber: number;
+	speaker: HandoffTurnSpeaker;
+	content: string;
+	verdict: HandoffVerdict;
+	createdAt: string;
+}
+
+export type HandoffConversationStatus = 'active' | 'escalated' | 'closed_agreed' | 'closed_by_human';
+
+/** Deliberately omits domain.HandoffConversation's SourceRootPath/
+ * TargetRootPath: those are subagent-invocation plumbing (where to run the
+ * source/target sides' CLI), not something a REST client needs to see. */
+export interface HandoffConversationDTO {
+	id: string;
+	handoffId: string;
+	status: HandoffConversationStatus;
+	turnCap?: string | null;
+	escalationReason?: string | null;
+	escalatedAt?: string | null;
+	draftedAction?: string | null;
+	draftedResolutionNote?: string | null;
+	draftedAt?: string | null;
+	arbiterSessionId: string;
+	closedAt?: string | null;
+	createdAt: string;
+	updatedAt: string;
 }

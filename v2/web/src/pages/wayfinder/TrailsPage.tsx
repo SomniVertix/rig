@@ -7,6 +7,7 @@ import { useTrails } from '../../data/trails';
 import { BoardView } from './BoardView';
 import { ListView } from './ListView';
 import { TrailStatusesDialog } from './TrailStatusesDialog';
+import { HandoffsPanel } from './HandoffsPanel';
 import './wayfinder.css';
 
 export function TrailsPage() {
@@ -68,6 +69,9 @@ export function TrailsPage() {
 					</p>
 				</div>
 			) : null}
+
+			{/* Handoffs panel */}
+			<HandoffsPanel workspaceId={workspace} />
 
 			{trails && trails.length > 0 ? (
 				view === 'board' ? (

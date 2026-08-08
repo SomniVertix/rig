@@ -125,7 +125,8 @@ func (s *Neo4jStore) UnspurWaypoint(ctx context.Context, waypointID, reason stri
 }
 
 // GetExpeditionLineage returns expeditionID's single parent edge, if any:
-// either the session that chartered it, or the waypoint that spurred it.
+// either the handoff that originated it (checked first), the session that chartered it,
+// or the waypoint that spurred it. Handoff is the most specific and takes precedence.
 func (s *Neo4jStore) GetExpeditionLineage(ctx context.Context, expeditionID string) (*domain.ExpeditionLineage, error) {
 	sess := s.session(ctx)
 	defer sess.Close(ctx)
@@ -133,9 +134,10 @@ func (s *Neo4jStore) GetExpeditionLineage(ctx context.Context, expeditionID stri
 	rec, err := neo4j.ExecuteRead(ctx, sess, func(tx neo4j.ManagedTransaction) (*neo4j.Record, error) {
 		res, err := tx.Run(ctx, `
 			MATCH (e:Expedition {id: $expeditionId})
+			OPTIONAL MATCH (parentHandoff:Handoff)-[:ORIGINATED]->(e)
 			OPTIONAL MATCH (sess:Session)-[:CHARTERED]->(e)
 			OPTIONAL MATCH (parentWaypoint:Waypoint)-[:SPURRED]->(e)
-			RETURN e.createdAt AS createdAt, sess.id AS sessionId, parentWaypoint.id AS waypointId`,
+			RETURN e.createdAt AS createdAt, parentHandoff.id AS handoffId, sess.id AS sessionId, parentWaypoint.id AS waypointId`,
 			map[string]any{"expeditionId": expeditionID})
 		if err != nil {
 			return nil, err
@@ -152,11 +154,16 @@ func (s *Neo4jStore) GetExpeditionLineage(ctx context.Context, expeditionID stri
 		return nil, store.ErrNotFound
 	}
 
+	handoffID, _ := rec.Get("handoffId")
 	sessionID, _ := rec.Get("sessionId")
 	waypointID, _ := rec.Get("waypointId")
 
 	lineage := &domain.ExpeditionLineage{ChildExpeditionID: expeditionID}
-	if wid, ok := waypointID.(string); ok {
+	// Check handoff first (most specific), then waypoint, then session
+	if hid, ok := handoffID.(string); ok {
+		lineage.ParentKind = domain.LineageParentHandoff
+		lineage.ParentHandoffID = &hid
+	} else if wid, ok := waypointID.(string); ok {
 		lineage.ParentKind = domain.LineageParentWaypoint
 		lineage.ParentWaypointID = &wid
 	} else if sid, ok := sessionID.(string); ok {

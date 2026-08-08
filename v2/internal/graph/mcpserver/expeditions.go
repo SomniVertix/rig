@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -72,6 +73,7 @@ type originOut struct {
 	Kind       string  `json:"kind"`
 	SessionID  *string `json:"sessionId,omitempty"`
 	WaypointID *string `json:"waypointId,omitempty"`
+	HandoffID  *string `json:"handoffId,omitempty"`
 }
 
 func buildOrigin(ctx context.Context, svc *service.Service, expeditionID string) (*originOut, error) {
@@ -86,6 +88,7 @@ func buildOrigin(ctx context.Context, svc *service.Service, expeditionID string)
 		Kind:       string(lineage.ParentKind),
 		SessionID:  lineage.ParentSessionID,
 		WaypointID: lineage.ParentWaypointID,
+		HandoffID:  lineage.ParentHandoffID,
 	}, nil
 }
 
@@ -230,11 +233,12 @@ type createExpeditionIn struct {
 	Destination    *string `json:"destination,omitempty" jsonschema:"what reaching the end looks like, one or two lines every session orients to"`
 	Notes          *string `json:"notes,omitempty" jsonschema:"domain, skills every session should consult, standing preferences for this effort"`
 	SessionID      *string `json:"sessionId,omitempty" jsonschema:"this invocation's start_session id, if the expedition is being chartered by a session"`
+	OriginHandoffID *string `json:"originHandoffId,omitempty" jsonschema:"handoff id, if the expedition is being chartered from a handoff via create_expedition(originHandoffId=...)"`
 }
 
 func createExpedition(svc *service.Service) func(context.Context, *mcp.CallToolRequest, createExpeditionIn) (*mcp.CallToolResult, expeditionResultOut, error) {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createExpeditionIn) (*mcp.CallToolResult, expeditionResultOut, error) {
-		e, err := svc.CreateExpedition(ctx, store.CreateExpeditionParams{
+		params := store.CreateExpeditionParams{
 			WorkspaceID:      in.WorkspaceID,
 			Slug:           in.Slug,
 			Title:          in.Title,
@@ -242,7 +246,15 @@ func createExpedition(svc *service.Service) func(context.Context, *mcp.CallToolR
 			Destination:    in.Destination,
 			Notes:          in.Notes,
 			SessionID:      in.SessionID,
-		})
+		}
+
+		var e *domain.Expedition
+		var err error
+		if in.OriginHandoffID != nil {
+			e, err = svc.CreateExpeditionFromHandoff(ctx, *in.OriginHandoffID, params)
+		} else {
+			e, err = svc.CreateExpedition(ctx, params)
+		}
 		if err != nil {
 			return nil, expeditionResultOut{}, err
 		}
@@ -306,8 +318,20 @@ type workspaceStatusIn struct {
 	WorkspaceID string `json:"workspaceId" jsonschema:"the resolved rig workspace id, from resolve_workspace_id"`
 }
 
+type handoffStatusRowOut struct {
+	ID                    string    `json:"id"`
+	Title                 string    `json:"title"`
+	Type                  string    `json:"type"`
+	Status                string    `json:"status"`
+	Direction             string    `json:"direction" jsonschema:"inbound or outbound relative to this workspace"`
+	CounterpartyWorkspaceID string   `json:"counterpartyWorkspaceId"`
+	SentAt                time.Time `json:"sentAt"`
+	HasConversation       bool      `json:"hasConversation"`
+}
+
 type workspaceStatusOut struct {
 	Expeditions []expeditionListRowOut `json:"expeditions"`
+	Handoffs    []handoffStatusRowOut  `json:"handoffs"`
 	SpecsNote   string                 `json:"specsNote" jsonschema:"why no specs are included: this tool doesn't aggregate them yet, not that the pipeline is unimplemented"`
 }
 
@@ -317,8 +341,72 @@ func getWorkspaceStatus(svc *service.Service) func(context.Context, *mcp.CallToo
 		if err != nil {
 			return nil, workspaceStatusOut{}, err
 		}
-		return nil, workspaceStatusOut{Expeditions: rows, SpecsNote: specsNotAvailableNote}, nil
+
+		// List handoffs in both directions, pending+read only
+		handoffRows, err := buildHandoffStatusRows(ctx, svc, in.WorkspaceID)
+		if err != nil {
+			return nil, workspaceStatusOut{}, err
+		}
+
+		return nil, workspaceStatusOut{Expeditions: rows, Handoffs: handoffRows, SpecsNote: specsNotAvailableNote}, nil
 	}
+}
+
+func buildHandoffStatusRows(ctx context.Context, svc *service.Service, workspaceID string) ([]handoffStatusRowOut, error) {
+	// List both pending and read handoffs in both directions
+	pending := string(domain.HandoffStatusPending)
+	read := string(domain.HandoffStatusRead)
+
+	pendingHandoffs, err := svc.ListHandoffs(ctx, store.ListHandoffsParams{
+		WorkspaceID: workspaceID,
+		Direction:   string(store.HandoffDirectionBoth),
+		Status:      &pending,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list pending handoffs: %w", err)
+	}
+
+	readHandoffs, err := svc.ListHandoffs(ctx, store.ListHandoffsParams{
+		WorkspaceID: workspaceID,
+		Direction:   string(store.HandoffDirectionBoth),
+		Status:      &read,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list read handoffs: %w", err)
+	}
+
+	handoffs := append(pendingHandoffs, readHandoffs...)
+
+	var rows []handoffStatusRowOut
+	for _, h := range handoffs {
+		// Determine direction relative to this workspace
+		var direction string
+		var counterparty string
+		if h.TargetWorkspaceID == workspaceID {
+			direction = "inbound"
+			counterparty = h.SourceWorkspaceID
+		} else {
+			direction = "outbound"
+			counterparty = h.TargetWorkspaceID
+		}
+
+		// Check if handoff has a conversation
+		_, err := svc.GetHandoffConversationByHandoff(ctx, h.ID)
+		hasConversation := err == nil
+
+		rows = append(rows, handoffStatusRowOut{
+			ID:                    h.ID,
+			Title:                 h.Title,
+			Type:                  h.Type,
+			Status:                h.Status,
+			Direction:             direction,
+			CounterpartyWorkspaceID: counterparty,
+			SentAt:                h.SentAt,
+			HasConversation:       hasConversation,
+		})
+	}
+
+	return rows, nil
 }
 
 type expeditionIDIn struct {

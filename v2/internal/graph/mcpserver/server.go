@@ -58,6 +58,8 @@ func RegisterTools(server *mcp.Server, svc *service.Service) {
 	registerAssetTools(server, svc)
 	registerTermTools(server, svc)
 	registerSessionStubTools(server, svc)
+	registerHandoffTools(server, svc)
+	registerHandoffConversationTools(server, svc)
 	registerSpecTools(server, svc)
 	registerRequirementsTools(server, svc)
 	registerOpenQuestionTools(server, svc)

@@ -43,6 +43,13 @@ func (svc *Service) CreateExpedition(ctx context.Context, params store.CreateExp
 	return svc.store.CreateExpedition(ctx, params)
 }
 
+func (svc *Service) CreateExpeditionFromHandoff(ctx context.Context, handoffID string, params store.CreateExpeditionParams) (*domain.Expedition, error) {
+	if !slugPattern.MatchString(params.Slug) {
+		return nil, ErrInvalidSlug
+	}
+	return svc.store.CreateExpeditionFromHandoff(ctx, handoffID, params)
+}
+
 func (svc *Service) GetExpedition(ctx context.Context, id string) (*domain.Expedition, error) {
 	return svc.store.GetExpedition(ctx, id)
 }

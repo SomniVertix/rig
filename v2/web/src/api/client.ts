@@ -17,7 +17,12 @@ import type {
 	RenderDocumentResponse,
 	ListTasksDocsResponse,
 	SpecStageName,
-	WorkspaceDTO
+	WorkspaceDTO,
+	HandoffDTO,
+	HandoffDirection,
+	HandoffStatus,
+	HandoffConversationDTO,
+	HandoffTurnDTO
 } from './types';
 
 interface ApiErrorBody {
@@ -166,4 +171,35 @@ interface ListWorkspacesResponse {
  * source for "which workspaces exist," no cwd required. */
 export async function listWorkspaces(): Promise<WorkspaceDTO[]> {
 	return (await apiFetch<ListWorkspacesResponse>('/workspaces')).workspaces;
+}
+
+// ── Handoffs ─────────────────────────────────────────────────────────────
+
+interface ListHandoffsResponse {
+	handoffs: HandoffDTO[];
+}
+
+/** List rows leave body/attachments unset — see HandoffDTO. */
+export function listHandoffs(
+	workspaceId: string,
+	direction: HandoffDirection,
+	status?: HandoffStatus
+): Promise<ListHandoffsResponse> {
+	const params = new URLSearchParams({ workspaceId, direction });
+	if (status) params.set('status', status);
+	return apiFetch<ListHandoffsResponse>(`/handoffs?${params.toString()}`);
+}
+
+/** Single-get path: body and attachments are populated here, unlike listHandoffs. */
+export function getHandoff(id: string): Promise<HandoffDTO> {
+	return apiFetch<HandoffDTO>(`/handoffs/${encodeURIComponent(id)}`);
+}
+
+interface GetHandoffConversationResponse {
+	conversation: HandoffConversationDTO;
+	turns: HandoffTurnDTO[];
+}
+
+export function getHandoffConversation(id: string): Promise<GetHandoffConversationResponse> {
+	return apiFetch<GetHandoffConversationResponse>(`/handoffs/${encodeURIComponent(id)}/conversation`);
 }

@@ -154,8 +154,21 @@ User invokes with `status` — no idea to chart, no expedition to walk; a reques
    |---|---|---|---|
    | `<slug>` — <title> | active / complete / abandoned | <destination, or "—" if not yet named> | <outcomeKind, or "—" if none> |
 
-4. Below the table, render the response's `specsNote` as a line of prose instead of a Specs table — `get_workspace_status` is expeditions-only today (the spec pipeline itself is real and Neo4j-backed; this one tool just doesn't aggregate spec rows into its response yet), and `specsNote` says so. Render whatever it says rather than hardcoding today's wording — once `get_workspace_status` grows real spec rows, this step will pick that up from the tool's shape rather than needing a skill rewrite.
-5. If the Expeditions table would be empty, say so in a line of prose instead of printing an empty table — "no expeditions yet in this workspace" reads cleaner than a header row over nothing.
+4. Below the Expeditions table, render the **Handoffs** table from `get_workspace_status.handoffs`, containing both inbound and outbound pending/read handoffs:
+
+   **Handoffs**
+
+   | Direction | From/To | Title | Type | Status | Sent | Conversation |
+   |---|---|---|---|---|---|---|
+   | inbound / outbound | <counterpartyWorkspaceId> | <title> | <type> | pending / read | <sentAt, relative time> | yes / no |
+
+   **Note:** The Handoffs table is read-only in Status mode. Do not call `get_handoff` to browse the detail, since that tool has the side effect of marking a pending handoff as read. If the user wants to see a handoff's full body or transcript, direct them to use the console's Wayfinder view instead.
+
+   If the Handoffs table would be empty, omit it and render: "No open handoffs in this workspace."
+
+   Disambiguate this Handoffs table from other references to "handoff" in the skill: Handoff is a document being sent/received between workspaces (core primitive, **Handoffs** table); handoff is a generic synonym for "transfer" used elsewhere in the skill (e.g., "Marking the expedition-to-spec handoff"); Bypass is not a handoff.
+
+5. Below the tables, render the response's `specsNote` as a line of prose instead of a Specs table — `get_workspace_status` is expeditions-only today (the spec pipeline itself is real and Neo4j-backed; this one tool just doesn't aggregate spec rows into its response yet), and `specsNote` says so. Render whatever it says rather than hardcoding today's wording — once `get_workspace_status` grows real spec rows, this step will pick that up from the tool's shape rather than needing a skill rewrite.
 6. Status is read-only front to back: it claims no waypoint, reaches nothing, mutates no state. Don't fold a Chart or Walk step into the same turn as a Status report — if the user wants to act on something the table surfaced, that's a fresh Chart or Walk invocation.
 
 ## Downshift

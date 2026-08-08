@@ -612,6 +612,100 @@ func (h *Handlers) RenderDocument(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, renderDocumentResponse{Markdown: md})
 }
 
+// --- Handoffs ---
+
+func (h *Handlers) ListHandoffs(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
+	if workspaceID == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "workspaceId is required"})
+		return
+	}
+
+	direction := r.URL.Query().Get("direction")
+	if direction != "inbound" && direction != "outbound" && direction != "both" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "direction must be one of: inbound, outbound, both"})
+		return
+	}
+
+	params := store.ListHandoffsParams{
+		WorkspaceID: workspaceID,
+		Direction:   direction,
+	}
+	if s := r.URL.Query().Get("status"); s != "" {
+		params.Status = &s
+	}
+
+	handoffs, err := h.svc.ListHandoffs(r.Context(), params)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	dtos := make([]handoffDTO, len(handoffs))
+	for i := range handoffs {
+		dto := newHandoffDTO(&handoffs[i], nil)
+		dtos[i] = *dto
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"handoffs": dtos})
+}
+
+func (h *Handlers) GetHandoff(w http.ResponseWriter, r *http.Request) {
+	handoffID := r.PathValue("id")
+
+	// IMPORTANT: This REST endpoint reads the handoff WITHOUT the side effect
+	// of marking it read (unlike the MCP tool). The console is read-only and
+	// must not trigger pending->read transitions as a browsing side effect.
+	handoff, err := h.svc.GetHandoffWithoutReadTransition(r.Context(), handoffID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	// Fetch its attachments
+	attachments, err := h.svc.ListHandoffAttachments(r.Context(), handoffID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	dto := newHandoffDTO(handoff, attachments)
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func (h *Handlers) GetHandoffConversation(w http.ResponseWriter, r *http.Request) {
+	handoffID := r.PathValue("id")
+
+	// Fetch the conversation for this handoff
+	conversation, err := h.svc.GetHandoffConversationByHandoff(r.Context(), handoffID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	// Fetch the turns for this conversation
+	turns, err := h.svc.ListHandoffTurns(r.Context(), conversation.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	conversationDTO := newHandoffConversationDTO(conversation)
+	turnDTOs := make([]handoffTurnDTO, len(turns))
+	for i := range turns {
+		turnDTOs[i] = *newHandoffTurnDTO(&turns[i])
+	}
+
+	type response struct {
+		Conversation *handoffConversationDTO `json:"conversation"`
+		Turns        []handoffTurnDTO        `json:"turns"`
+	}
+
+	writeJSON(w, http.StatusOK, response{
+		Conversation: conversationDTO,
+		Turns:        turnDTOs,
+	})
+}
+
 func (h *Handlers) FinalizeStage(w http.ResponseWriter, r *http.Request) {
 	h.stageAction(w, r, stageFinalize)
 }

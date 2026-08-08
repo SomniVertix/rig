@@ -112,6 +112,55 @@ func labelFromWorkspacePath(path string) string {
 	return strings.TrimSuffix(filepath.Base(path), ".code-workspace")
 }
 
+// WorkspaceDetail is a fuller workspace-derived projection than
+// WorkspaceSummary, including the workspace's root filesystem path. This is
+// safe to expose to MCP clients (which already run with filesystem access to
+// resolve a cwd) but must not be exposed to the path-free browser-facing
+// WorkspaceSummary shape.
+type WorkspaceDetail struct {
+	ID       string `json:"id"`
+	Slug     string `json:"slug"`
+	Name     string `json:"name"`
+	RootPath string `json:"rootPath"`
+}
+
+// ListDetailed returns every distinct workspaceId known to this registry,
+// sorted by workspaceId, alongside its root filesystem path. RootPath is the
+// workspace's first declared folder when it has one, else the directory
+// containing the workspace file itself.
+func (r *Registry) ListDetailed() []WorkspaceDetail {
+	details := map[string]WorkspaceDetail{}
+	for _, ws := range r.workspaces {
+		if _, ok := details[ws.WorkspaceID]; ok {
+			continue
+		}
+
+		rootPath := filepath.Dir(ws.Path)
+		if len(ws.Folders) > 0 {
+			rootPath = ws.Folders[0]
+		}
+
+		details[ws.WorkspaceID] = WorkspaceDetail{
+			ID:       ws.WorkspaceID,
+			Slug:     ws.WorkspaceID,
+			Name:     labelFromWorkspacePath(ws.Path),
+			RootPath: rootPath,
+		}
+	}
+
+	ids := make([]string, 0, len(details))
+	for id := range details {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	out := make([]WorkspaceDetail, len(ids))
+	for i, id := range ids {
+		out[i] = details[id]
+	}
+	return out
+}
+
 func claims(folders []string, target string) bool {
 	for _, folder := range folders {
 		if target == folder || strings.HasPrefix(target, folder+string(os.PathSeparator)) {

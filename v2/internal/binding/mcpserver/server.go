@@ -20,6 +20,10 @@ type resolveOutput struct {
 	WorkspaceID string `json:"workspaceId"`
 }
 
+type listWorkspacesOutput struct {
+	Workspaces []registry.WorkspaceDetail `json:"workspaces"`
+}
+
 // NewHandler returns an http.Handler serving the binding service's MCP
 // tools over the streamable HTTP transport (see [MCP spec]).
 //
@@ -41,6 +45,13 @@ func RegisterTools(server *mcp.Server, reg *registry.Registry) {
 		Name:        "resolve_workspace_id",
 		Description: "Resolve a working directory to the rig workspaceId of the workspace whose folders claim it.",
 	}, resolveWorkspaceID(reg))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "list_workspaces",
+		Description: "List all available workspaces by id/slug/name/rootPath. Intended for harness-generic " +
+			"subagent spawning (rootPath binding) and human-friendly name resolution. Distinctly differs from " +
+			"resolve_workspace_id which maps the caller's own cwd to its own workspace.",
+	}, listWorkspaces(reg))
 }
 
 func resolveWorkspaceID(reg *registry.Registry) func(context.Context, *mcp.CallToolRequest, resolveArgs) (*mcp.CallToolResult, resolveOutput, error) {
@@ -57,6 +68,12 @@ func resolveWorkspaceID(reg *registry.Registry) func(context.Context, *mcp.CallT
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "resolved workspaceId: " + workspaceID}},
 		}, resolveOutput{WorkspaceID: workspaceID}, nil
+	}
+}
+
+func listWorkspaces(reg *registry.Registry) func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, listWorkspacesOutput, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listWorkspacesOutput, error) {
+		return nil, listWorkspacesOutput{Workspaces: reg.ListDetailed()}, nil
 	}
 }
 

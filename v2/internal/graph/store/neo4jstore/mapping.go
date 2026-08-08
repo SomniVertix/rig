@@ -351,6 +351,76 @@ func nodeToExpeditionTerm(n neo4j.Node) (*domain.ExpeditionTerm, error) {
 	}, nil
 }
 
+func nodeToHandoff(n neo4j.Node) (*domain.Handoff, error) {
+	p := n.Props
+	id, err := getStringProp(p, "id")
+	if err != nil {
+		return nil, err
+	}
+	sourceWorkspaceID, err := getStringProp(p, "sourceWorkspaceId")
+	if err != nil {
+		return nil, err
+	}
+	targetWorkspaceID, err := getStringProp(p, "targetWorkspaceId")
+	if err != nil {
+		return nil, err
+	}
+	title, err := getStringProp(p, "title")
+	if err != nil {
+		return nil, err
+	}
+	bodyMarkdown, err := getStringProp(p, "bodyMarkdown")
+	if err != nil {
+		return nil, err
+	}
+	typ, err := getStringProp(p, "type")
+	if err != nil {
+		return nil, err
+	}
+	status, err := getStringProp(p, "status")
+	if err != nil {
+		return nil, err
+	}
+	sentBy, err := getStringProp(p, "sentBy")
+	if err != nil {
+		return nil, err
+	}
+	sentAt, err := getTimeProp(p, "sentAt")
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := getTimeProp(p, "createdAt")
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := getTimeProp(p, "updatedAt")
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.Handoff{
+		ID:                 id,
+		SourceWorkspaceID:  sourceWorkspaceID,
+		TargetWorkspaceID:  targetWorkspaceID,
+		Title:              title,
+		BodyMarkdown:       bodyMarkdown,
+		Type:               typ,
+		Status:             status,
+		OriginExpeditionID: getStringPtrProp(p, "originExpeditionId"),
+		OriginWaypointID:   getStringPtrProp(p, "originWaypointId"),
+		OriginCommitSHA:    getStringPtrProp(p, "originCommitSha"),
+		OriginSessionID:    getStringPtrProp(p, "originSessionId"),
+		SentBy:             sentBy,
+		SentAt:             sentAt,
+		ReadAt:             getTimePtrProp(p, "readAt"),
+		ResolutionNote:     getStringPtrProp(p, "resolutionNote"),
+		ResolvedAt:         getTimePtrProp(p, "resolvedAt"),
+		ResolvedBy:         getStringPtrProp(p, "resolvedBy"),
+		CreatedAt:          createdAt,
+		UpdatedAt:          updatedAt,
+	}, nil
+}
+
 // singleNode extracts the node bound to key from a query result's single
 // record, mapping "no rows" to store.ErrNotFound at the call site.
 func singleNode(rec *neo4j.Record, key string) (neo4j.Node, bool) {
@@ -895,5 +965,41 @@ func nodeToDefinitionOfDoneItem(n neo4j.Node) (*domain.DefinitionOfDoneItem, err
 	}
 	return &domain.DefinitionOfDoneItem{
 		ID: id, SpecID: specID, Ordinal: ordinal, Description: description, IsChecked: getBoolProp(p, "isChecked"),
+	}, nil
+}
+
+func nodeToHandoffAttachment(n neo4j.Node) (*domain.HandoffAttachment, error) {
+	p := n.Props
+	id, err := getStringProp(p, "id")
+	if err != nil {
+		return nil, err
+	}
+	handoffID, err := getStringProp(p, "handoffId")
+	if err != nil {
+		return nil, err
+	}
+	ordinal, err := getIntProp(p, "ordinal")
+	if err != nil {
+		return nil, err
+	}
+	repoPath, err := getStringProp(p, "repoPath")
+	if err != nil {
+		return nil, err
+	}
+	commitSHA, err := getStringProp(p, "commitSha")
+	if err != nil {
+		return nil, err
+	}
+	note, err := getStringProp(p, "note")
+	if err != nil {
+		return nil, err
+	}
+	return &domain.HandoffAttachment{
+		ID:        id,
+		HandoffID: handoffID,
+		Ordinal:   ordinal,
+		RepoPath:  repoPath,
+		CommitSHA: commitSHA,
+		Note:      note,
 	}, nil
 }

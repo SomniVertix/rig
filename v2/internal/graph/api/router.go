@@ -61,6 +61,11 @@ func NewRouter(h *Handlers) *http.ServeMux {
 	mux.HandleFunc("DELETE /waypoint-dependencies", h.RemoveWaypointDependency)
 	mux.HandleFunc("GET /expeditions/{expeditionId}/waypoint-dependencies", h.ListWaypointDependencies)
 
+	// Handoffs (read-only)
+	mux.HandleFunc("GET /handoffs", h.ListHandoffs)
+	mux.HandleFunc("GET /handoffs/{id}", h.GetHandoff)
+	mux.HandleFunc("GET /handoffs/{id}/conversation", h.GetHandoffConversation)
+
 	// Spec pipeline — read/lifecycle + approve/deny only; see the "Spec
 	// pipeline" comment in dto.go for why this isn't a full mirror of the
 	// mcp__rig__* catalog.

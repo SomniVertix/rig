@@ -202,6 +202,20 @@ func (s *Neo4jStore) EnsureSchema(ctx context.Context) error {
 		"CREATE CONSTRAINT parallel_batch_doc_order_unique IF NOT EXISTS FOR (p:ParallelBatch) REQUIRE (p.tasksDocId, p.batchOrder) IS UNIQUE",
 		"CREATE CONSTRAINT dod_item_id_unique IF NOT EXISTS FOR (d:DefinitionOfDoneItem) REQUIRE d.id IS UNIQUE",
 		"CREATE CONSTRAINT dod_item_spec_ordinal_unique IF NOT EXISTS FOR (d:DefinitionOfDoneItem) REQUIRE (d.specId, d.ordinal) IS UNIQUE",
+
+		// Handoffs (cross-workspace handoff messages and their attachments).
+		"CREATE CONSTRAINT handoff_id_unique IF NOT EXISTS FOR (h:Handoff) REQUIRE h.id IS UNIQUE",
+		"CREATE INDEX handoff_target_status_idx IF NOT EXISTS FOR (h:Handoff) ON (h.targetWorkspaceId, h.status)",
+		"CREATE INDEX handoff_source_status_idx IF NOT EXISTS FOR (h:Handoff) ON (h.sourceWorkspaceId, h.status)",
+		"CREATE CONSTRAINT handoff_attachment_id_unique IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE a.id IS UNIQUE",
+		"CREATE CONSTRAINT handoff_attachment_ordinal_unique IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE (a.handoffId, a.ordinal) IS UNIQUE",
+
+		// HandoffConversations and HandoffTurns (multi-turn negotiation between
+		// the source and target workspaces of a Handoff).
+		"CREATE CONSTRAINT handoff_conversation_id_unique IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.id IS UNIQUE",
+		"CREATE CONSTRAINT handoff_conversation_handoff_unique IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.handoffId IS UNIQUE",
+		"CREATE CONSTRAINT handoff_turn_id_unique IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.id IS UNIQUE",
+		"CREATE CONSTRAINT handoff_turn_number_unique IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE (t.conversationId, t.turnNumber) IS UNIQUE",
 	}
 
 	typeStmts := []string{
@@ -439,6 +453,64 @@ func (s *Neo4jStore) EnsureSchema(ctx context.Context) error {
 		"CREATE CONSTRAINT dod_item_ordinal_type IF NOT EXISTS FOR (d:DefinitionOfDoneItem) REQUIRE d.ordinal IS :: INTEGER",
 		"CREATE CONSTRAINT dod_item_description_type IF NOT EXISTS FOR (d:DefinitionOfDoneItem) REQUIRE d.description IS :: STRING",
 		"CREATE CONSTRAINT dod_item_is_checked_type IF NOT EXISTS FOR (d:DefinitionOfDoneItem) REQUIRE d.isChecked IS :: BOOLEAN",
+
+		// Handoff property types (see domain.Handoff / nodeToHandoff in mapping.go).
+		"CREATE CONSTRAINT handoff_id_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.id IS :: STRING",
+		"CREATE CONSTRAINT handoff_source_workspace_id_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.sourceWorkspaceId IS :: STRING",
+		"CREATE CONSTRAINT handoff_target_workspace_id_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.targetWorkspaceId IS :: STRING",
+		"CREATE CONSTRAINT handoff_title_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.title IS :: STRING",
+		"CREATE CONSTRAINT handoff_body_markdown_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.bodyMarkdown IS :: STRING",
+		"CREATE CONSTRAINT handoff_type_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.type IS :: STRING",
+		"CREATE CONSTRAINT handoff_status_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.status IS :: STRING",
+		"CREATE CONSTRAINT handoff_origin_expedition_id_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.originExpeditionId IS :: STRING",
+		"CREATE CONSTRAINT handoff_origin_waypoint_id_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.originWaypointId IS :: STRING",
+		"CREATE CONSTRAINT handoff_origin_commit_sha_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.originCommitSha IS :: STRING",
+		"CREATE CONSTRAINT handoff_origin_session_id_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.originSessionId IS :: STRING",
+		"CREATE CONSTRAINT handoff_sent_by_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.sentBy IS :: STRING",
+		"CREATE CONSTRAINT handoff_sent_at_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.sentAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT handoff_read_at_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.readAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT handoff_resolution_note_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.resolutionNote IS :: STRING",
+		"CREATE CONSTRAINT handoff_resolved_at_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.resolvedAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT handoff_resolved_by_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.resolvedBy IS :: STRING",
+		"CREATE CONSTRAINT handoff_created_at_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.createdAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT handoff_updated_at_type IF NOT EXISTS FOR (h:Handoff) REQUIRE h.updatedAt IS :: ZONED DATETIME",
+
+		// HandoffAttachment property types (see domain.HandoffAttachment /
+		// nodeToHandoffAttachment in mapping.go).
+		"CREATE CONSTRAINT handoff_attachment_id_type IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE a.id IS :: STRING",
+		"CREATE CONSTRAINT handoff_attachment_handoff_id_type IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE a.handoffId IS :: STRING",
+		"CREATE CONSTRAINT handoff_attachment_ordinal_type IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE a.ordinal IS :: INTEGER",
+		"CREATE CONSTRAINT handoff_attachment_repo_path_type IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE a.repoPath IS :: STRING",
+		"CREATE CONSTRAINT handoff_attachment_commit_sha_type IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE a.commitSha IS :: STRING",
+		"CREATE CONSTRAINT handoff_attachment_note_type IF NOT EXISTS FOR (a:HandoffAttachment) REQUIRE a.note IS :: STRING",
+
+		// HandoffConversation property types (see domain.HandoffConversation in
+		// handoffconversation.go).
+		"CREATE CONSTRAINT handoff_conversation_id_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.id IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_handoff_id_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.handoffId IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_status_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.status IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_turn_cap_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.turnCap IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_escalation_reason_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.escalationReason IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_escalated_at_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.escalatedAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT handoff_conversation_closed_at_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.closedAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT handoff_conversation_drafted_action_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.draftedAction IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_drafted_resolution_note_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.draftedResolutionNote IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_drafted_at_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.draftedAt IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_arbiter_session_id_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.arbiterSessionId IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_source_root_path_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.sourceRootPath IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_target_root_path_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.targetRootPath IS :: STRING",
+		"CREATE CONSTRAINT handoff_conversation_created_at_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.createdAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT handoff_conversation_updated_at_type IF NOT EXISTS FOR (c:HandoffConversation) REQUIRE c.updatedAt IS :: ZONED DATETIME",
+
+		// HandoffTurn property types (see domain.HandoffTurn in
+		// handoffconversation.go).
+		"CREATE CONSTRAINT handoff_turn_id_type IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.id IS :: STRING",
+		"CREATE CONSTRAINT handoff_turn_conversation_id_type IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.conversationId IS :: STRING",
+		"CREATE CONSTRAINT handoff_turn_number_type IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.turnNumber IS :: INTEGER",
+		"CREATE CONSTRAINT handoff_turn_speaker_type IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.speaker IS :: STRING",
+		"CREATE CONSTRAINT handoff_turn_content_type IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.content IS :: STRING",
+		"CREATE CONSTRAINT handoff_turn_verdict_type IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.verdict IS :: STRING",
+		"CREATE CONSTRAINT handoff_turn_created_at_type IF NOT EXISTS FOR (t:HandoffTurn) REQUIRE t.createdAt IS :: ZONED DATETIME",
 
 		// TaskDependencyEdge has no node of its own — it's the BLOCKS relationship
 		// between two TaskItem nodes, carrying only createdAt (see AddTaskDependencyEdge

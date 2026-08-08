@@ -63,6 +63,75 @@ func (s *Neo4jStore) CreateExpedition(ctx context.Context, params store.CreateEx
 	return nodeToExpedition(n)
 }
 
+// CreateExpeditionFromHandoff creates an expedition from a handoff in a single atomic write:
+// matches the handoff (must be pending or read and target the caller's workspace),
+// creates the expedition, creates the (:Handoff)-[:ORIGINATED]->(:Expedition) edge,
+// and transitions the handoff to actioned with a system-generated resolution note.
+// If the handoff doesn't exist, is already actioned/dismissed, or targets a different
+// workspace, returns store.ErrConflict and creates nothing.
+func (s *Neo4jStore) CreateExpeditionFromHandoff(ctx context.Context, handoffID string, params store.CreateExpeditionParams) (*domain.Expedition, error) {
+	sess := s.session(ctx)
+	defer sess.Close(ctx)
+
+	now := time.Now().UTC()
+	expeditionID := uuid.NewString()
+	resolutionNote := fmt.Sprintf("Actioned by expedition \"%s\".", params.Slug)
+
+	cypher := `
+		MATCH (h:Handoff {id: $handoffId})
+		WHERE h.status IN ['pending', 'read'] AND h.targetWorkspaceId = $workspaceId
+		CREATE (e:Expedition {
+			id: $expeditionId, workspaceId: $workspaceId, slug: $slug, title: $title,
+			briefingPrompt: $briefingPrompt, destination: $destination,
+			notes: $notes, status: $status,
+			createdAt: $createdAt, updatedAt: $updatedAt
+		})
+		CREATE (h)-[:ORIGINATED]->(e)
+		SET h.status = 'actioned',
+		    h.resolutionNote = $resolutionNote,
+		    h.resolvedAt = $now,
+		    h.updatedAt = $now
+		RETURN e`
+
+	rec, err := neo4j.ExecuteWrite(ctx, sess, func(tx neo4j.ManagedTransaction) (*neo4j.Record, error) {
+		res, err := tx.Run(ctx, cypher, map[string]any{
+			"handoffId":      handoffID,
+			"expeditionId":   expeditionID,
+			"workspaceId":      params.WorkspaceID,
+			"slug":           params.Slug,
+			"title":          params.Title,
+			"briefingPrompt": params.BriefingPrompt,
+			"destination":    derefStr(params.Destination),
+			"notes":          derefStr(params.Notes),
+			"status":         string(domain.ExpeditionStatusActive),
+			"resolutionNote": resolutionNote,
+			"createdAt":      now,
+			"updatedAt":      now,
+			"now":            now,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !res.Next(ctx) {
+			return nil, nil
+		}
+		return res.Record(), res.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("neo4jstore: create expedition from handoff: %w", err)
+	}
+	if rec == nil {
+		// Cypher guards failed: handoff not found, wrong workspace, or not pending/read
+		return nil, store.ErrConflict
+	}
+
+	n, ok := singleNode(rec, "e")
+	if !ok {
+		return nil, fmt.Errorf("neo4jstore: create expedition from handoff: no node returned")
+	}
+	return nodeToExpedition(n)
+}
+
 func (s *Neo4jStore) GetExpedition(ctx context.Context, id string) (*domain.Expedition, error) {
 	return s.getExpeditionBy(ctx, "id", id)
 }

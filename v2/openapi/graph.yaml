@@ -733,6 +733,76 @@ paths:
               schema: { $ref: "#/components/schemas/StageActionResponse" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /handoffs:
+    get:
+      summary: List handoffs for a workspace
+      operationId: listHandoffs
+      parameters:
+        - name: workspaceId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: direction
+          in: query
+          required: true
+          schema: { type: string, enum: [inbound, outbound, both] }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  handoffs:
+                    type: array
+                    items: { $ref: "#/components/schemas/Handoff" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /handoffs/{id}:
+    get:
+      summary: Get a handoff with its full body and attachments
+      operationId: getHandoff
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Handoff" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /handoffs/{id}/conversation:
+    get:
+      summary: Get a handoff conversation and its turns
+      operationId: getHandoffConversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation: { $ref: "#/components/schemas/HandoffConversation" }
+                  turns:
+                    type: array
+                    items: { $ref: "#/components/schemas/HandoffTurn" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   parameters:
     ExpeditionId:
@@ -1173,3 +1243,67 @@ components:
           allOf: [ { $ref: "#/components/schemas/TasksDoc" } ]
           nullable: true
           description: Set for stage tasks.
+
+    Handoff:
+      type: object
+      properties:
+        id: { type: string }
+        sourceWorkspaceId: { type: string }
+        targetWorkspaceId: { type: string }
+        title: { type: string }
+        body:
+          type: string
+          nullable: true
+          description: Populated only on single-get (GET /handoffs/{id}); omitted on list rows
+        type: { type: string, enum: [bug, question, fyi, dependency-change] }
+        status: { type: string, enum: [pending, read, actioned, dismissed] }
+        sentBy: { type: string }
+        sentAt: { type: string, format: date-time }
+        readAt: { type: string, format: date-time, nullable: true }
+        resolutionNote: { type: string, nullable: true }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        resolvedBy: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        attachments:
+          type: array
+          items: { $ref: "#/components/schemas/HandoffAttachment" }
+          nullable: true
+          description: Populated only on single-get (GET /handoffs/{id}); omitted on list rows
+
+    HandoffAttachment:
+      type: object
+      properties:
+        id: { type: string }
+        ordinal: { type: integer }
+        repoPath: { type: string }
+        commitSha: { type: string }
+        note: { type: string }
+
+    HandoffConversation:
+      type: object
+      properties:
+        id: { type: string }
+        handoffId: { type: string }
+        status: { type: string, enum: [active, escalated, closed_agreed, closed_by_human] }
+        turnCap: { type: string, nullable: true }
+        escalationReason: { type: string, nullable: true, enum: [turn_cap, tie_break, stalled_subagent, workspace_unreachable] }
+        escalatedAt: { type: string, format: date-time, nullable: true }
+        draftedAction: { type: string, nullable: true, enum: [action, dismiss] }
+        draftedResolutionNote: { type: string, nullable: true }
+        draftedAt: { type: string, nullable: true }
+        arbiterSessionId: { type: string }
+        closedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    HandoffTurn:
+      type: object
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        turnNumber: { type: integer }
+        speaker: { type: string, enum: [source, target, arbiter] }
+        content: { type: string }
+        verdict: { type: string, enum: [action, dismiss, more_info, blocked] }
+        createdAt: { type: string, format: date-time }
