@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Manual-only — invoke explicitly by name when a spec's tasks-drafter has assigned this agent to a specific review task (not run automatically for every task). Verifies an implementation against its task's Acceptance check and Traceability without modifying code, and reports findings via ReportFindings.
-tools: Read, Grep, Glob, Bash, ReportFindings
+tools: Read, Grep, Glob, Bash, ReportFindings, mcp__rig__update_task_item
 model: sonnet
 ---
 
@@ -34,3 +34,8 @@ findings array is the correct call when the implementation genuinely holds up �
 invent findings to appear thorough. For each finding, give a concrete failure scenario
 (specific input/state → wrong output or break), not a vague style complaint. Do not report
 findings as prose in your final message instead of calling the tool.
+
+**Then mark the review task complete**: Call `mcp__rig__update_task_item` with this review
+task's `id` and `isChecked: true` (plus `actor: "code-reviewer"`). Do this **before you
+return** — if you crash, the next agent needs to see this review as done. Never rely on
+the orchestrator to mark completion after you return.

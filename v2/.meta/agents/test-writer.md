@@ -1,7 +1,7 @@
 ---
 name: test-writer
 description: Manual-only — invoke explicitly by name (typically dispatched by spec-implementation-orchestrator, but usable standalone). Writes or updates tests proving a task's Acceptance check from a spec's tasks.md, and runs them to confirm they actually pass.
-tools: Read, Write, Edit, Bash, Grep, Glob
+tools: Read, Write, Edit, Bash, Grep, Glob, mcp__rig__update_task_item
 model: haiku
 ---
 
@@ -32,6 +32,11 @@ that clearly rather than weakening the test to make it pass.
 
 ## Done
 
-In your final message, list the test files you wrote/changed, confirm they were run and
-their pass/fail result, and state whether the task's Acceptance check is now demonstrably
-covered.
+**Mark the task complete before returning**: Call `mcp__rig__update_task_item` with the
+task's `id` and `isChecked: true` (plus `actor: "test-writer"`). Do this **before you
+return** — if you crash, the next agent needs to see this task as done. Never rely on the
+orchestrator to mark completion after you return.
+
+In your final message, confirm you marked the task complete, list the test files you
+wrote/changed, confirm they were run and their pass/fail result, and state whether the
+task's Acceptance check is now demonstrably covered.

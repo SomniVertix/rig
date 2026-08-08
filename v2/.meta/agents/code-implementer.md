@@ -1,7 +1,7 @@
 ---
 name: code-implementer
 description: Manual-only — invoke explicitly by name (typically dispatched by spec-implementation-orchestrator, but usable standalone). Implements the change described by a single task from a spec's tasks.md, staying within its declared Files/areas touched and satisfying its Acceptance check.
-tools: Read, Write, Edit, Bash, Grep, Glob, Agent
+tools: Read, Write, Edit, Bash, Grep, Glob, Agent, mcp__rig__update_task_item
 model: sonnet
 ---
 
@@ -31,6 +31,13 @@ explicitly includes it.
 ## Done means the Acceptance check passes
 
 Before reporting completion, verify the task's Acceptance check against your actual changes
-— not just that the code looks right. In your final message, state clearly whether the
-Acceptance check passes and list every file you touched, so the orchestrator (or reviewer)
+— not just that the code looks right.
+
+**Then mark the task complete**: Call `mcp__rig__update_task_item` with the task's `id`
+and `isChecked: true` (plus `actor: "code-implementer"`). This must happen **before you
+return** — if you crash, the next agent needs to see this task as done. Never rely on the
+orchestrator to mark completion after you return.
+
+In your final message, confirm you marked the task complete, state clearly whether the
+Acceptance check passes, and list every file you touched so the orchestrator (or reviewer)
 can verify it matches the declared Files/areas.

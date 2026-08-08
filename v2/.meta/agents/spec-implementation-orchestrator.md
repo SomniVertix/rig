@@ -38,16 +38,20 @@ must be `"approved"`. If any component isn't, stop and report that back.
      (`P1`, then `P2`, ...), respecting cross-component dependency edges the same way.
      Dispatch all items in the current batch concurrently, wait for all of them to
      complete, then proceed to the next batch.
-4. For every completed item in either mode:
+4. **Each implementer marks its own task complete** — `code-implementer` and `test-writer`
+   both call `update_task_item` with `isChecked: true` before they return, so you never
+   need to mark completion after dispatch. Your role is validation:
+   - After each item returns, verify via `list_task_items` that it actually marked itself
+     complete. If it didn't, that's a bug — call `update_task_item` yourself as fallback
+     and report the gap.
    - Spot-check that the completed item's actual file changes roughly match its declared
      Files/areas touched (Grep/Glob). Flag (don't silently ignore) any item that touched
      files outside its declared area.
-   - Call `mcp__rig__update_task_item` with `isChecked: true` for that item
-     immediately, and update your TodoWrite list. (A parent item is rejected if you try to
-     check it while a subtask in the same component is still unchecked — check subtasks
-     first.)
+   - Update your TodoWrite list to reflect the now-checked item.
 5. After all subtasks under a parent task are complete, mark the parent item's checkbox via
-   `update_task_item` if it is not already checked.
+   `update_task_item` if it is not already checked. (A parent item is rejected if you try
+   to check it while a subtask in the same component is still unchecked — the implementers
+   only mark leaf tasks, you mark parents after their children are done.)
 6. Run the spec-wide Definition of Done checklist (e.g. run the test/build commands via
    Bash where applicable) and call `mcp__rig__update_definition_of_done_item` with
    `isChecked: true` for each item that passes.
