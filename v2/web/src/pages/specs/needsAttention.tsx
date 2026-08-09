@@ -57,7 +57,7 @@ export function TraceabilityAttentionCard({ markdown }: { markdown: string }) {
 			<div className="rl-eyebrow" style={{ marginBottom: 10 }}>
 				Requirement Traceability
 			</div>
-			<div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+			<div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '60vh', overflowY: 'auto' }}>
 				{rows.map((row, i) => (
 					<Card key={i}>
 						<CardPad>

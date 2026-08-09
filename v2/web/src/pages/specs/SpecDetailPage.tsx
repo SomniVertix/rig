@@ -13,9 +13,9 @@ import type { SpecStageName } from '../../data/specs/types';
 import type { TasksDocDTO } from '../../api/types';
 import './specs.css';
 
-const STEPPER_STEPS = [...SPEC_STAGE_ORDER, 'implementation'].map((key) => ({
+const STEPPER_STEPS = [...SPEC_STAGE_ORDER, 'implementation', 'complete'].map((key) => ({
 	key,
-	label: key === 'implementation' ? 'Implementation' : SPEC_STAGE_CONFIG.find((s) => s.key === key)!.label
+	label: key === 'implementation' ? 'Implementation' : key === 'complete' ? 'Complete' : SPEC_STAGE_CONFIG.find((s) => s.key === key)!.label
 }));
 
 export function SpecDetailPage() {
@@ -44,6 +44,10 @@ export function SpecDetailPage() {
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading spec…</p>;
 	if (isError || !spec) return <p style={{ color: 'var(--rose-500)' }}>Failed to load spec: {(error as Error)?.message ?? 'not found'}</p>;
 
+	// Prototype: treat specs as 'complete' if they've been in implementation for a while
+	// Real logic would check spec.implementationStageStatus === 'approved'
+	const isComplete = spec.currentStage === 'implementation' && false; // TODO: real backend field
+	const currentStageDisplay = isComplete ? 'complete' : spec.currentStage;
 	const headlineStatus = spec.currentStage === 'implementation' ? 'approved' : spec.stages[spec.currentStage];
 
 	return (
@@ -60,7 +64,7 @@ export function SpecDetailPage() {
 			</div>
 
 			<div style={{ marginBottom: 20, maxWidth: 620 }}>
-				<StageStepper steps={STEPPER_STEPS} currentKey={spec.currentStage} />
+				<StageStepper steps={STEPPER_STEPS} currentKey={currentStageDisplay} />
 			</div>
 
 			<div className="rl-detail-grid">
