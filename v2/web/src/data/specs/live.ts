@@ -69,6 +69,14 @@ function useInvalidateSpec(specId: string) {
 	};
 }
 
+export function useFinalizeStage(specId: string) {
+	const invalidate = useInvalidateSpec(specId);
+	return useMutation({
+		mutationFn: (body: StageActionRequest) => api.finalizeStage(specId, body),
+		onSuccess: invalidate
+	});
+}
+
 /** Approve/deny are human-only per the brand guide — agents cannot self-approve a draft. */
 export function useApproveStage(specId: string) {
 	const invalidate = useInvalidateSpec(specId);

@@ -4,7 +4,7 @@ import { Check, X } from 'lucide-react';
 import { Badge, Button, StatusBadge, StageStepper, Tabs, Textarea, Tooltip } from '../../ds';
 import { MarkdownWithAttention, OpenQuestionsAttentionCard, TraceabilityAttentionCard } from './needsAttention';
 import { usePageTitle } from '../../app/state/AppStateContext';
-import { useSpec, useSpecDocument, useApproveStage, useDenyStage, useOriginTrail, useTasksDocs } from '../../data/specs';
+import { useSpec, useSpecDocument, useFinalizeStage, useApproveStage, useDenyStage, useOriginTrail, useTasksDocs } from '../../data/specs';
 import { SPEC_STAGE_CONFIG } from '../../config/specStages';
 import { SPEC_STAGE_ORDER, tasksDocDisplayStatus } from '../../domain/specs';
 import { parseTaskCompletion, type TaskCompletion } from '../../domain/taskCompletion';
@@ -492,6 +492,7 @@ function ImplementationReviewGate({
 	implementationStatus: string;
 	isComplete: boolean;
 }) {
+	const finalize = useFinalizeStage(specId);
 	const approve = useApproveStage(specId);
 	const deny = useDenyStage(specId);
 	const [denyOpen, setDenyOpen] = useState(false);
@@ -520,7 +521,34 @@ function ImplementationReviewGate({
 		);
 	}
 
-	// in_review or not_started
+	// not_started - show finalize button
+	if (implementationStatus === 'not_started') {
+		return (
+			<div className="rl-card rl-card__pad">
+				<div className="rl-eyebrow" style={{ marginBottom: 6 }}>
+					Implementation stage
+				</div>
+				<p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)', marginBottom: 12 }}>
+					Implementation is ready to begin. Finalize to mark it in review.
+				</p>
+				<Button
+					variant="primary"
+					block
+					disabled={finalize.isPending}
+					onClick={() => finalize.mutate({ stage: 'implementation' })}
+				>
+					Finalize implementation
+				</Button>
+				{finalize.isError ? (
+					<p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--rose-500)' }}>
+						{(finalize.error as Error)?.message}
+					</p>
+				) : null}
+			</div>
+		);
+	}
+
+	// in_review - show approve/deny
 	return (
 		<div className="rl-card rl-card__pad">
 			<div className="rl-eyebrow" style={{ marginBottom: 6 }}>
