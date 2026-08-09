@@ -29,7 +29,7 @@ export function SpecDetailPage() {
 	// (only once — after that the user's own tab clicks take over).
 	const [defaulted, setDefaulted] = useState(false);
 	useEffect(() => {
-		if (!defaulted && spec && spec.currentStage !== 'implementation') {
+		if (!defaulted && spec && spec.currentStage !== 'implementation' && spec.currentStage !== 'complete') {
 			setActiveStage(spec.currentStage);
 			setDefaulted(true);
 		}
