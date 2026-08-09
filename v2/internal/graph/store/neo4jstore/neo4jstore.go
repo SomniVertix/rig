@@ -324,6 +324,9 @@ func (s *Neo4jStore) EnsureSchema(ctx context.Context) error {
 		"CREATE CONSTRAINT spec_design_stage_status_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.designStageStatus IS :: STRING",
 		"CREATE CONSTRAINT spec_design_denied_at_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.designDeniedAt IS :: ZONED DATETIME",
 		"CREATE CONSTRAINT spec_design_last_denial_reason_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.designLastDenialReason IS :: STRING",
+		"CREATE CONSTRAINT spec_implementation_stage_status_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.implementationStageStatus IS :: STRING",
+		"CREATE CONSTRAINT spec_implementation_denied_at_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.implementationDeniedAt IS :: ZONED DATETIME",
+		"CREATE CONSTRAINT spec_implementation_last_denial_reason_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.implementationLastDenialReason IS :: STRING",
 		"CREATE CONSTRAINT spec_created_at_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.createdAt IS :: ZONED DATETIME",
 		"CREATE CONSTRAINT spec_updated_at_type IF NOT EXISTS FOR (s:Spec) REQUIRE s.updatedAt IS :: ZONED DATETIME",
 

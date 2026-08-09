@@ -54,13 +54,20 @@ type Spec struct {
 	DesignDeniedAt          *time.Time
 	DesignLastDenialReason  *string
 
+	// Implementation stage: unlike requirements/design/tasks, this is purely
+	// a completion marker with no editable content on Spec itself — the work
+	// happens outside rig. Approval marks the spec as complete.
+	ImplementationStageStatus      SpecStageStatus
+	ImplementationDeniedAt         *time.Time
+	ImplementationLastDenialReason *string
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
 // NextStageName names the pipeline's next actionable stage for a spec,
-// including the terminal "implementation" once every component's tasks
-// stage is approved.
+// including "implementation" once every component's tasks is approved,
+// and the terminal "complete" once implementation is approved.
 type NextStageName string
 
 const (
@@ -68,6 +75,7 @@ const (
 	NextStageDesign         NextStageName = "design"
 	NextStageTasks          NextStageName = "tasks"
 	NextStageImplementation NextStageName = "implementation"
+	NextStageComplete       NextStageName = "complete"
 )
 
 // NextStageInfo is get_next_stage's computed result: which stage to work on

@@ -26,6 +26,7 @@ func (s *Neo4jStore) CreateSpec(ctx context.Context, params store.CreateSpecPara
 			requirementsDeniedAt: NULL, requirementsLastDenialReason: NULL,
 			designOverview: "", designArchitecture: "", designDataModelOverview: NULL,
 			designStageStatus: $notStarted, designDeniedAt: NULL, designLastDenialReason: NULL,
+			implementationStageStatus: $notStarted, implementationDeniedAt: NULL, implementationLastDenialReason: NULL,
 			createdAt: $now, updatedAt: $now
 		})
 		RETURN s`
@@ -288,6 +289,18 @@ func (s *Neo4jStore) DenyDesignStage(ctx context.Context, specID, reason string)
 	return s.transitionSpecStage(ctx, specID, "designStageStatus", domain.SpecStageInReview, domain.SpecStageNotStarted, &reason, boolPtr(true))
 }
 
+func (s *Neo4jStore) FinalizeImplementationStage(ctx context.Context, specID string) (*domain.Spec, error) {
+	return s.transitionSpecStage(ctx, specID, "implementationStageStatus", domain.SpecStageNotStarted, domain.SpecStageInReview, nil, nil)
+}
+
+func (s *Neo4jStore) ApproveImplementationStage(ctx context.Context, specID string) (*domain.Spec, error) {
+	return s.transitionSpecStage(ctx, specID, "implementationStageStatus", domain.SpecStageInReview, domain.SpecStageApproved, nil, nil)
+}
+
+func (s *Neo4jStore) DenyImplementationStage(ctx context.Context, specID, reason string) (*domain.Spec, error) {
+	return s.transitionSpecStage(ctx, specID, "implementationStageStatus", domain.SpecStageInReview, domain.SpecStageNotStarted, &reason, boolPtr(true))
+}
+
 // transitionSpecStage moves the named status property from "from" to "to",
 // atomically checking the precondition in the same MATCH/WHERE — a status
 // that's already moved on (e.g. a concurrent finalize) fails as
@@ -297,9 +310,14 @@ func (s *Neo4jStore) DenyDesignStage(ctx context.Context, specID, reason string)
 // statusField's "requirements"/"design" prefix); an approve/finalize clears
 // them back to NULL.
 func (s *Neo4jStore) transitionSpecStage(ctx context.Context, specID, statusField string, from, to domain.SpecStageStatus, reason *string, denied *bool) (*domain.Spec, error) {
-	prefix := "requirements"
-	if statusField == "designStageStatus" {
+	var prefix string
+	switch statusField {
+	case "designStageStatus":
 		prefix = "design"
+	case "implementationStageStatus":
+		prefix = "implementation"
+	default:
+		prefix = "requirements"
 	}
 	deniedAtField := prefix + "DeniedAt"
 	reasonField := prefix + "LastDenialReason"

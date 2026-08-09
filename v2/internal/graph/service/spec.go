@@ -618,5 +618,8 @@ func (svc *Service) GetNextStage(ctx context.Context, specID string) (*domain.Ne
 	if len(lagging) > 0 {
 		return &domain.NextStageInfo{NextStage: domain.NextStageTasks, LaggingComponents: lagging}, nil
 	}
-	return &domain.NextStageInfo{NextStage: domain.NextStageImplementation}, nil
+	if spec.ImplementationStageStatus != domain.SpecStageApproved {
+		return &domain.NextStageInfo{NextStage: domain.NextStageImplementation}, nil
+	}
+	return &domain.NextStageInfo{NextStage: domain.NextStageComplete}, nil
 }

@@ -475,6 +475,10 @@ func nodeToSpec(n neo4j.Node) (*domain.Spec, error) {
 	if err != nil {
 		return nil, err
 	}
+	implementationStatus, err := getStringProp(p, "implementationStageStatus")
+	if err != nil {
+		return nil, err
+	}
 	createdAt, err := getTimeProp(p, "createdAt")
 	if err != nil {
 		return nil, err
@@ -493,14 +497,17 @@ func nodeToSpec(n neo4j.Node) (*domain.Spec, error) {
 		RequirementsStageStatus:      domain.SpecStageStatus(requirementsStatus),
 		RequirementsDeniedAt:         getTimePtrProp(p, "requirementsDeniedAt"),
 		RequirementsLastDenialReason: getStringPtrProp(p, "requirementsLastDenialReason"),
-		DesignOverview:               designOverview,
-		DesignArchitecture:           designArchitecture,
-		DesignDataModelOverview:      getStringPtrProp(p, "designDataModelOverview"),
-		DesignStageStatus:            domain.SpecStageStatus(designStatus),
-		DesignDeniedAt:               getTimePtrProp(p, "designDeniedAt"),
-		DesignLastDenialReason:       getStringPtrProp(p, "designLastDenialReason"),
-		CreatedAt:                    createdAt,
-		UpdatedAt:                    updatedAt,
+		DesignOverview:                    designOverview,
+		DesignArchitecture:                designArchitecture,
+		DesignDataModelOverview:           getStringPtrProp(p, "designDataModelOverview"),
+		DesignStageStatus:                 domain.SpecStageStatus(designStatus),
+		DesignDeniedAt:                    getTimePtrProp(p, "designDeniedAt"),
+		DesignLastDenialReason:            getStringPtrProp(p, "designLastDenialReason"),
+		ImplementationStageStatus:         domain.SpecStageStatus(implementationStatus),
+		ImplementationDeniedAt:            getTimePtrProp(p, "implementationDeniedAt"),
+		ImplementationLastDenialReason:    getStringPtrProp(p, "implementationLastDenialReason"),
+		CreatedAt:                         createdAt,
+		UpdatedAt:                         updatedAt,
 	}, nil
 }
 
