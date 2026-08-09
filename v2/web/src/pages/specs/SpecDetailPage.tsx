@@ -238,22 +238,23 @@ function TasksComponentSwitcher({
 
 	if (!docs || docs.length === 0) return null;
 
+	// W4 (wayfinder specs-ui-review-surfaces): count components complete
+	// (every checkbox checked) instead of approved. Use the same completion
+	// logic TasksComponentSwitcherRow uses for its CompletionRing.
+	const rows = docs.map((doc) => (
+		<TasksComponentSwitcherRow
+			key={doc.id}
+			specId={specId}
+			doc={doc}
+			selected={doc.componentSlug === selected}
+			onSelect={() => onSelect(doc.componentSlug)}
+		/>
+	));
+
 	return (
 		<div className="rl-card rl-card__pad">
-			<div className="rl-eyebrow" style={{ marginBottom: 10 }}>
-				{docs.filter((d) => d.status === 'approved').length}/{docs.length} components approved
-			</div>
-			<div className="rl-component-switcher">
-				{docs.map((doc) => (
-					<TasksComponentSwitcherRow
-						key={doc.id}
-						specId={specId}
-						doc={doc}
-						selected={doc.componentSlug === selected}
-						onSelect={() => onSelect(doc.componentSlug)}
-					/>
-				))}
-			</div>
+			<TasksCompletionMetric specId={specId} docs={docs} />
+			<div className="rl-component-switcher">{rows}</div>
 		</div>
 	);
 }
@@ -271,6 +272,26 @@ function TasksComponentSwitcherRow({
 }) {
 	const completion = useComponentCompletion(specId, doc.componentSlug);
 	return <ComponentSwitcherRow doc={doc} selected={selected} onSelect={onSelect} completion={completion} />;
+}
+
+/** Metric line for TasksComponentSwitcher: counts components whose tasks.md
+ * has every checkbox checked ("components complete"), replacing the prior
+ * "approved" count per W4 (wayfinder specs-ui-review-surfaces). */
+function TasksCompletionMetric({ specId, docs }: { specId: string; docs: TasksDocDTO[] }) {
+	// Fetch completions for all components. Each hook call must happen
+	// unconditionally, so we call them in a fixed-length array matching docs.
+	const completions = docs.map((doc) => {
+		// eslint-disable-next-line react-hooks/rules-of-hooks
+		return useComponentCompletion(specId, doc.componentSlug);
+	});
+
+	const completeCount = completions.filter((c) => c && c.done === c.total && c.total > 0).length;
+
+	return (
+		<div className="rl-eyebrow" style={{ marginBottom: 10 }}>
+			{completeCount}/{docs.length} components complete
+		</div>
+	);
 }
 
 function TaskDocumentCard({ specId, doc }: { specId: string; doc: TasksDocDTO }) {
