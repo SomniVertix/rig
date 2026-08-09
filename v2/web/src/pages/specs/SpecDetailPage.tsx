@@ -79,7 +79,9 @@ export function SpecDetailPage() {
 					</div>
 				</div>
 				<div className="rl-detail-grid__rail">
-					{activeStage === 'tasks' ? (
+					{activeStage === 'tasks' && spec.currentStage === 'implementation' ? (
+						<ImplementationReadinessCard />
+					) : activeStage === 'tasks' ? (
 						<TasksReviewGate specId={spec.id} component={selectedComponent} />
 					) : (
 						<ReviewGateCard specId={spec.id} stage={activeStage} status={spec.stages[activeStage]} />
@@ -473,6 +475,26 @@ function OriginTrailCard({ specId, workspace }: { specId: string; workspace: str
 				Origin trail
 			</div>
 			<Link to={`/${workspace}/trails/${trail.id}`}>{trail.name} →</Link>
+		</div>
+	);
+}
+
+/** W5 (wayfinder specs-ui-review-surfaces): appears on the Tasks tab when
+ * spec.currentStage === 'implementation', replacing the per-component review
+ * gate. Shows that all task components are complete and approved, and
+ * implementation can begin. Reuses the shared attention pattern visual style. */
+function ImplementationReadinessCard() {
+	return (
+		<div className="rl-card rl-card__pad">
+			<div className="rl-eyebrow" style={{ marginBottom: 6, color: 'var(--emerald-500)' }}>
+				Ready for Implementation
+			</div>
+			<div className="rl-gate-card__line" style={{ color: 'var(--emerald-500)', marginBottom: 8 }}>
+				<Check size={15} /> All components approved
+			</div>
+			<p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
+				Every task component has been reviewed and approved. This spec is ready to implement.
+			</p>
 		</div>
 	);
 }
