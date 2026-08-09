@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Check, X } from 'lucide-react';
-import { Badge, Button, Markdown, StatusBadge, StageStepper, Tabs, Textarea, Tooltip } from '../../ds';
+import { Badge, Button, StatusBadge, StageStepper, Tabs, Textarea, Tooltip } from '../../ds';
+import { MarkdownWithAttention, OpenQuestionsAttentionCard, TraceabilityAttentionCard } from './needsAttention';
 import { usePageTitle } from '../../app/state/AppStateContext';
 import { useSpec, useSpecDocument, useApproveStage, useDenyStage, useOriginTrail, useTasksDocs } from '../../data/specs';
 import { SPEC_STAGE_CONFIG } from '../../config/specStages';
@@ -83,6 +84,7 @@ export function SpecDetailPage() {
 					) : (
 						<ReviewGateCard specId={spec.id} stage={activeStage} status={spec.stages[activeStage]} />
 					)}
+					<StageAttentionCards specId={spec.id} stage={activeStage} component={selectedComponent} />
 					<StageAgentModelCard />
 					<OriginTrailCard specId={spec.id} workspace={workspace} />
 					{activeStage === 'tasks' ? (
@@ -103,8 +105,14 @@ function DocumentCard({ specId, stage }: { specId: string; stage: SpecStageName 
 				<p style={{ color: 'var(--text-muted)' }}>Loading document…</p>
 			) : (
 				<div className="rl-doc-card__body">
-						{data?.markdown ? <Markdown>{data.markdown}</Markdown> : 'No content yet.'}
-					</div>
+					{data?.markdown ? (
+						<MarkdownWithAttention hideTraceability={stage === 'design'}>
+							{data.markdown}
+						</MarkdownWithAttention>
+					) : (
+						'No content yet.'
+					)}
+				</div>
 			)}
 			<div className="rl-doc-card__footer">
 				rendered on demand · GET /specs/{specId}/render?stage={stage}
@@ -273,7 +281,13 @@ function TaskDocumentCard({ specId, doc }: { specId: string; doc: TasksDocDTO })
 			{isLoading ? (
 				<p style={{ color: 'var(--text-muted)' }}>Loading document…</p>
 			) : (
-				<div className="rl-doc-card__body">{data?.markdown ? <Markdown>{data.markdown}</Markdown> : 'No content yet.'}</div>
+				<div className="rl-doc-card__body">
+					{data?.markdown ? (
+						<MarkdownWithAttention>{data.markdown}</MarkdownWithAttention>
+					) : (
+						'No content yet.'
+					)}
+				</div>
 			)}
 			<div className="rl-doc-card__footer">
 				rendered on demand · GET /specs/{specId}/render?stage=tasks&component={doc.componentSlug}
@@ -289,6 +303,35 @@ function TasksReviewGate({ specId, component }: { specId: string; component?: st
 	if (!doc) return null;
 
 	return <ReviewGateCard specId={specId} stage="tasks" status={tasksDocDisplayStatus(doc)} component={doc.componentSlug} />;
+}
+
+/** Renders the appropriate "needs attention" cards for the current stage:
+ * - Requirements: open questions
+ * - Design: traceability + open questions
+ * - Tasks: open questions (per-component) */
+function StageAttentionCards({
+	specId,
+	stage,
+	component
+}: {
+	specId: string;
+	stage: SpecStageName;
+	component?: string;
+}) {
+	const { data } = useSpecDocument(specId, stage, component);
+	if (!data?.markdown) return null;
+
+	if (stage === 'design') {
+		return (
+			<>
+				<TraceabilityAttentionCard markdown={data.markdown} />
+				<OpenQuestionsAttentionCard markdown={data.markdown} />
+			</>
+		);
+	}
+
+	// Requirements and Tasks both just show open questions
+	return <OpenQuestionsAttentionCard markdown={data.markdown} />;
 }
 
 function ReviewGateCard({
