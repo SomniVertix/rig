@@ -44,11 +44,8 @@ export function SpecDetailPage() {
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading spec…</p>;
 	if (isError || !spec) return <p style={{ color: 'var(--rose-500)' }}>Failed to load spec: {(error as Error)?.message ?? 'not found'}</p>;
 
-	// Prototype: treat all implementation-stage specs as 'complete'
-	// Real logic would check spec.implementationStageStatus === 'approved'
-	const isComplete = spec.currentStage === 'implementation';
-	const currentStageDisplay = isComplete ? 'complete' : spec.currentStage;
-	const headlineStatus = isComplete ? 'approved' : spec.currentStage === 'implementation' ? 'approved' : spec.stages[spec.currentStage];
+	const currentStageDisplay = spec.currentStage;
+	const headlineStatus = spec.currentStage === 'complete' ? 'approved' : spec.currentStage === 'implementation' ? 'approved' : spec.stages[spec.currentStage];
 
 	return (
 		<div>
@@ -83,8 +80,8 @@ export function SpecDetailPage() {
 					</div>
 				</div>
 				<div className="rl-detail-grid__rail">
-					{activeStage === 'tasks' && spec.currentStage === 'implementation' ? (
-						<ImplementationReadinessCard />
+					{activeStage === 'tasks' && (spec.currentStage === 'implementation' || spec.currentStage === 'complete') ? (
+						<ImplementationReviewGate specId={spec.id} implementationStatus={spec.implementationStageStatus} isComplete={spec.currentStage === 'complete'} />
 					) : activeStage === 'tasks' ? (
 						<TasksReviewGate specId={spec.id} component={selectedComponent} />
 					) : (
@@ -483,22 +480,94 @@ function OriginTrailCard({ specId, workspace }: { specId: string; workspace: str
 	);
 }
 
-/** W5 (wayfinder specs-ui-review-surfaces): appears on the Tasks tab when
- * spec.currentStage === 'implementation', replacing the per-component review
- * gate. Shows that all task components are complete and approved, and
- * implementation can begin. Reuses the shared attention pattern visual style. */
-function ImplementationReadinessCard() {
+/** Implementation stage review gate: shown on Tasks tab when spec reaches
+ * implementation or complete stage. Shows approval UI when in_review, success
+ * message when complete. */
+function ImplementationReviewGate({
+	specId,
+	implementationStatus,
+	isComplete
+}: {
+	specId: string;
+	implementationStatus: string;
+	isComplete: boolean;
+}) {
+	const approve = useApproveStage(specId);
+	const deny = useDenyStage(specId);
+	const [denyOpen, setDenyOpen] = useState(false);
+	const [reason, setReason] = useState('');
+
+	if (isComplete || implementationStatus === 'approved') {
+		return (
+			<div className="rl-card rl-card__pad">
+				<div className="rl-eyebrow" style={{ marginBottom: 6, color: 'var(--emerald-500)' }}>
+					Complete
+				</div>
+				<div className="rl-gate-card__line" style={{ color: 'var(--emerald-500)' }}>
+					<Check size={15} /> Implementation approved · web-ui
+				</div>
+			</div>
+		);
+	}
+
+	if (implementationStatus === 'denied') {
+		return (
+			<div className="rl-card rl-card__pad">
+				<div className="rl-gate-card__line" style={{ color: 'var(--rose-500)' }}>
+					Denied — re-work needed
+				</div>
+			</div>
+		);
+	}
+
+	// in_review or not_started
 	return (
 		<div className="rl-card rl-card__pad">
-			<div className="rl-eyebrow" style={{ marginBottom: 6, color: 'var(--emerald-500)' }}>
-				Ready for Implementation
+			<div className="rl-eyebrow" style={{ marginBottom: 6 }}>
+				Implementation review gate
 			</div>
-			<div className="rl-gate-card__line" style={{ color: 'var(--emerald-500)', marginBottom: 8 }}>
-				<Check size={15} /> All components approved
-			</div>
-			<p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
-				Every task component has been reviewed and approved. This spec is ready to implement.
+			<p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)', marginBottom: 12 }}>
+				Implementation is complete. Approve to mark this spec as done, or deny if re-work is needed.
 			</p>
+			{!denyOpen ? (
+				<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+					<Button
+						variant="success"
+						block
+						icon={Check}
+						disabled={approve.isPending}
+						onClick={() => approve.mutate({ stage: 'implementation' })}
+					>
+						Approve
+					</Button>
+					<Button variant="danger" block icon={X} onClick={() => setDenyOpen(true)}>
+						Deny & request re-work
+					</Button>
+				</div>
+			) : (
+				<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+					<Textarea label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What needs to change." />
+					<div style={{ display: 'flex', gap: 8 }}>
+						<Button variant="ghost" onClick={() => setDenyOpen(false)}>
+							Cancel
+						</Button>
+						<Button
+							variant="danger"
+							disabled={!reason.trim() || deny.isPending}
+							onClick={() =>
+								deny.mutate({ stage: 'implementation', reason }, { onSuccess: () => { setDenyOpen(false); setReason(''); } })
+							}
+						>
+							Confirm deny
+						</Button>
+					</div>
+				</div>
+			)}
+			{approve.isError || deny.isError ? (
+				<p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--rose-500)' }}>
+					{(approve.error as Error)?.message ?? (deny.error as Error)?.message}
+				</p>
+			) : null}
 		</div>
 	);
 }

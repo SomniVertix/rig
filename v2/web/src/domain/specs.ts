@@ -4,11 +4,12 @@ import type { DisplayStageStatus, SpecDetail, SpecSummary } from '../data/specs/
 /** Pipeline order — for StageStepper rendering (requirements → design → tasks → implementation). */
 export const SPEC_STAGE_ORDER: SpecStageName[] = ['requirements', 'design', 'tasks'];
 
-function currentStageOf(spec: SpecDTO): SpecStageName | 'implementation' {
+function currentStageOf(spec: SpecDTO): SpecStageName | 'implementation' | 'complete' {
 	if (spec.requirementsStageStatus !== 'approved') return 'requirements';
 	if (spec.designStageStatus !== 'approved') return 'design';
 	if (spec.tasksStageStatus !== 'approved') return 'tasks';
-	return 'implementation';
+	if (spec.implementationStageStatus !== 'approved') return 'implementation';
+	return 'complete';
 }
 
 function stagesOf(spec: SpecDTO): SpecSummary['stages'] {
@@ -49,6 +50,9 @@ export function toSpecDetail(spec: SpecDTO): SpecDetail {
 		designDataModelOverview: spec.designDataModelOverview ?? undefined,
 		designDeniedAt: spec.designDeniedAt ?? undefined,
 		designLastDenialReason: spec.designLastDenialReason ?? undefined,
+		implementationStageStatus: spec.implementationLastDenialReason ? 'denied' : spec.implementationStageStatus,
+		implementationDeniedAt: spec.implementationDeniedAt ?? undefined,
+		implementationLastDenialReason: spec.implementationLastDenialReason ?? undefined,
 		createdAt: spec.createdAt,
 		updatedAt: spec.updatedAt
 	};

@@ -84,6 +84,9 @@ export interface SpecDTO {
 	designLastDenialReason?: string | null;
 	/** Derived live from every component's TasksDoc — never stored. */
 	tasksStageStatus: SpecStageStatus;
+	implementationStageStatus: SpecStageStatus;
+	implementationDeniedAt?: string | null;
+	implementationLastDenialReason?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }

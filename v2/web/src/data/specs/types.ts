@@ -33,5 +33,8 @@ export interface SpecDetail extends SpecSummary {
 	designDataModelOverview?: string;
 	designDeniedAt?: string;
 	designLastDenialReason?: string;
+	implementationStageStatus: DisplayStageStatus;
+	implementationDeniedAt?: string;
+	implementationLastDenialReason?: string;
 	createdAt: string;
 }
