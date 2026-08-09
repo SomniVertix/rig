@@ -208,6 +208,16 @@ func finalizeStage(svc *service.Service) func(context.Context, *mcp.CallToolRequ
 				return nil, finalizeStageOut{}, err
 			}
 			return nil, finalizeStageOut{Spec: &out}, nil
+		case "implementation":
+			spec, err := svc.FinalizeImplementationStage(ctx, in.SpecID)
+			if err != nil {
+				return nil, finalizeStageOut{}, err
+			}
+			out, err := specOutFor(ctx, svc, spec)
+			if err != nil {
+				return nil, finalizeStageOut{}, err
+			}
+			return nil, finalizeStageOut{Spec: &out}, nil
 		case "tasks":
 			if in.Component == nil {
 				return nil, finalizeStageOut{}, fmt.Errorf("mcpserver: finalize_stage: stage \"tasks\" requires component")

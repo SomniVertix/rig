@@ -805,6 +805,12 @@ func (h *Handlers) stageAction(w http.ResponseWriter, r *http.Request, kind stag
 		spec, err = h.svc.ApproveDesignStage(r.Context(), specID)
 	case req.Stage == "design" && kind == stageDeny:
 		spec, err = h.svc.DenyDesignStage(r.Context(), specID, req.Reason)
+	case req.Stage == "implementation" && kind == stageFinalize:
+		spec, err = h.svc.FinalizeImplementationStage(r.Context(), specID)
+	case req.Stage == "implementation" && kind == stageApprove:
+		spec, err = h.svc.ApproveImplementationStage(r.Context(), specID)
+	case req.Stage == "implementation" && kind == stageDeny:
+		spec, err = h.svc.DenyImplementationStage(r.Context(), specID, req.Reason)
 	default:
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unknown stage \"" + req.Stage + "\""})
 		return

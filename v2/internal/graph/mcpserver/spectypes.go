@@ -17,11 +17,14 @@ type specOut struct {
 	RequirementsLastDenialReason *string    `json:"requirementsLastDenialReason,omitempty"`
 	DesignOverview               string     `json:"designOverview"`
 	DesignArchitecture           string     `json:"designArchitecture"`
-	DesignDataModelOverview      *string    `json:"designDataModelOverview,omitempty"`
-	DesignStageStatus            string     `json:"designStageStatus"`
-	DesignDeniedAt               *time.Time `json:"designDeniedAt,omitempty"`
-	DesignLastDenialReason       *string    `json:"designLastDenialReason,omitempty"`
-	TasksStageStatus             string     `json:"tasksStageStatus" jsonschema:"derived live from every component's TasksDoc — never stored"`
+	DesignDataModelOverview           *string    `json:"designDataModelOverview,omitempty"`
+	DesignStageStatus                 string     `json:"designStageStatus"`
+	DesignDeniedAt                    *time.Time `json:"designDeniedAt,omitempty"`
+	DesignLastDenialReason            *string    `json:"designLastDenialReason,omitempty"`
+	TasksStageStatus                  string     `json:"tasksStageStatus" jsonschema:"derived live from every component's TasksDoc — never stored"`
+	ImplementationStageStatus         string     `json:"implementationStageStatus"`
+	ImplementationDeniedAt            *time.Time `json:"implementationDeniedAt,omitempty"`
+	ImplementationLastDenialReason    *string    `json:"implementationLastDenialReason,omitempty"`
 }
 
 func newSpecOut(s *domain.Spec, tasksStatus domain.SpecStageStatus) specOut {
@@ -32,12 +35,15 @@ func newSpecOut(s *domain.Spec, tasksStatus domain.SpecStageStatus) specOut {
 		RequirementsDeniedAt:         s.RequirementsDeniedAt,
 		RequirementsLastDenialReason: s.RequirementsLastDenialReason,
 		DesignOverview:               s.DesignOverview,
-		DesignArchitecture:           s.DesignArchitecture,
-		DesignDataModelOverview:      s.DesignDataModelOverview,
-		DesignStageStatus:            string(s.DesignStageStatus),
-		DesignDeniedAt:               s.DesignDeniedAt,
-		DesignLastDenialReason:       s.DesignLastDenialReason,
-		TasksStageStatus:             string(tasksStatus),
+		DesignArchitecture:                s.DesignArchitecture,
+		DesignDataModelOverview:           s.DesignDataModelOverview,
+		DesignStageStatus:                 string(s.DesignStageStatus),
+		DesignDeniedAt:                    s.DesignDeniedAt,
+		DesignLastDenialReason:            s.DesignLastDenialReason,
+		TasksStageStatus:                  string(tasksStatus),
+		ImplementationStageStatus:         string(s.ImplementationStageStatus),
+		ImplementationDeniedAt:            s.ImplementationDeniedAt,
+		ImplementationLastDenialReason:    s.ImplementationLastDenialReason,
 	}
 }
 

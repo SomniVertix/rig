@@ -494,6 +494,21 @@ func (svc *Service) DenyDesignStage(ctx context.Context, specID, reason string) 
 	return svc.store.DenyDesignStage(ctx, specID, reason)
 }
 
+func (svc *Service) FinalizeImplementationStage(ctx context.Context, specID string) (*domain.Spec, error) {
+	return svc.store.FinalizeImplementationStage(ctx, specID)
+}
+
+func (svc *Service) ApproveImplementationStage(ctx context.Context, specID string) (*domain.Spec, error) {
+	return svc.store.ApproveImplementationStage(ctx, specID)
+}
+
+func (svc *Service) DenyImplementationStage(ctx context.Context, specID, reason string) (*domain.Spec, error) {
+	if strings.TrimSpace(reason) == "" {
+		return nil, fmt.Errorf("service: deny_stage requires a non-empty reason")
+	}
+	return svc.store.DenyImplementationStage(ctx, specID, reason)
+}
+
 // FinalizeTasksStage finalizes one component's TasksDoc. Beyond its own
 // zero_task_files_touched gate, it also runs the whole spec's
 // HasTaskDependencyCycle check — v1 does the same: cycle detection walks
