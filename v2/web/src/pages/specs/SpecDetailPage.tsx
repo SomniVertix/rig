@@ -44,11 +44,11 @@ export function SpecDetailPage() {
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading spec…</p>;
 	if (isError || !spec) return <p style={{ color: 'var(--rose-500)' }}>Failed to load spec: {(error as Error)?.message ?? 'not found'}</p>;
 
-	// Prototype: treat specs as 'complete' if they've been in implementation for a while
+	// Prototype: treat all implementation-stage specs as 'complete'
 	// Real logic would check spec.implementationStageStatus === 'approved'
-	const isComplete = spec.currentStage === 'implementation' && false; // TODO: real backend field
+	const isComplete = spec.currentStage === 'implementation';
 	const currentStageDisplay = isComplete ? 'complete' : spec.currentStage;
-	const headlineStatus = spec.currentStage === 'implementation' ? 'approved' : spec.stages[spec.currentStage];
+	const headlineStatus = isComplete ? 'approved' : spec.currentStage === 'implementation' ? 'approved' : spec.stages[spec.currentStage];
 
 	return (
 		<div>
