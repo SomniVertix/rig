@@ -94,8 +94,8 @@ func (svc *Service) ResumeHandoffConversation(ctx context.Context, conversationI
 	}
 
 	return svc.store.ResumeHandoffConversation(ctx, store.ResumeHandoffConversationParams{
-		ConversationID:   conversationID,
-		RaiseTurnCapBy:   raiseTurnCapBy,
+		ConversationID: conversationID,
+		RaiseTurnCapBy: raiseTurnCapBy,
 	})
 }
 
@@ -120,13 +120,11 @@ func (svc *Service) DraftHandoffResolution(ctx context.Context, conversationID s
 		actionStr = &s
 	}
 	return svc.store.DraftHandoffResolution(ctx, store.DraftHandoffResolutionParams{
-		ConversationID:   conversationID,
-		Action:           actionStr,
-		ResolutionNote:   note,
+		ConversationID: conversationID,
+		Action:         actionStr,
+		ResolutionNote: note,
 	})
 }
-
-
 
 // Helper
 func strPtr(s string) *string {

@@ -36,7 +36,7 @@ func (s *Neo4jStore) CreateExpedition(ctx context.Context, params store.CreateEx
 	rec, err := neo4j.ExecuteWrite(ctx, sess, func(tx neo4j.ManagedTransaction) (*neo4j.Record, error) {
 		res, err := tx.Run(ctx, cypher, map[string]any{
 			"id":             id,
-			"workspaceId":      params.WorkspaceID,
+			"workspaceId":    params.WorkspaceID,
 			"slug":           params.Slug,
 			"title":          params.Title,
 			"briefingPrompt": params.BriefingPrompt,
@@ -97,7 +97,7 @@ func (s *Neo4jStore) CreateExpeditionFromHandoff(ctx context.Context, handoffID 
 		res, err := tx.Run(ctx, cypher, map[string]any{
 			"handoffId":      handoffID,
 			"expeditionId":   expeditionID,
-			"workspaceId":      params.WorkspaceID,
+			"workspaceId":    params.WorkspaceID,
 			"slug":           params.Slug,
 			"title":          params.Title,
 			"briefingPrompt": params.BriefingPrompt,

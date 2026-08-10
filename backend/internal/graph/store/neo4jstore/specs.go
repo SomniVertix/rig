@@ -34,7 +34,7 @@ func (s *Neo4jStore) CreateSpec(ctx context.Context, params store.CreateSpecPara
 	rec, err := neo4j.ExecuteWrite(ctx, sess, func(tx neo4j.ManagedTransaction) (*neo4j.Record, error) {
 		res, err := tx.Run(ctx, cypher, map[string]any{
 			"id":          id,
-			"workspaceId":   params.WorkspaceID,
+			"workspaceId": params.WorkspaceID,
 			"slug":        params.Slug,
 			"featureName": params.FeatureName,
 			"notStarted":  string(domain.SpecStageNotStarted),
@@ -66,7 +66,7 @@ func (s *Neo4jStore) GetSpecBySlug(ctx context.Context, workspaceID, slug string
 	rec, err := neo4j.ExecuteRead(ctx, sess, func(tx neo4j.ManagedTransaction) (*neo4j.Record, error) {
 		res, err := tx.Run(ctx, "MATCH (s:Spec {workspaceId: $workspaceId, slug: $slug}) RETURN s", map[string]any{
 			"workspaceId": workspaceID,
-			"slug":      slug,
+			"slug":        slug,
 		})
 		if err != nil {
 			return nil, err

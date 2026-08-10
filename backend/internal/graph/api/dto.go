@@ -13,7 +13,7 @@ import (
 
 type expeditionDTO struct {
 	ID             string    `json:"id"`
-	WorkspaceID      string    `json:"workspaceId"`
+	WorkspaceID    string    `json:"workspaceId"`
 	Slug           string    `json:"slug"`
 	Title          string    `json:"title"`
 	BriefingPrompt string    `json:"briefingPrompt"`
@@ -32,7 +32,7 @@ type expeditionDTO struct {
 func newExpeditionDTO(e *domain.Expedition) expeditionDTO {
 	dto := expeditionDTO{
 		ID:             e.ID,
-		WorkspaceID:      e.WorkspaceID,
+		WorkspaceID:    e.WorkspaceID,
 		Slug:           e.Slug,
 		Title:          e.Title,
 		BriefingPrompt: e.BriefingPrompt,
@@ -127,7 +127,7 @@ func newLineageDTO(l *domain.ExpeditionLineage) lineageDTO {
 }
 
 type createExpeditionRequest struct {
-	WorkspaceID      string  `json:"workspaceId"`
+	WorkspaceID    string  `json:"workspaceId"`
 	Slug           string  `json:"slug"`
 	Title          string  `json:"title"`
 	BriefingPrompt string  `json:"briefingPrompt"`
@@ -138,7 +138,7 @@ type createExpeditionRequest struct {
 
 func (r createExpeditionRequest) toParams() store.CreateExpeditionParams {
 	return store.CreateExpeditionParams{
-		WorkspaceID:      r.WorkspaceID,
+		WorkspaceID:    r.WorkspaceID,
 		Slug:           r.Slug,
 		Title:          r.Title,
 		BriefingPrompt: r.BriefingPrompt,
@@ -246,7 +246,7 @@ type reasonRequest struct {
 }
 
 type spurWaypointRequest struct {
-	WorkspaceID      string  `json:"workspaceId"`
+	WorkspaceID    string  `json:"workspaceId"`
 	Slug           string  `json:"slug"`
 	Title          string  `json:"title"`
 	BriefingPrompt string  `json:"briefingPrompt"`
@@ -259,7 +259,7 @@ type spurWaypointRequest struct {
 func (r spurWaypointRequest) toParams() store.SpurWaypointParams {
 	return store.SpurWaypointParams{
 		CreateExpeditionParams: store.CreateExpeditionParams{
-			WorkspaceID:      r.WorkspaceID,
+			WorkspaceID:    r.WorkspaceID,
 			Slug:           r.Slug,
 			Title:          r.Title,
 			BriefingPrompt: r.BriefingPrompt,
@@ -443,47 +443,47 @@ type updateExpeditionTermRequest struct {
 // above, which still has no REST equivalent and shouldn't get one from this.
 
 type specDTO struct {
-	ID                           string     `json:"id"`
+	ID                             string     `json:"id"`
 	WorkspaceID                    string     `json:"workspaceId"`
-	Slug                         string     `json:"slug"`
-	FeatureName                  string     `json:"featureName"`
-	RequirementsOverview         string     `json:"requirementsOverview"`
-	RequirementsStageStatus      string     `json:"requirementsStageStatus"`
-	RequirementsDeniedAt         *time.Time `json:"requirementsDeniedAt,omitempty"`
-	RequirementsLastDenialReason *string    `json:"requirementsLastDenialReason,omitempty"`
-	DesignOverview               string     `json:"designOverview"`
-	DesignArchitecture           string     `json:"designArchitecture"`
-	DesignDataModelOverview           *string    `json:"designDataModelOverview,omitempty"`
-	DesignStageStatus                 string     `json:"designStageStatus"`
-	DesignDeniedAt                    *time.Time `json:"designDeniedAt,omitempty"`
-	DesignLastDenialReason            *string    `json:"designLastDenialReason,omitempty"`
-	TasksStageStatus                  string     `json:"tasksStageStatus"`
-	ImplementationStageStatus         string     `json:"implementationStageStatus"`
-	ImplementationDeniedAt            *time.Time `json:"implementationDeniedAt,omitempty"`
-	ImplementationLastDenialReason    *string    `json:"implementationLastDenialReason,omitempty"`
-	CreatedAt                         time.Time  `json:"createdAt"`
-	UpdatedAt                    time.Time  `json:"updatedAt"`
+	Slug                           string     `json:"slug"`
+	FeatureName                    string     `json:"featureName"`
+	RequirementsOverview           string     `json:"requirementsOverview"`
+	RequirementsStageStatus        string     `json:"requirementsStageStatus"`
+	RequirementsDeniedAt           *time.Time `json:"requirementsDeniedAt,omitempty"`
+	RequirementsLastDenialReason   *string    `json:"requirementsLastDenialReason,omitempty"`
+	DesignOverview                 string     `json:"designOverview"`
+	DesignArchitecture             string     `json:"designArchitecture"`
+	DesignDataModelOverview        *string    `json:"designDataModelOverview,omitempty"`
+	DesignStageStatus              string     `json:"designStageStatus"`
+	DesignDeniedAt                 *time.Time `json:"designDeniedAt,omitempty"`
+	DesignLastDenialReason         *string    `json:"designLastDenialReason,omitempty"`
+	TasksStageStatus               string     `json:"tasksStageStatus"`
+	ImplementationStageStatus      string     `json:"implementationStageStatus"`
+	ImplementationDeniedAt         *time.Time `json:"implementationDeniedAt,omitempty"`
+	ImplementationLastDenialReason *string    `json:"implementationLastDenialReason,omitempty"`
+	CreatedAt                      time.Time  `json:"createdAt"`
+	UpdatedAt                      time.Time  `json:"updatedAt"`
 }
 
 func newSpecDTO(s *domain.Spec, tasksStatus domain.SpecStageStatus) specDTO {
 	return specDTO{
 		ID: s.ID, WorkspaceID: s.WorkspaceID, Slug: s.Slug, FeatureName: s.FeatureName,
-		RequirementsOverview:         s.RequirementsOverview,
-		RequirementsStageStatus:      string(s.RequirementsStageStatus),
-		RequirementsDeniedAt:         s.RequirementsDeniedAt,
-		RequirementsLastDenialReason: s.RequirementsLastDenialReason,
-		DesignOverview:               s.DesignOverview,
-		DesignArchitecture:                s.DesignArchitecture,
-		DesignDataModelOverview:           s.DesignDataModelOverview,
-		DesignStageStatus:                 string(s.DesignStageStatus),
-		DesignDeniedAt:                    s.DesignDeniedAt,
-		DesignLastDenialReason:            s.DesignLastDenialReason,
-		TasksStageStatus:                  string(tasksStatus),
-		ImplementationStageStatus:         string(s.ImplementationStageStatus),
-		ImplementationDeniedAt:            s.ImplementationDeniedAt,
-		ImplementationLastDenialReason:    s.ImplementationLastDenialReason,
-		CreatedAt:                         s.CreatedAt,
-		UpdatedAt:                    s.UpdatedAt,
+		RequirementsOverview:           s.RequirementsOverview,
+		RequirementsStageStatus:        string(s.RequirementsStageStatus),
+		RequirementsDeniedAt:           s.RequirementsDeniedAt,
+		RequirementsLastDenialReason:   s.RequirementsLastDenialReason,
+		DesignOverview:                 s.DesignOverview,
+		DesignArchitecture:             s.DesignArchitecture,
+		DesignDataModelOverview:        s.DesignDataModelOverview,
+		DesignStageStatus:              string(s.DesignStageStatus),
+		DesignDeniedAt:                 s.DesignDeniedAt,
+		DesignLastDenialReason:         s.DesignLastDenialReason,
+		TasksStageStatus:               string(tasksStatus),
+		ImplementationStageStatus:      string(s.ImplementationStageStatus),
+		ImplementationDeniedAt:         s.ImplementationDeniedAt,
+		ImplementationLastDenialReason: s.ImplementationLastDenialReason,
+		CreatedAt:                      s.CreatedAt,
+		UpdatedAt:                      s.UpdatedAt,
 	}
 }
 

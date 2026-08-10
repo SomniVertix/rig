@@ -15,7 +15,7 @@ func TestListDetailed(t *testing.T) {
 		wantSortedIDOrder []string
 	}{
 		{
-			name:       "single workspace with folder",
+			name: "single workspace with folder",
 			workspaces: []scanner.Workspace{
 				{
 					Path:        "/home/user/my-project.code-workspace",
@@ -35,7 +35,7 @@ func TestListDetailed(t *testing.T) {
 			},
 		},
 		{
-			name:       "single workspace without folders - RootPath fallback",
+			name: "single workspace without folders - RootPath fallback",
 			workspaces: []scanner.Workspace{
 				{
 					Path:        "/home/user/empty.code-workspace",
@@ -55,7 +55,7 @@ func TestListDetailed(t *testing.T) {
 			},
 		},
 		{
-			name:       "workspace with multiple folders - first folder picked",
+			name: "workspace with multiple folders - first folder picked",
 			workspaces: []scanner.Workspace{
 				{
 					Path:        "/workspace/multi.code-workspace",
@@ -75,7 +75,7 @@ func TestListDetailed(t *testing.T) {
 			},
 		},
 		{
-			name:       "name derivation strips .code-workspace extension",
+			name: "name derivation strips .code-workspace extension",
 			workspaces: []scanner.Workspace{
 				{
 					Path:        "/config/my-special-workspace.code-workspace",
@@ -95,7 +95,7 @@ func TestListDetailed(t *testing.T) {
 			},
 		},
 		{
-			name:       "multiple workspaces sorted by ID",
+			name: "multiple workspaces sorted by ID",
 			workspaces: []scanner.Workspace{
 				{
 					Path:        "/root/zebra.code-workspace",
@@ -137,7 +137,7 @@ func TestListDetailed(t *testing.T) {
 			},
 		},
 		{
-			name:       "duplicate workspaceId - first occurrence wins (dedup)",
+			name: "duplicate workspaceId - first occurrence wins (dedup)",
 			workspaces: []scanner.Workspace{
 				{
 					Path:        "/root/first.code-workspace",

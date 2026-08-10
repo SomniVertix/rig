@@ -48,8 +48,8 @@ type Waypoint struct {
 	ResolutionGist        *string
 	Rationale             *string
 	BypassReason          *string
-	UnbypassReason        *string // why unbypass_waypoint was last called; nulled by a subsequent bypass
-	UnspurReason          *string // why unspur_waypoint was last called; nulled by a subsequent spur
+	UnbypassReason        *string         // why unbypass_waypoint was last called; nulled by a subsequent bypass
+	UnspurReason          *string         // why unspur_waypoint was last called; nulled by a subsequent spur
 	PreviousStatus        *WaypointStatus // status immediately before bypass_waypoint terminated it (marked, sighted, or rehydrating)
 	ReachedIn             *string         // provenance: identifier of the conversation that resolved it
 	ReachedAt             *time.Time

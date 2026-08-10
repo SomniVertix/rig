@@ -70,9 +70,10 @@ func RegisterTools(server *mcp.Server, svc *service.Service) {
 // toolError reports a business-logic failure (not found, conflict, bad
 // input, not implemented) as tool content rather than a protocol-level
 // error, so the calling model can see what went wrong and self-correct.
-// Returning a plain error from a ToolHandlerFor does the same thing
-// automatically, but every tool here goes through this so the shape is
-// consistent and callers can rely on it.
+// Returning a plain error from a ToolHandlerFor produces the identical
+// IsError CallToolResult shape automatically (see the SDK's SetError), so
+// most tools below just return the error directly — toolError only earns
+// its keep where a handler wants a custom message distinct from err.Error().
 func toolError(message string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		IsError: true,

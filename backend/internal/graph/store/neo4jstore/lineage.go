@@ -51,7 +51,7 @@ func (s *Neo4jStore) SpurWaypoint(ctx context.Context, waypointID string, params
 		res, err := tx.Run(ctx, cypher, map[string]any{
 			"waypointId":     waypointID,
 			"expeditionId":   expeditionID,
-			"workspaceId":      params.WorkspaceID,
+			"workspaceId":    params.WorkspaceID,
 			"slug":           params.Slug,
 			"title":          params.Title,
 			"briefingPrompt": params.BriefingPrompt,

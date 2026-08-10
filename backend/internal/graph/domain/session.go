@@ -29,7 +29,7 @@ type Session struct {
 	Label        *string
 	Kind         SessionKind
 	Executor     string // "claude" today
-	WorkspaceID    *string
+	WorkspaceID  *string
 	SeedPrompt   *string
 	Status       SessionStatus
 	LastAnswerAt *time.Time

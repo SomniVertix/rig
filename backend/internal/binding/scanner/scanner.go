@@ -31,7 +31,7 @@ var kebabSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // Workspace is one successfully-parsed *.code-workspace file with a valid
 // rig.workspaceId.
 type Workspace struct {
-	Path      string
+	Path        string
 	WorkspaceID string
 	// Folders holds each entry of the file's "folders" array, resolved to an
 	// absolute, cleaned path (relative entries resolve against the
@@ -141,9 +141,9 @@ func classifyFile(path string, result *Result) {
 	}
 
 	result.Workspaces = append(result.Workspaces, Workspace{
-		Path:      path,
+		Path:        path,
 		WorkspaceID: workspaceID,
-		Folders:   folders,
+		Folders:     folders,
 	})
 }
 

@@ -68,10 +68,6 @@ func (svc *Service) renderRequirements(ctx context.Context, specID string) (stri
 	}
 	b.WriteString("\n")
 
-	unresolved, err := svc.store.ListUnresolvedOpenQuestions(ctx, specID, domain.SpecStageRequirements)
-	if err != nil {
-		return "", err
-	}
 	all, err := svc.store.ListOpenQuestions(ctx, specID)
 	if err != nil {
 		return "", err
@@ -83,7 +79,6 @@ func (svc *Service) renderRequirements(ctx context.Context, specID string) (stri
 		}
 		writeOpenQuestionLine(&b, q)
 	}
-	_ = unresolved // gate logic lives in checkNoUnresolvedOpenQuestions; rendering shows all, resolved or not
 	b.WriteString("\n")
 
 	terms, err := svc.store.ListGlossaryTerms(ctx, specID)

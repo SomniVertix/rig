@@ -162,17 +162,17 @@ type getHandoffOut struct {
 // --- Input types (wire shapes for tool requests) ---
 
 type sendHandoffIn struct {
-	SourceWorkspaceID string                    `json:"sourceWorkspaceId"`
-	TargetWorkspaceID string                    `json:"targetWorkspaceId"`
-	Title             string                    `json:"title"`
-	BodyMarkdown      string                    `json:"bodyMarkdown"`
-	Type              string                    `json:"type"`
-	SentBy            string                    `json:"sentBy"`
-	Attachments       []handoffAttachmentInput  `json:"attachments,omitempty"`
+	SourceWorkspaceID  string                   `json:"sourceWorkspaceId"`
+	TargetWorkspaceID  string                   `json:"targetWorkspaceId"`
+	Title              string                   `json:"title"`
+	BodyMarkdown       string                   `json:"bodyMarkdown"`
+	Type               string                   `json:"type"`
+	SentBy             string                   `json:"sentBy"`
+	Attachments        []handoffAttachmentInput `json:"attachments,omitempty"`
 	OriginExpeditionID *string                  `json:"originExpeditionId,omitempty"`
-	OriginWaypointID  *string                   `json:"originWaypointId,omitempty"`
-	OriginCommitSHA   *string                   `json:"originCommitSha,omitempty"`
-	OriginSessionID   *string                   `json:"originSessionId,omitempty"`
+	OriginWaypointID   *string                  `json:"originWaypointId,omitempty"`
+	OriginCommitSHA    *string                  `json:"originCommitSha,omitempty"`
+	OriginSessionID    *string                  `json:"originSessionId,omitempty"`
 }
 
 type handoffAttachmentInput struct {

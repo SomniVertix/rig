@@ -18,13 +18,16 @@ type Config struct {
 	Neo4jDatabase string
 }
 
-// Load reads configuration from environment variables, applying the same
-// defaults v1's docker-compose.yml did where an analog exists.
+// Load reads configuration from environment variables. Defaults match the
+// bundled docker-compose Neo4j container's topology (see docker-compose.yml)
+// for a bare `go run ./cmd/rig` against it — never a specific external
+// instance, so a missing env var fails toward "wrong local target" at worst,
+// not a silent connection to someone else's database.
 func Load() (Config, error) {
 	cfg := Config{
-		Neo4jURI:      getEnv("GRAPH_NEO4J_URI", "neo4j+s://bc963923.databases.neo4j.io"),
-		Neo4jUsername: getEnv("GRAPH_NEO4J_USERNAME", "bc963923"),
-		Neo4jDatabase: getEnv("GRAPH_NEO4J_DATABASE", "g7C2sRRjVzZK6-wTZ7NWaDJSiBvV39FkmPDN433WaHE"),
+		Neo4jURI:      getEnv("GRAPH_NEO4J_URI", "neo4j://localhost:7687"),
+		Neo4jUsername: getEnv("GRAPH_NEO4J_USERNAME", "neo4j"),
+		Neo4jDatabase: getEnv("GRAPH_NEO4J_DATABASE", "neo4j"),
 	}
 
 	cfg.Neo4jPassword = os.Getenv("GRAPH_NEO4J_PASSWORD")

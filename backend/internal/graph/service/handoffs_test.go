@@ -13,14 +13,14 @@ import (
 // if called), and tracks which store methods were invoked during tests.
 type handoffStubStore struct {
 	store.Store
-	sendHandoffCalled         bool
-	closeHandoffCalled        bool
+	sendHandoffCalled          bool
+	closeHandoffCalled         bool
 	addHandoffAttachmentCalled bool
-	markHandoffReadCalled     bool
-	getHandoffCall            int // count of GetHandoff calls, 0-based
-	handoffToReturn           *domain.Handoff
-	attachmentToReturn        *domain.HandoffAttachment
-	errToReturn               error
+	markHandoffReadCalled      bool
+	getHandoffCall             int // count of GetHandoff calls, 0-based
+	handoffToReturn            *domain.Handoff
+	attachmentToReturn         *domain.HandoffAttachment
+	errToReturn                error
 }
 
 func (s *handoffStubStore) SendHandoff(ctx context.Context, params store.SendHandoffParams) (*domain.Handoff, error) {
@@ -95,7 +95,7 @@ func (s *handoffStubStore) AddHandoffAttachment(ctx context.Context, params stor
 
 // TestSendHandoffValidation tests SendHandoff's validation guards.
 func TestSendHandoffValidation(t *testing.T) {
-	tests := []struct{
+	tests := []struct {
 		name       string
 		params     store.SendHandoffParams
 		wantErr    bool
@@ -341,11 +341,11 @@ func TestSendHandoffWithAttachments(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
+		name        string
 		attachments []store.HandoffAttachmentInput
-		wantErr    bool
-		wantErrMsg string
-		wantCalled bool
+		wantErr     bool
+		wantErrMsg  string
+		wantCalled  bool
 	}{
 		{
 			name:        "valid without attachments",
@@ -517,36 +517,36 @@ func (s *getHandoffStubStore) MarkHandoffRead(ctx context.Context, handoffID str
 // TestGetHandoffTransitions tests GetHandoff's state transitions.
 func TestGetHandoffTransitions(t *testing.T) {
 	tests := []struct {
-		name                    string
-		handoffStatus           domain.HandoffStatus
+		name                   string
+		handoffStatus          domain.HandoffStatus
 		wantTransitionedToRead bool
 		wantFinalStatus        domain.HandoffStatus
 		wantMarkReadCalled     bool
 	}{
 		{
-			name:                    "pending handoff transitions to read",
-			handoffStatus:           domain.HandoffStatusPending,
+			name:                   "pending handoff transitions to read",
+			handoffStatus:          domain.HandoffStatusPending,
 			wantTransitionedToRead: true,
 			wantFinalStatus:        domain.HandoffStatusRead,
 			wantMarkReadCalled:     true,
 		},
 		{
-			name:                    "already read handoff no transition",
-			handoffStatus:           domain.HandoffStatusRead,
+			name:                   "already read handoff no transition",
+			handoffStatus:          domain.HandoffStatusRead,
 			wantTransitionedToRead: false,
 			wantFinalStatus:        domain.HandoffStatusRead,
 			wantMarkReadCalled:     false,
 		},
 		{
-			name:                    "actioned handoff no transition",
-			handoffStatus:           domain.HandoffStatusActioned,
+			name:                   "actioned handoff no transition",
+			handoffStatus:          domain.HandoffStatusActioned,
 			wantTransitionedToRead: false,
 			wantFinalStatus:        domain.HandoffStatusActioned,
 			wantMarkReadCalled:     false,
 		},
 		{
-			name:                    "dismissed handoff no transition",
-			handoffStatus:           domain.HandoffStatusDismissed,
+			name:                   "dismissed handoff no transition",
+			handoffStatus:          domain.HandoffStatusDismissed,
 			wantTransitionedToRead: false,
 			wantFinalStatus:        domain.HandoffStatusDismissed,
 			wantMarkReadCalled:     false,

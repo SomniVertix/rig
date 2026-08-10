@@ -38,7 +38,7 @@ const (
 // Spec via HAS_* relationships, per decision 4.
 type Spec struct {
 	ID          string
-	WorkspaceID   string
+	WorkspaceID string
 	Slug        string
 	FeatureName string
 

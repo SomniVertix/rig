@@ -106,7 +106,7 @@ func nodeToExpedition(n neo4j.Node) (*domain.Expedition, error) {
 
 	e := &domain.Expedition{
 		ID:             id,
-		WorkspaceID:      workspaceID,
+		WorkspaceID:    workspaceID,
 		Slug:           slug,
 		Title:          title,
 		BriefingPrompt: briefingPrompt,
@@ -489,25 +489,25 @@ func nodeToSpec(n neo4j.Node) (*domain.Spec, error) {
 	}
 
 	return &domain.Spec{
-		ID:                           id,
+		ID:                             id,
 		WorkspaceID:                    workspaceID,
-		Slug:                         slug,
-		FeatureName:                  featureName,
-		RequirementsOverview:         requirementsOverview,
-		RequirementsStageStatus:      domain.SpecStageStatus(requirementsStatus),
-		RequirementsDeniedAt:         getTimePtrProp(p, "requirementsDeniedAt"),
-		RequirementsLastDenialReason: getStringPtrProp(p, "requirementsLastDenialReason"),
-		DesignOverview:                    designOverview,
-		DesignArchitecture:                designArchitecture,
-		DesignDataModelOverview:           getStringPtrProp(p, "designDataModelOverview"),
-		DesignStageStatus:                 domain.SpecStageStatus(designStatus),
-		DesignDeniedAt:                    getTimePtrProp(p, "designDeniedAt"),
-		DesignLastDenialReason:            getStringPtrProp(p, "designLastDenialReason"),
-		ImplementationStageStatus:         domain.SpecStageStatus(implementationStatus),
-		ImplementationDeniedAt:            getTimePtrProp(p, "implementationDeniedAt"),
-		ImplementationLastDenialReason:    getStringPtrProp(p, "implementationLastDenialReason"),
-		CreatedAt:                         createdAt,
-		UpdatedAt:                         updatedAt,
+		Slug:                           slug,
+		FeatureName:                    featureName,
+		RequirementsOverview:           requirementsOverview,
+		RequirementsStageStatus:        domain.SpecStageStatus(requirementsStatus),
+		RequirementsDeniedAt:           getTimePtrProp(p, "requirementsDeniedAt"),
+		RequirementsLastDenialReason:   getStringPtrProp(p, "requirementsLastDenialReason"),
+		DesignOverview:                 designOverview,
+		DesignArchitecture:             designArchitecture,
+		DesignDataModelOverview:        getStringPtrProp(p, "designDataModelOverview"),
+		DesignStageStatus:              domain.SpecStageStatus(designStatus),
+		DesignDeniedAt:                 getTimePtrProp(p, "designDeniedAt"),
+		DesignLastDenialReason:         getStringPtrProp(p, "designLastDenialReason"),
+		ImplementationStageStatus:      domain.SpecStageStatus(implementationStatus),
+		ImplementationDeniedAt:         getTimePtrProp(p, "implementationDeniedAt"),
+		ImplementationLastDenialReason: getStringPtrProp(p, "implementationLastDenialReason"),
+		CreatedAt:                      createdAt,
+		UpdatedAt:                      updatedAt,
 	}, nil
 }
 

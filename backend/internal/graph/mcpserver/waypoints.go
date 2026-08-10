@@ -301,7 +301,7 @@ func unbypassWaypoint(svc *service.Service) func(context.Context, *mcp.CallToolR
 
 type spurWaypointIn struct {
 	WaypointID  string  `json:"waypointId" jsonschema:"the origin waypoint's id"`
-	WorkspaceID   string  `json:"workspaceId" jsonschema:"the resolved rig workspace id, from resolve_workspace_id"`
+	WorkspaceID string  `json:"workspaceId" jsonschema:"the resolved rig workspace id, from resolve_workspace_id"`
 	Slug        string  `json:"slug" jsonschema:"kebab-case slug for the new child expedition, unique per workspace"`
 	Title       string  `json:"title" jsonschema:"short human title for the child expedition"`
 	Destination *string `json:"destination,omitempty"`
@@ -325,7 +325,7 @@ func spurWaypoint(svc *service.Service) func(context.Context, *mcp.CallToolReque
 
 		child, err := svc.SpurWaypoint(ctx, in.WaypointID, store.SpurWaypointParams{
 			CreateExpeditionParams: store.CreateExpeditionParams{
-				WorkspaceID:      in.WorkspaceID,
+				WorkspaceID:    in.WorkspaceID,
 				Slug:           in.Slug,
 				Title:          in.Title,
 				BriefingPrompt: briefingPrompt,

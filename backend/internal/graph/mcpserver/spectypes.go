@@ -7,43 +7,43 @@ import (
 )
 
 type specOut struct {
-	ID                           string     `json:"id"`
+	ID                             string     `json:"id"`
 	WorkspaceID                    string     `json:"workspaceId"`
-	Slug                         string     `json:"slug"`
-	FeatureName                  string     `json:"featureName"`
-	RequirementsOverview         string     `json:"requirementsOverview"`
-	RequirementsStageStatus      string     `json:"requirementsStageStatus"`
-	RequirementsDeniedAt         *time.Time `json:"requirementsDeniedAt,omitempty"`
-	RequirementsLastDenialReason *string    `json:"requirementsLastDenialReason,omitempty"`
-	DesignOverview               string     `json:"designOverview"`
-	DesignArchitecture           string     `json:"designArchitecture"`
-	DesignDataModelOverview           *string    `json:"designDataModelOverview,omitempty"`
-	DesignStageStatus                 string     `json:"designStageStatus"`
-	DesignDeniedAt                    *time.Time `json:"designDeniedAt,omitempty"`
-	DesignLastDenialReason            *string    `json:"designLastDenialReason,omitempty"`
-	TasksStageStatus                  string     `json:"tasksStageStatus" jsonschema:"derived live from every component's TasksDoc — never stored"`
-	ImplementationStageStatus         string     `json:"implementationStageStatus"`
-	ImplementationDeniedAt            *time.Time `json:"implementationDeniedAt,omitempty"`
-	ImplementationLastDenialReason    *string    `json:"implementationLastDenialReason,omitempty"`
+	Slug                           string     `json:"slug"`
+	FeatureName                    string     `json:"featureName"`
+	RequirementsOverview           string     `json:"requirementsOverview"`
+	RequirementsStageStatus        string     `json:"requirementsStageStatus"`
+	RequirementsDeniedAt           *time.Time `json:"requirementsDeniedAt,omitempty"`
+	RequirementsLastDenialReason   *string    `json:"requirementsLastDenialReason,omitempty"`
+	DesignOverview                 string     `json:"designOverview"`
+	DesignArchitecture             string     `json:"designArchitecture"`
+	DesignDataModelOverview        *string    `json:"designDataModelOverview,omitempty"`
+	DesignStageStatus              string     `json:"designStageStatus"`
+	DesignDeniedAt                 *time.Time `json:"designDeniedAt,omitempty"`
+	DesignLastDenialReason         *string    `json:"designLastDenialReason,omitempty"`
+	TasksStageStatus               string     `json:"tasksStageStatus" jsonschema:"derived live from every component's TasksDoc — never stored"`
+	ImplementationStageStatus      string     `json:"implementationStageStatus"`
+	ImplementationDeniedAt         *time.Time `json:"implementationDeniedAt,omitempty"`
+	ImplementationLastDenialReason *string    `json:"implementationLastDenialReason,omitempty"`
 }
 
 func newSpecOut(s *domain.Spec, tasksStatus domain.SpecStageStatus) specOut {
 	return specOut{
 		ID: s.ID, WorkspaceID: s.WorkspaceID, Slug: s.Slug, FeatureName: s.FeatureName,
-		RequirementsOverview:         s.RequirementsOverview,
-		RequirementsStageStatus:      string(s.RequirementsStageStatus),
-		RequirementsDeniedAt:         s.RequirementsDeniedAt,
-		RequirementsLastDenialReason: s.RequirementsLastDenialReason,
-		DesignOverview:               s.DesignOverview,
-		DesignArchitecture:                s.DesignArchitecture,
-		DesignDataModelOverview:           s.DesignDataModelOverview,
-		DesignStageStatus:                 string(s.DesignStageStatus),
-		DesignDeniedAt:                    s.DesignDeniedAt,
-		DesignLastDenialReason:            s.DesignLastDenialReason,
-		TasksStageStatus:                  string(tasksStatus),
-		ImplementationStageStatus:         string(s.ImplementationStageStatus),
-		ImplementationDeniedAt:            s.ImplementationDeniedAt,
-		ImplementationLastDenialReason:    s.ImplementationLastDenialReason,
+		RequirementsOverview:           s.RequirementsOverview,
+		RequirementsStageStatus:        string(s.RequirementsStageStatus),
+		RequirementsDeniedAt:           s.RequirementsDeniedAt,
+		RequirementsLastDenialReason:   s.RequirementsLastDenialReason,
+		DesignOverview:                 s.DesignOverview,
+		DesignArchitecture:             s.DesignArchitecture,
+		DesignDataModelOverview:        s.DesignDataModelOverview,
+		DesignStageStatus:              string(s.DesignStageStatus),
+		DesignDeniedAt:                 s.DesignDeniedAt,
+		DesignLastDenialReason:         s.DesignLastDenialReason,
+		TasksStageStatus:               string(tasksStatus),
+		ImplementationStageStatus:      string(s.ImplementationStageStatus),
+		ImplementationDeniedAt:         s.ImplementationDeniedAt,
+		ImplementationLastDenialReason: s.ImplementationLastDenialReason,
 	}
 }
 

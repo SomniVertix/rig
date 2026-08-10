@@ -31,7 +31,7 @@ const (
 // never structural.
 type Expedition struct {
 	ID             string
-	WorkspaceID      string
+	WorkspaceID    string
 	Slug           string
 	Title          string
 	BriefingPrompt string // the user's initial ask, largely verbatim

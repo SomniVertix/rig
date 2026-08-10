@@ -10,7 +10,7 @@ import (
 // using SKILL.md's public vocabulary.
 type expeditionOut struct {
 	ID             string  `json:"id"`
-	WorkspaceID      string  `json:"workspaceId"`
+	WorkspaceID    string  `json:"workspaceId"`
 	Slug           string  `json:"slug"`
 	Title          string  `json:"title"`
 	BriefingPrompt string  `json:"briefingPrompt"`
@@ -26,7 +26,7 @@ type expeditionOut struct {
 func newExpeditionOut(e *domain.Expedition) expeditionOut {
 	out := expeditionOut{
 		ID:             e.ID,
-		WorkspaceID:      e.WorkspaceID,
+		WorkspaceID:    e.WorkspaceID,
 		Slug:           e.Slug,
 		Title:          e.Title,
 		BriefingPrompt: e.BriefingPrompt,

@@ -25,7 +25,7 @@ var ErrConflict = errors.New("store: conflict")
 var ErrNotImplemented = errors.New("store: not implemented")
 
 type CreateExpeditionParams struct {
-	WorkspaceID      string
+	WorkspaceID    string
 	Slug           string
 	Title          string
 	BriefingPrompt string
@@ -44,7 +44,7 @@ type SpurWaypointParams struct {
 
 type ListExpeditionsParams struct {
 	WorkspaceID string
-	Status    *domain.ExpeditionStatus
+	Status      *domain.ExpeditionStatus
 }
 
 type UpdateExpeditionParams struct {
@@ -100,11 +100,11 @@ type AddWaypointAssetParams struct {
 }
 
 type StartSessionParams struct {
-	Actor      string
-	Label      *string
-	Kind       domain.SessionKind
-	WorkspaceID  *string
-	SeedPrompt *string
+	Actor       string
+	Label       *string
+	Kind        domain.SessionKind
+	WorkspaceID *string
+	SeedPrompt  *string
 }
 
 // FlagWaypointParams raises a non-mutating marker on a target waypoint.
@@ -124,7 +124,7 @@ type FlagWaypointParams struct {
 // call this in is the Order section" rule.
 
 type CreateSpecParams struct {
-	WorkspaceID   string
+	WorkspaceID string
 	Slug        string
 	FeatureName string
 }

@@ -98,7 +98,9 @@ func run() error {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("server shutdown", "error", err)
+		}
 	}()
 
 	slog.Info("rig service listening", "addr", addr, "workspaceRoot", bindingCfg.WorkspaceRoot)

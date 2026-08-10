@@ -16,10 +16,10 @@ import (
 // GetHandoffConversationByHandoff error per handoff id.
 type stubStatusStore struct {
 	store.Store
-	handoffs         []domain.Handoff
+	handoffs          []domain.Handoff
 	listHandoffsCalls int
-	lastStatusFilter *string
-	conversationErrs map[string]error // handoffID -> error; store.ErrNotFound means "no conversation"
+	lastStatusFilter  *string
+	conversationErrs  map[string]error // handoffID -> error; store.ErrNotFound means "no conversation"
 }
 
 func (s *stubStatusStore) ListHandoffs(ctx context.Context, params store.ListHandoffsParams) ([]domain.Handoff, error) {

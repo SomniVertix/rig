@@ -226,20 +226,20 @@ type expeditionResultOut struct {
 }
 
 type createExpeditionIn struct {
-	WorkspaceID      string  `json:"workspaceId" jsonschema:"the resolved rig workspace id, from resolve_workspace_id"`
-	Slug           string  `json:"slug" jsonschema:"kebab-case expedition slug, unique per workspace"`
-	Title          string  `json:"title" jsonschema:"short human title"`
-	BriefingPrompt string  `json:"briefingPrompt" jsonschema:"the user's initial ask, largely verbatim"`
-	Destination    *string `json:"destination,omitempty" jsonschema:"what reaching the end looks like, one or two lines every session orients to"`
-	Notes          *string `json:"notes,omitempty" jsonschema:"domain, skills every session should consult, standing preferences for this effort"`
-	SessionID      *string `json:"sessionId,omitempty" jsonschema:"this invocation's start_session id, if the expedition is being chartered by a session"`
+	WorkspaceID     string  `json:"workspaceId" jsonschema:"the resolved rig workspace id, from resolve_workspace_id"`
+	Slug            string  `json:"slug" jsonschema:"kebab-case expedition slug, unique per workspace"`
+	Title           string  `json:"title" jsonschema:"short human title"`
+	BriefingPrompt  string  `json:"briefingPrompt" jsonschema:"the user's initial ask, largely verbatim"`
+	Destination     *string `json:"destination,omitempty" jsonschema:"what reaching the end looks like, one or two lines every session orients to"`
+	Notes           *string `json:"notes,omitempty" jsonschema:"domain, skills every session should consult, standing preferences for this effort"`
+	SessionID       *string `json:"sessionId,omitempty" jsonschema:"this invocation's start_session id, if the expedition is being chartered by a session"`
 	OriginHandoffID *string `json:"originHandoffId,omitempty" jsonschema:"handoff id, if the expedition is being chartered from a handoff via create_expedition(originHandoffId=...)"`
 }
 
 func createExpedition(svc *service.Service) func(context.Context, *mcp.CallToolRequest, createExpeditionIn) (*mcp.CallToolResult, expeditionResultOut, error) {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createExpeditionIn) (*mcp.CallToolResult, expeditionResultOut, error) {
 		params := store.CreateExpeditionParams{
-			WorkspaceID:      in.WorkspaceID,
+			WorkspaceID:    in.WorkspaceID,
 			Slug:           in.Slug,
 			Title:          in.Title,
 			BriefingPrompt: in.BriefingPrompt,
@@ -264,7 +264,7 @@ func createExpedition(svc *service.Service) func(context.Context, *mcp.CallToolR
 
 type listExpeditionsIn struct {
 	WorkspaceID string  `json:"workspaceId" jsonschema:"the resolved rig workspace id, from resolve_workspace_id"`
-	Status    *string `json:"status,omitempty" jsonschema:"filter: active | complete | abandoned"`
+	Status      *string `json:"status,omitempty" jsonschema:"filter: active | complete | abandoned"`
 }
 
 type expeditionListRowOut struct {
@@ -319,14 +319,14 @@ type workspaceStatusIn struct {
 }
 
 type handoffStatusRowOut struct {
-	ID                    string    `json:"id"`
-	Title                 string    `json:"title"`
-	Type                  string    `json:"type"`
-	Status                string    `json:"status"`
-	Direction             string    `json:"direction" jsonschema:"inbound or outbound relative to this workspace"`
-	CounterpartyWorkspaceID string   `json:"counterpartyWorkspaceId"`
-	SentAt                time.Time `json:"sentAt"`
-	HasConversation       bool      `json:"hasConversation"`
+	ID                      string    `json:"id"`
+	Title                   string    `json:"title"`
+	Type                    string    `json:"type"`
+	Status                  string    `json:"status"`
+	Direction               string    `json:"direction" jsonschema:"inbound or outbound relative to this workspace"`
+	CounterpartyWorkspaceID string    `json:"counterpartyWorkspaceId"`
+	SentAt                  time.Time `json:"sentAt"`
+	HasConversation         bool      `json:"hasConversation"`
 }
 
 type workspaceStatusOut struct {
@@ -397,14 +397,14 @@ func buildHandoffStatusRows(ctx context.Context, svc *service.Service, workspace
 		}
 
 		rows = append(rows, handoffStatusRowOut{
-			ID:                    h.ID,
-			Title:                 h.Title,
-			Type:                  h.Type,
-			Status:                h.Status,
-			Direction:             direction,
+			ID:                      h.ID,
+			Title:                   h.Title,
+			Type:                    h.Type,
+			Status:                  h.Status,
+			Direction:               direction,
 			CounterpartyWorkspaceID: counterparty,
-			SentAt:                h.SentAt,
-			HasConversation:       hasConversation,
+			SentAt:                  h.SentAt,
+			HasConversation:         hasConversation,
 		})
 	}
 

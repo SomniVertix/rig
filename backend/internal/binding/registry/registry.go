@@ -26,7 +26,7 @@ var ErrNoMatch = errors.New("registry: no workspace claims this directory")
 // determines which workspace's data an MCP session can read/write), so this
 // is a hard error rather than a silently-picked winner, matching v1.
 type AmbiguousError struct {
-	Dir        string
+	Dir          string
 	WorkspaceIDs []string
 }
 
@@ -80,7 +80,7 @@ func (r *Registry) Resolve(dir string) (string, error) {
 // resolve — folder paths are deliberately omitted.
 type WorkspaceSummary struct {
 	WorkspaceID string `json:"workspaceId"`
-	Label     string `json:"label"`
+	Label       string `json:"label"`
 }
 
 // List returns every distinct workspaceId known to this registry, sorted by
