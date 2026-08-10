@@ -1,0 +1,29 @@
+# Herdr plugin manifest — see https://herdr.dev/docs/plugins/.
+#
+# This plugin is a single Go binary (built by the [[build]] step below) that
+# opens as a terminal-pane dashboard over rig's REST API: the same
+# expeditions/waypoints/specs/tasks-docs/handoffs data the Rig web console
+# renders, viewable and (for waypoints and spec stages) actionable without
+# leaving Herdr.
+#
+# min_herdr_version is a placeholder — set it to whatever `herdr --version`
+# reports in your environment; nothing here depends on a specific release
+# beyond the plugin manifest schema documented at the URL above.
+id = "rig.dashboard"
+name = "Rig Dashboard"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "View and act on rig's expeditions, waypoints, specs, and handoffs from a Herdr pane."
+platforms = ["linux", "macos", "windows"]
+
+[[build]]
+command = ["go", "build", "-o", "rig-herdr", "."]
+
+# Opens as its own tab. RIG_URL (default http://localhost:8789) points it
+# at a running `rig` service; RIG_WORKSPACE_ID skips workspace auto-resolve
+# and jumps straight to that workspace's dashboard.
+[[panes]]
+id = "dashboard"
+title = "Rig"
+placement = "tab"
+command = ["./rig-herdr"]
