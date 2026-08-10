@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { Waypoint } from '../../../data/trails/types';
 import { WAYPOINT_STATE_LABEL } from '../shared';
@@ -10,7 +11,7 @@ export type WaypointNodeData = {
 
 export type WaypointFlowNode = Node<WaypointNodeData, 'waypoint'>;
 
-export function WaypointNode({ data, selected, sourcePosition, targetPosition }: NodeProps<WaypointFlowNode>) {
+export const WaypointNode = memo(function WaypointNode({ data, selected, sourcePosition, targetPosition }: NodeProps<WaypointFlowNode>) {
 	const { waypoint } = data;
 	const pill = WAYPOINT_STATE_PILL[waypoint.state];
 	const bypassed = waypoint.state === 'bypassed';
@@ -36,4 +37,4 @@ export function WaypointNode({ data, selected, sourcePosition, targetPosition }:
 			<Handle type="source" position={sourcePosition ?? Position.Right} />
 		</div>
 	);
-}
+});

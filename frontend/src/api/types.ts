@@ -111,7 +111,7 @@ export interface NextStageInfoDTO {
 }
 
 export interface StageActionRequest {
-	stage: SpecStageName;
+	stage: SpecStageName | 'implementation';
 	/** Required when stage is "tasks": the design component's slug. */
 	component?: string;
 	/** Required for deny; ignored otherwise. */

@@ -2,12 +2,13 @@ import type { ReactNode, CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
 import { usePageTitle } from '../app/state/AppStateContext';
 import { useAudit } from '../data/audit';
+import { errorMessage } from '../api/client';
 
 export function AuditLog() {
 	usePageTitle('Audit log');
 	// :workspace is always present — this route only ever mounts under /:workspace.
 	const { workspace } = useParams() as { workspace: string };
-	const { data: rows, isLoading } = useAudit(workspace);
+	const { data: rows, isLoading, isError, error } = useAudit(workspace);
 
 	return (
 		<div>
@@ -16,7 +17,9 @@ export function AuditLog() {
 				every mutation · one row · same transaction
 			</p>
 
-			{isLoading ? (
+			{isError ? (
+				<p style={{ color: 'var(--rose-500)' }}>Failed to load audit log: {errorMessage(error)}</p>
+			) : isLoading ? (
 				<p style={{ color: 'var(--text-muted)' }}>Loading…</p>
 			) : (
 				<div
@@ -46,8 +49,8 @@ export function AuditLog() {
 							{h}
 						</div>
 					))}
-					{rows?.map((row, i) => (
-						<div style={{ display: 'contents' }} key={i}>
+					{rows?.map((row) => (
+						<div style={{ display: 'contents' }} key={`${row.ts}-${row.actor}-${row.action}-${row.target}`}>
 							<Cell>{row.ts}</Cell>
 							<Cell style={{ color: row.actor === 'web-ui' ? 'var(--text-brand)' : 'var(--text-muted)' }}>{row.actor}</Cell>
 							<Cell>{row.action}</Cell>

@@ -10,6 +10,7 @@ import {
 	useBypassWaypoint,
 	useUnbypassWaypoint
 } from '../../data/trails';
+import { errorMessage } from '../../api/client';
 
 // No actor/auth system exists in V2 yet (see GAPS.md §3) — all console writes
 // are attributed to this fixed literal, matching the pattern the design
@@ -122,7 +123,7 @@ export function WaypointInspector({ trailId, waypoint }: WaypointInspectorProps)
 
 			{claim.isError || release.isError || reach.isError || bypass.isError || unbypass.isError ? (
 				<p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--rose-500)' }}>
-					{[claim, release, reach, bypass, unbypass].map((m) => (m.error as Error)?.message).find(Boolean)}
+					{[claim, release, reach, bypass, unbypass].map((m) => errorMessage(m.error)).find(Boolean)}
 				</p>
 			) : null}
 

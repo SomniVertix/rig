@@ -34,6 +34,7 @@ const baseSpec: SpecDTO = {
 	designArchitecture: 'design arch',
 	designStageStatus: 'approved',
 	tasksStageStatus: 'in_review',
+	implementationStageStatus: 'not_started',
 	createdAt: '2026-08-01T00:00:00Z',
 	updatedAt: '2026-08-01T00:00:00Z'
 };
@@ -75,7 +76,14 @@ beforeEach(() => {
 	vi.mocked(api.getSpec).mockResolvedValue(baseSpec);
 	vi.mocked(api.getExpeditionBySpec).mockRejectedValue(new ApiError(404, 'not found'));
 	vi.mocked(api.renderSpecDocument).mockImplementation(async (_id, _stage, component) => ({
-		markdown: `# Tasks: ${component}`
+		// Checkbox lines drive the "components complete" metric below (domain/taskCompletion.ts):
+		// alpha is partially checked (1/2), beta is fully checked (2/2) — one of two components complete.
+		markdown:
+			component === 'alpha'
+				? `# Tasks: alpha\n\n- [x] one\n- [ ] two\n`
+				: component === 'beta'
+					? `# Tasks: beta\n\n- [x] one\n- [x] two\n`
+					: `# Tasks: ${component}`
 	}));
 	vi.mocked(api.listTasksDocs).mockResolvedValue({ tasksDocs: [alphaDoc, betaDoc] });
 });
@@ -87,7 +95,7 @@ describe('SpecDetailPage — Tasks tab', () => {
 		expect(await screen.findByText('Alpha Component')).toBeInTheDocument();
 		expect(screen.getByText('Beta Component')).toBeInTheDocument();
 		expect(await screen.findByText('Tasks: alpha')).toBeInTheDocument();
-		expect(screen.getByText('1/2 components approved')).toBeInTheDocument();
+		expect(screen.getByText('1/2 components complete')).toBeInTheDocument();
 	});
 
 	it('switches the rendered doc and review-gate status when another switcher row is clicked', async () => {

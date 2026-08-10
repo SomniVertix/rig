@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { Card, Icon, RelativeTime, Tag } from '../../ds';
+import { Card, Icon, RelativeTime, StatusBadge, Tag } from '../../ds';
+import type { Status } from '../../ds';
 import { useHandoffs } from '../../data/handoffs';
 import { HandoffDetailDialog } from './HandoffDetailDialog';
 import type { HandoffType, HandoffStatus } from '../../api/types';
+import { errorMessage } from '../../api/client';
 
 export interface HandoffsPanelProps {
 	workspaceId: string;
 }
 
 export function HandoffsPanel({ workspaceId }: HandoffsPanelProps) {
-	const { data: handoffs = [], isLoading } = useHandoffs(workspaceId);
+	const { data: handoffs = [], isLoading, isError, error } = useHandoffs(workspaceId);
 	const [selectedHandoffId, setSelectedHandoffId] = useState<string | undefined>();
 	const [detailOpen, setDetailOpen] = useState(false);
 
@@ -22,6 +24,14 @@ export function HandoffsPanel({ workspaceId }: HandoffsPanelProps) {
 	const handleDetailClose = () => {
 		setDetailOpen(false);
 	};
+
+	if (isError) {
+		return (
+			<Card className="handoffs-panel">
+				<div className="handoffs-panel__loading" style={{ color: 'var(--rose-500)' }}>Failed to load handoffs: {errorMessage(error)}</div>
+			</Card>
+		);
+	}
 
 	if (isLoading) {
 		return (
@@ -65,7 +75,7 @@ export function HandoffsPanel({ workspaceId }: HandoffsPanelProps) {
 								className="handoffs-table__row"
 								onClick={() => handleRowClick(handoff.id)}
 								style={{ cursor: 'pointer', borderBottomStyle: 'solid', borderBottomColor: 'var(--border-muted)', borderBottomWidth: '1px', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}
-								onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-secondary)')}
+								onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-surface-2)')}
 								onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
 							>
 								<td className="handoffs-table__direction" style={{ paddingRight: '1rem' }}>
@@ -86,7 +96,7 @@ export function HandoffsPanel({ workspaceId }: HandoffsPanelProps) {
 									<Tag className={`tag--${getTypeVariant(handoff.type)}`}>{handoff.type}</Tag>
 								</td>
 								<td className="handoffs-table__status" style={{ paddingRight: '1rem' }}>
-									<StatusBadge status={handoff.status} />
+									<StatusBadge status={toHandoffBadgeStatus(handoff.status)} label={handoff.status} />
 								</td>
 								<td className="handoffs-table__sent" style={{ paddingRight: '1rem' }}>
 									<RelativeTime value={handoff.sentAt} />
@@ -122,12 +132,16 @@ function getTypeVariant(type: HandoffType): string {
 	}
 }
 
-/**
- * Simple status badge component for handoff status.
- */
-function StatusBadge({ status }: { status: HandoffStatus }) {
-	const className = `status-badge status-badge--${status}`;
-	const label = status.charAt(0).toUpperCase() + status.slice(1);
-
-	return <span className={className}>{label}</span>;
+/** Maps a handoff's lifecycle status onto the ds StatusBadge's workflow-status palette. */
+function toHandoffBadgeStatus(status: HandoffStatus): Status {
+	switch (status) {
+		case 'pending':
+			return 'in_review';
+		case 'read':
+			return 'draft';
+		case 'actioned':
+			return 'approved';
+		case 'dismissed':
+			return 'denied';
+	}
 }

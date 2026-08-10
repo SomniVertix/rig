@@ -4,6 +4,7 @@ import { StatusBadge } from '../ds';
 import { usePageTitle } from '../app/state/AppStateContext';
 import { useWorkspaceSummaries } from '../data/workspaceSummaries';
 import type { WorkspaceSummary, StageDistributionStatus } from '../data/workspaceSummaries/types';
+import { errorMessage } from '../api/client';
 
 const STAGE_COLOR: Record<StageDistributionStatus, string> = {
 	not_started: 'var(--status-draft-fg)',
@@ -15,7 +16,7 @@ const STAGE_COLOR: Record<StageDistributionStatus, string> = {
 export function WorkspacesOverview() {
 	usePageTitle('Workspaces');
 	const navigate = useNavigate();
-	const { data: workspaces, isLoading } = useWorkspaceSummaries();
+	const { data: workspaces, isLoading, isError, error } = useWorkspaceSummaries();
 
 	const { needsReview, quiet } = useMemo(() => {
 		const sorted = [...(workspaces ?? [])].sort((a, b) => b.gatesWaiting - a.gatesWaiting);
@@ -25,6 +26,7 @@ export function WorkspacesOverview() {
 		};
 	}, [workspaces]);
 
+	if (isError) return <p style={{ color: 'var(--rose-500)' }}>Failed to load workspaces: {errorMessage(error)}</p>;
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading workspaces…</p>;
 
 	return (
@@ -69,7 +71,15 @@ function WorkspaceCard({ workspace, quiet, onClick }: { workspace: WorkspaceSumm
 	return (
 		<div
 			className="rl-card"
+			role="button"
+			tabIndex={0}
 			onClick={onClick}
+			onKeyDown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					onClick();
+				}
+			}}
 			style={{ padding: 16, cursor: 'pointer', opacity: quiet ? 0.85 : 1 }}
 		>
 			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>

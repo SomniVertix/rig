@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from '../../api/client';
 import { ApiError } from '../../api/client';
-import type { StageActionRequest } from '../../api/types';
+import type { SpecStageName, StageActionRequest } from '../../api/types';
 import { toSpecDetail, toSpecSummary } from '../../domain/specs';
 import { toTrailSummary } from '../../domain/trails';
 import { queryKeys } from '../queryKeys';
@@ -28,7 +28,7 @@ export function useSpec(specId: string) {
  * error state) when the spec wasn't chartered from a trail. */
 export function useOriginTrail(specId: string) {
 	return useQuery<TrailSummary | null>({
-		queryKey: ['origin-trail', specId],
+		queryKey: queryKeys.originTrail(specId),
 		queryFn: async () => {
 			try {
 				const expedition = await api.getExpeditionBySpec(specId);
@@ -42,7 +42,7 @@ export function useOriginTrail(specId: string) {
 	});
 }
 
-export function useSpecDocument(specId: string, stage: StageActionRequest['stage'], component?: string) {
+export function useSpecDocument(specId: string, stage: SpecStageName, component?: string) {
 	return useQuery({
 		queryKey: queryKeys.specDoc(specId, stage, component),
 		queryFn: () => api.renderSpecDocument(specId, stage, component),

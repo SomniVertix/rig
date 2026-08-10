@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FIXTURE_RUNS } from '../../fixtures/runs';
+import { queryKeys } from '../queryKeys';
 import type { Run } from './types';
 
-const QUERY_KEY = ['runs'];
+const QUERY_KEY = queryKeys.runs();
 
 // Stage B — no runs/executor/scheduler REST surface exists in V2 yet (see GAPS.md §3).
 export function useRuns() {

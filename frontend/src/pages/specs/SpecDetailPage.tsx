@@ -11,6 +11,7 @@ import { parseTaskCompletion, type TaskCompletion } from '../../domain/taskCompl
 import { toBadgeStatus } from './shared';
 import type { SpecStageName } from '../../data/specs/types';
 import type { TasksDocDTO } from '../../api/types';
+import { errorMessage } from '../../api/client';
 import './specs.css';
 
 const STEPPER_STEPS = [...SPEC_STAGE_ORDER, 'implementation', 'complete'].map((key) => ({
@@ -42,7 +43,7 @@ export function SpecDetailPage() {
 	const [selectedComponent, setSelectedComponent] = useState<string | undefined>();
 
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading spec…</p>;
-	if (isError || !spec) return <p style={{ color: 'var(--rose-500)' }}>Failed to load spec: {(error as Error)?.message ?? 'not found'}</p>;
+	if (isError || !spec) return <p style={{ color: 'var(--rose-500)' }}>Failed to load spec: {errorMessage(error) ?? 'not found'}</p>;
 
 	const currentStageDisplay = spec.currentStage;
 	const headlineStatus = spec.currentStage === 'complete' ? 'approved' : spec.currentStage === 'implementation' ? 'approved' : spec.stages[spec.currentStage];
@@ -444,7 +445,7 @@ function ReviewGateCard({
 			)}
 			{approve.isError || deny.isError ? (
 				<p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--rose-500)' }}>
-					{(approve.error as Error)?.message ?? (deny.error as Error)?.message}
+					{errorMessage(approve.error) ?? errorMessage(deny.error)}
 				</p>
 			) : null}
 		</div>
@@ -541,7 +542,7 @@ function ImplementationReviewGate({
 				</Button>
 				{finalize.isError ? (
 					<p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--rose-500)' }}>
-						{(finalize.error as Error)?.message}
+						{errorMessage(finalize.error)}
 					</p>
 				) : null}
 			</div>
@@ -593,7 +594,7 @@ function ImplementationReviewGate({
 			)}
 			{approve.isError || deny.isError ? (
 				<p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--rose-500)' }}>
-					{(approve.error as Error)?.message ?? (deny.error as Error)?.message}
+					{errorMessage(approve.error) ?? errorMessage(deny.error)}
 				</p>
 			) : null}
 		</div>

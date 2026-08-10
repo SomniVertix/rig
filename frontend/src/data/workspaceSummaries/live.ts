@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import * as api from '../../api/client';
 import { toSpecSummary } from '../../domain/specs';
+import { queryKeys } from '../queryKeys';
 import type { WorkspaceSummary, StageDistributionStatus } from './types';
 
 /**
@@ -11,7 +12,7 @@ import type { WorkspaceSummary, StageDistributionStatus } from './types';
  */
 export function useWorkspaceSummaries() {
 	return useQuery<WorkspaceSummary[]>({
-		queryKey: ['workspaces', 'live-aggregate'],
+		queryKey: queryKeys.workspaceSummaries(),
 		queryFn: async () => {
 			const workspaces = await api.listWorkspaces();
 			return Promise.all(workspaces.map((w) => loadWorkspaceSummary(w.workspaceId, w.label)));
@@ -27,7 +28,7 @@ async function loadWorkspaceSummary(slug: string, name: string): Promise<Workspa
 
 	const bucketCounts: Record<StageDistributionStatus, number> = { not_started: 0, in_review: 0, approved: 0, denied: 0 };
 	for (const s of summaries) {
-		const headline = s.currentStage === 'implementation' ? 'approved' : s.stages[s.currentStage];
+		const headline = s.currentStage === 'implementation' || s.currentStage === 'complete' ? 'approved' : s.stages[s.currentStage];
 		bucketCounts[headline] += 1;
 	}
 	const stageDistribution = (Object.keys(bucketCounts) as StageDistributionStatus[])

@@ -4,6 +4,7 @@ import { FileText } from 'lucide-react';
 import { StatusBadge, Icon, RelativeTime } from '../../ds';
 import { usePageTitle } from '../../app/state/AppStateContext';
 import { useSpecs } from '../../data/specs';
+import { errorMessage } from '../../api/client';
 import { toBadgeStatus } from './shared';
 import type { SpecStageName } from '../../data/specs/types';
 import './specs.css';
@@ -57,7 +58,7 @@ export function SpecsListPage() {
 			</div>
 
 			{isLoading ? <p style={{ color: 'var(--text-muted)' }}>Loading specs…</p> : null}
-			{isError ? <p style={{ color: 'var(--rose-500)' }}>Failed to load specs: {(error as Error).message}</p> : null}
+			{isError ? <p style={{ color: 'var(--rose-500)' }}>Failed to load specs: {errorMessage(error)}</p> : null}
 
 			{specs && specs.length === 0 ? (
 				<div className="rl-card rl-card__pad" style={{ textAlign: 'center', borderStyle: 'dashed' }}>
@@ -79,7 +80,19 @@ export function SpecsListPage() {
 						<div>Updated</div>
 					</div>
 					{filtered.map((spec) => (
-						<div key={spec.id} className="rl-specs-table__row" onClick={() => navigate(`/${workspace}/specs/${spec.id}`)}>
+						<div
+							key={spec.id}
+							className="rl-specs-table__row"
+							role="button"
+							tabIndex={0}
+							onClick={() => navigate(`/${workspace}/specs/${spec.id}`)}
+							onKeyDown={(e) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault();
+									navigate(`/${workspace}/specs/${spec.id}`);
+								}
+							}}
+						>
 							<div className="rl-specs-table__feature">{spec.featureName}</div>
 							<div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>{spec.currentStage}</div>
 							<div>

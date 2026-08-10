@@ -18,8 +18,8 @@ export interface SpecSummary {
 	id: string;
 	slug: string;
 	featureName: string;
-	/** First non-approved stage in order, or 'implementation' once tasks is approved. */
-	currentStage: SpecStageName | 'implementation';
+	/** First non-approved stage in order, 'implementation' once tasks is approved, or 'complete' once implementation is approved. */
+	currentStage: SpecStageName | 'implementation' | 'complete';
 	stages: Record<SpecStageName, DisplayStageStatus>;
 	updatedAt: string;
 }

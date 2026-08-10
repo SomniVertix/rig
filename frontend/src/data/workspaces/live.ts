@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import * as api from '../../api/client';
+import { queryKeys } from '../queryKeys';
 import type { Workspace } from './types';
 
 /**
@@ -9,7 +10,7 @@ import type { Workspace } from './types';
  */
 export function useWorkspaces() {
 	return useQuery<Workspace[]>({
-		queryKey: ['workspaces'],
+		queryKey: queryKeys.workspaces(),
 		queryFn: async () => (await api.listWorkspaces()).map((w) => ({ id: w.workspaceId, label: w.label }))
 	});
 }

@@ -4,6 +4,7 @@ import { LayoutGrid, List, Info, Map } from 'lucide-react';
 import { Button, IconButton, Icon } from '../../ds';
 import { usePageTitle, useAppState } from '../../app/state/AppStateContext';
 import { useTrails } from '../../data/trails';
+import { errorMessage } from '../../api/client';
 import { BoardView } from './BoardView';
 import { ListView } from './ListView';
 import { TrailStatusesDialog } from './TrailStatusesDialog';
@@ -59,7 +60,7 @@ export function TrailsPage() {
 			</div>
 
 			{isLoading ? <p style={{ color: 'var(--text-muted)' }}>Loading trails…</p> : null}
-			{isError ? <p style={{ color: 'var(--rose-500)' }}>Failed to load trails: {(error as Error).message}</p> : null}
+			{isError ? <p style={{ color: 'var(--rose-500)' }}>Failed to load trails: {errorMessage(error)}</p> : null}
 
 			{trails && trails.length === 0 ? (
 				<div className="rl-card rl-card__pad" style={{ textAlign: 'center', borderStyle: 'dashed' }}>

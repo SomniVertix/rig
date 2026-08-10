@@ -39,6 +39,11 @@ export class ApiError extends Error {
 	}
 }
 
+/** TanStack Query types a mutation/query's `error` as `unknown` — narrow it safely for display. */
+export function errorMessage(error: unknown): string | undefined {
+	return error instanceof Error ? error.message : undefined;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(path, {
 		...init,

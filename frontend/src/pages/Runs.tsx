@@ -5,18 +5,21 @@ import { usePageTitle } from '../app/state/AppStateContext';
 import { useRuns } from '../data/runs';
 import type { RunExecutor } from '../data/runs/types';
 import { AbortRunDialog } from './AbortRunDialog';
+import { errorMessage } from '../api/client';
 import './runs.css';
 
 export function Runs() {
 	usePageTitle('Runs');
-	const { data: runs, isLoading } = useRuns();
+	const { data: runs, isLoading, isError, error } = useRuns();
 	const [abortTarget, setAbortTarget] = useState<string | null>(null);
 
 	return (
 		<div>
 			<h1 style={{ marginBottom: 20 }}>Runs</h1>
 
-			{isLoading ? (
+			{isError ? (
+				<p style={{ color: 'var(--rose-500)' }}>Failed to load runs: {errorMessage(error)}</p>
+			) : isLoading ? (
 				<p style={{ color: 'var(--text-muted)' }}>Loading…</p>
 			) : (
 				<div className="rl-runs-table">

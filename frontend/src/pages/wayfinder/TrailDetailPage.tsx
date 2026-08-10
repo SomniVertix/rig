@@ -4,6 +4,7 @@ import { ArrowRight, ArrowDown } from 'lucide-react';
 import { Badge, StageStepper, Tabs, Icon } from '../../ds';
 import { usePageTitle } from '../../app/state/AppStateContext';
 import { useTrail } from '../../data/trails';
+import { errorMessage } from '../../api/client';
 import { TRAIL_STATUS_LABEL, TRAIL_STATUS_TONE } from './shared';
 import { TrailGraphView } from './graph/TrailGraphView';
 import type { GraphDirection } from './graph/useTrailGraph';
@@ -51,7 +52,7 @@ export function TrailDetailPage() {
 	const reachedCount = trail?.waypoints.filter((w) => w.state === 'reached').length ?? 0;
 
 	if (isLoading) return <p style={{ color: 'var(--text-muted)' }}>Loading trail…</p>;
-	if (isError || !trail) return <p style={{ color: 'var(--rose-500)' }}>Failed to load trail: {(error as Error)?.message ?? 'not found'}</p>;
+	if (isError || !trail) return <p style={{ color: 'var(--rose-500)' }}>Failed to load trail: {errorMessage(error) ?? 'not found'}</p>;
 
 	return (
 		<div>

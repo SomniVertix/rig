@@ -34,7 +34,19 @@ export function BoardView({ trails, workspaceId }: BoardViewProps) {
 							// and TrailStatus has no StatusBadge token mapping (that
 							// component is scoped to the five spec-pipeline statuses).
 							items.map((trail) => (
-								<div key={trail.id} className="rl-board__card" onClick={() => navigate(`/${workspaceId}/trails/${trail.id}`)}>
+								<div
+									key={trail.id}
+									className="rl-board__card"
+									role="button"
+									tabIndex={0}
+									onClick={() => navigate(`/${workspaceId}/trails/${trail.id}`)}
+									onKeyDown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											navigate(`/${workspaceId}/trails/${trail.id}`);
+										}
+									}}
+								>
 									<div className="rl-board__card-title">
 										<span>{trail.name}</span>
 									</div>
