@@ -1,7 +1,0 @@
-.git
-.env
-*.md
-.meta
-artifacts
-web/node_modules
-web/dist
