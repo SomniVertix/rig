@@ -30,8 +30,8 @@ func NewTasksDocsPage(client *rigclient.Client, specID, specName string) *TasksD
 
 func (p *TasksDocsPage) Title() string     { return p.specName + " / tasks" }
 func (p *TasksDocsPage) SetSize(w, h int)  { p.list.SetSize(w, footerHeight(h)) }
-func (p *TasksDocsPage) isFiltering() bool { return p.list.FilterState() == list.Filtering }
-func (p *TasksDocsPage) onFirstPage() bool { return p.list.Paginator.OnFirstPage() }
+func (p *TasksDocsPage) isFiltering() bool { return isFilteringList(p.list) }
+func (p *TasksDocsPage) onFirstPage() bool { return onFirstPageList(p.list) }
 func (p *TasksDocsPage) formActive() bool  { return p.denyForm.Active }
 
 type tasksDocsLoadedMsg struct {

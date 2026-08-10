@@ -74,9 +74,9 @@ const (
 	StageRequirements SpecStageName = "requirements"
 	StageDesign       SpecStageName = "design"
 	StageTasks        SpecStageName = "tasks"
-	// StageImplementation isn't in web/src/api/types.ts's SpecStageName yet,
-	// but internal/graph/api/handlers.go accepts it on the wire for
-	// approve/deny/finalize — see the "implementation" case there.
+	// StageImplementation is a valid finalize/approve/deny wire value (see
+	// internal/graph/api/handlers.go's "implementation" case) but has no
+	// rendered document — RenderDocument only knows requirements/design/tasks.
 	StageImplementation SpecStageName = "implementation"
 )
 

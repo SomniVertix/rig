@@ -25,8 +25,8 @@ func NewExpeditionsPage(client *rigclient.Client, workspaceID string) *Expeditio
 
 func (p *ExpeditionsPage) Title() string     { return "Expeditions" }
 func (p *ExpeditionsPage) SetSize(w, h int)  { p.list.SetSize(w, footerHeight(h)) }
-func (p *ExpeditionsPage) isFiltering() bool { return p.list.FilterState() == list.Filtering }
-func (p *ExpeditionsPage) onFirstPage() bool { return p.list.Paginator.OnFirstPage() }
+func (p *ExpeditionsPage) isFiltering() bool { return isFilteringList(p.list) }
+func (p *ExpeditionsPage) onFirstPage() bool { return onFirstPageList(p.list) }
 
 func (p *ExpeditionsPage) filter() rigclient.ExpeditionStatus { return expeditionFilters[p.filterIdx] }
 

@@ -46,8 +46,8 @@ func (p *ExpeditionDetailPage) SetSize(w, h int) {
 	p.list.SetSize(w, footerHeight(h-p.infoLines))
 }
 
-func (p *ExpeditionDetailPage) isFiltering() bool { return p.list.FilterState() == list.Filtering }
-func (p *ExpeditionDetailPage) onFirstPage() bool { return p.list.Paginator.OnFirstPage() }
+func (p *ExpeditionDetailPage) isFiltering() bool { return isFilteringList(p.list) }
+func (p *ExpeditionDetailPage) onFirstPage() bool { return onFirstPageList(p.list) }
 
 type waypointsLoadedMsg struct {
 	waypoints []rigclient.Waypoint

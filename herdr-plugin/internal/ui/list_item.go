@@ -33,3 +33,9 @@ func newList(title string) list.Model {
 	l.DisableQuitKeybindings()
 	return l
 }
+
+// isFilteringList and onFirstPageList back every list page's isFiltering()/
+// onFirstPage() methods (see app.go's filterer/pager interfaces) — one
+// implementation instead of six near-identical copies.
+func isFilteringList(l list.Model) bool { return l.FilterState() == list.Filtering }
+func onFirstPageList(l list.Model) bool { return l.Paginator.OnFirstPage() }

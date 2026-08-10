@@ -19,8 +19,8 @@ func NewSpecsPage(client *rigclient.Client, workspaceID string) *SpecsPage {
 
 func (p *SpecsPage) Title() string     { return "Specs" }
 func (p *SpecsPage) SetSize(w, h int)  { p.list.SetSize(w, footerHeight(h)) }
-func (p *SpecsPage) isFiltering() bool { return p.list.FilterState() == list.Filtering }
-func (p *SpecsPage) onFirstPage() bool { return p.list.Paginator.OnFirstPage() }
+func (p *SpecsPage) isFiltering() bool { return isFilteringList(p.list) }
+func (p *SpecsPage) onFirstPage() bool { return onFirstPageList(p.list) }
 
 type specsLoadedMsg struct {
 	specs []rigclient.Spec

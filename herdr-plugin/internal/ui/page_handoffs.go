@@ -25,8 +25,8 @@ func NewHandoffsPage(client *rigclient.Client, workspaceID string) *HandoffsPage
 func (p *HandoffsPage) Title() string                         { return "Handoffs" }
 func (p *HandoffsPage) SetSize(w, h int)                      { p.list.SetSize(w, footerHeight(h)) }
 func (p *HandoffsPage) direction() rigclient.HandoffDirection { return handoffDirections[p.dirIdx] }
-func (p *HandoffsPage) isFiltering() bool                     { return p.list.FilterState() == list.Filtering }
-func (p *HandoffsPage) onFirstPage() bool                     { return p.list.Paginator.OnFirstPage() }
+func (p *HandoffsPage) isFiltering() bool                     { return isFilteringList(p.list) }
+func (p *HandoffsPage) onFirstPage() bool                     { return onFirstPageList(p.list) }
 
 type handoffsLoadedMsg struct {
 	handoffs []rigclient.Handoff

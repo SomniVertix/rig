@@ -195,7 +195,10 @@ func (p *SpecDetailPage) Update(msg tea.Msg) (Page, tea.Cmd) {
 			}
 			return p, nil
 		case "v":
-			if stage == rigclient.StageTasks {
+			// Tasks has no spec-wide doc (per-component, via enter); Implementation
+			// has no rendered doc at all — the backend's RenderDocument only knows
+			// requirements/design/tasks (see rigclient.StageImplementation's comment).
+			if stage == rigclient.StageTasks || stage == rigclient.StageImplementation {
 				return p, nil
 			}
 			return p, p.viewRendered(stage)

@@ -23,7 +23,6 @@ var (
 	statusErrStyle = lipgloss.NewStyle().Foreground(colorBad).Bold(true)
 
 	labelStyle = lipgloss.NewStyle().Foreground(colorMuted)
-	valueStyle = lipgloss.NewStyle()
 
 	badgeActive   = lipgloss.NewStyle().Foreground(colorGood)
 	badgeMuted    = lipgloss.NewStyle().Foreground(colorMuted)
@@ -47,7 +46,7 @@ func statusBadge(status string) string {
 		return badgeActive.Render(status)
 	case "abandoned", "bypassed", "dismissed":
 		return badgeMuted.Render(status)
-	case "not_started", "sighted", "marked":
+	case "not_started", "sighted", "marked", "rehydrating":
 		return badgeMuted.Render(status)
 	default:
 		return badgeBad.Render(status)

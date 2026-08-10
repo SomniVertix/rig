@@ -50,14 +50,14 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return err
+			return fmt.Errorf("rig api: encoding request body: %w", err)
 		}
 		reqBody = bytes.NewReader(b)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, u, reqBody)
 	if err != nil {
-		return err
+		return fmt.Errorf("rig api: building request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -69,7 +69,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("rig api: reading response body: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
@@ -85,7 +85,10 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if out == nil || len(respBody) == 0 {
 		return nil
 	}
-	return json.Unmarshal(respBody, out)
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("rig api: decoding response: %w", err)
+	}
+	return nil
 }
 
 // ── Workspaces ───────────────────────────────────────────────────────────

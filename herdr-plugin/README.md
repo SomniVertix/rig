@@ -106,11 +106,11 @@ internal/ui/                Bubble Tea pages: a navigation stack (see app.go)
 - Read + approve/deny/finalize only — there's no document-drafting UI (no
   editing requirements/design text, no writing task items). Use the web
   console or rig's MCP tools for that.
-- `HERDR_PLUGIN_CONTEXT_JSON`'s exact schema isn't published; `main.go`
-  probes a few plausible key names (`cwd`, `workingDirectory`,
-  `workspacePath`, `path`) before falling back to the pane's own working
-  directory, which is right in the common case (a pane opened inside a
-  project directory).
+- Workspace resolution is `RIG_WORKSPACE_ID` (explicit override) then the
+  pane's own working directory via `POST /resolve`, unless that directory
+  is just `HERDR_PLUGIN_ROOT` (the plugin's own install dir, not a real
+  project) — see `main.go`'s `resolveRootPage`/`pluginCwd`. Either path
+  falling through lands on the workspace picker instead.
 - No link-handler wiring yet from clicked web-console URLs
   (`/:workspace/specs/:specId`, `/:workspace/trails/:trailId`) into a
   focused detail view — worth adding via `[[link_handlers]]` in

@@ -13,7 +13,6 @@ import (
 type WorkspacesPage struct {
 	client *rigclient.Client
 	list   list.Model
-	err    error
 }
 
 func NewWorkspacesPage(client *rigclient.Client) *WorkspacesPage {
@@ -23,8 +22,8 @@ func NewWorkspacesPage(client *rigclient.Client) *WorkspacesPage {
 func (p *WorkspacesPage) Title() string { return "rig" }
 
 func (p *WorkspacesPage) SetSize(w, h int)  { p.list.SetSize(w, h) }
-func (p *WorkspacesPage) isFiltering() bool { return p.list.FilterState() == list.Filtering }
-func (p *WorkspacesPage) onFirstPage() bool { return p.list.Paginator.OnFirstPage() }
+func (p *WorkspacesPage) isFiltering() bool { return isFilteringList(p.list) }
+func (p *WorkspacesPage) onFirstPage() bool { return onFirstPageList(p.list) }
 
 type workspacesLoadedMsg struct {
 	workspaces []rigclient.Workspace
@@ -44,7 +43,6 @@ func (p *WorkspacesPage) Init() tea.Cmd {
 func (p *WorkspacesPage) Update(msg tea.Msg) (Page, tea.Cmd) {
 	switch msg := msg.(type) {
 	case workspacesLoadedMsg:
-		p.err = msg.err
 		if msg.err != nil {
 			return p, StatusErr(msg.err)
 		}
