@@ -1,0 +1,13 @@
+# OS
+.DS_Store
+
+# Editor / backup files
+*.bak
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Agent-run scratch artifacts (transcripts, mission logs) — local reference
+# only, never project source. Unanchored so it's caught at any depth.
+.pi-subagents/

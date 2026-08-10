@@ -1,6 +1,9 @@
 /bin/
 /dist/
+/rig
 *.test
+coverage.out
+coverage.html
 
 # web
 web/node_modules/
